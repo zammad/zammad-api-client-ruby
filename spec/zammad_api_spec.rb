@@ -1,0 +1,6 @@
+require 'authentication'
+require 'resources/user_spec'
+require 'resources/group_spec'
+require 'resources/organization_spec'
+require 'resources/ticket_state_spec'
+require 'resources/ticket_priority_spec'
