@@ -187,3 +187,17 @@ tickets.each {|ticket|
   p "ticket: #{ticket.number} - #{ticket.number}"
 }
 ```
+
+## Testing
+
+### setup an (empty Zammad) test env
+
+* git clone git@github.com:zammad/zammad.git
+* cd zammad
+* cp contrib/auto_wizard_test.json auto_wizard.json
+* ./script/bootstrap.sh
+* rails s
+
+### execute client tests
+
+* rspec spec/zammad_api_spec.rb
