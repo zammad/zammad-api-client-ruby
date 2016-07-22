@@ -181,7 +181,8 @@ list of all new or open
 tickets = client.ticket.search(query: 'state:new OR state:open')
 
 ticket[0].id # id of record
-ticket[0].number # 'Support'
+ticket[0].number # uniq number of ticket
+ticket[0].group # 'Support'
 
 tickets.each {|ticket|
   p "ticket: #{ticket.number} - #{ticket.number}"
