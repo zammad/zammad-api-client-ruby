@@ -173,7 +173,11 @@ ticket = client.ticket.create(
 )
 
 ticket.id # id of record
-ticket.number # 'Support'
+ticket.number # uniq number of ticket
+ticket.title # 'a new ticket #1'
+ticket.group # 'Support'
+ticket.created_at # '2022-01-01T12:42:01Z'
+# ...
 ```
 
 list of all new or open
