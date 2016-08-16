@@ -184,7 +184,11 @@ ticket = client.ticket.create(
 )
 
 ticket.id # id of record
-ticket.number # 'Support'
+ticket.number # uniq number of ticket
+ticket.title # 'a new ticket #1'
+ticket.group # 'Support'
+ticket.created_at # '2022-01-01T12:42:01Z'
+# ...
 ```
 
 list of all new or open
@@ -192,10 +196,13 @@ list of all new or open
 tickets = client.ticket.search(query: 'state:new OR state:open')
 
 ticket[0].id # id of record
-ticket[0].number # 'Support'
+ticket[0].number # uniq number of ticket
+ticket[0].title # 'title of ticket'
+ticket[0].group # 'Support'
+ticket[0].created_at # '2022-01-01T12:42:01Z'
 
 tickets.each {|ticket|
-  p "ticket: #{ticket.number} - #{ticket.number}"
+  p "ticket: #{ticket.number} - #{ticket.title}"
 }
 ```
 
