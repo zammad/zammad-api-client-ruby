@@ -30,8 +30,10 @@ module ZammadAPI
     def check_config
       raise 'url is needed' if !@internal_config[:url]
       raise 'url need to start with http:// or https://' if @internal_config[:url] !~ %r{^(http|https)://}
-      raise 'user is empty' if !@internal_config[:user] || @internal_config[:user].empty?
-      raise 'password is empty' if !@internal_config[:password] || @internal_config[:password].empty?
+      raise 'user is empty' if (!@internal_config[:user] || @internal_config[:user].empty?) && (!@internal_config[:http_token] || @internal_config[:http_token].empty?)
+      if @internal_config[:user] && !@internal_config[:user].empty?
+        raise 'password is empty' if !@internal_config[:password] || @internal_config[:password].empty?
+      end
     end
 
     def modulize(string)

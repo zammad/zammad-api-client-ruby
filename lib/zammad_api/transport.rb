@@ -14,7 +14,12 @@ module ZammadAPI
         #faraday.response :logger                  # log requests to STDOUT
         faraday.adapter Faraday.default_adapter  # make requests with Net::HTTP
       end
-      @conn.basic_auth(config[:user], config[:password])
+      @conn.headers[:user_agent] = 'Zammad API Ruby'
+      if config[:http_token] && !config[:http_token].empty?
+        @conn.token_auth(config[:http_token])
+      else
+        @conn.basic_auth(config[:user], config[:password])
+      end
     end
 
     def get(param)
