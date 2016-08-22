@@ -6,23 +6,25 @@ module ZammadAPI
   module Resources
     class Base
       attr_accessor :new_instance, :url, :attributes
+      attr_reader :changes
 
-      def initialize(transport, attributes)
+      def initialize(transport, attributes = {})
         @new_instance = true
-        @transport = transport
+        @transport    = transport
+        @changes      = {}
+        @url          = self.class.url_get
+
         if attributes.nil?
           attributes = {}
         end
         @attributes = attributes
-        @changes = {}
         symbolize_keys_deep!(@attributes)
-        @url = self.class.url_get
       end
 
       def method_missing(method, *args)
         if method.to_s[-1, 1] == '='
-          method = method.to_s[0, method.length - 1].to_sym
-          @changes[method] = [@attributes[method], args[0]]
+          method              = method.to_s[0, method.length - 1].to_sym
+          @changes[method]    = [@attributes[method], args[0]]
           @attributes[method] = args[0]
         end
         @attributes[method]
@@ -31,8 +33,6 @@ module ZammadAPI
       def new_record?
         @new_instance
       end
-
-      attr_reader :changes
 
       def changed?
         return false if @changes.empty?
@@ -60,7 +60,7 @@ module ZammadAPI
           end
         else
           attributes_to_post = { expand: true }
-          @changes.each {|name, values|
+          @changes.each { |name, values|
             attributes_to_post[name] = values[1]
           }
           response = @transport.put(url: "#{@url}/#{@attributes[:id]}", params: attributes_to_post)
@@ -95,10 +95,9 @@ module ZammadAPI
         if response.status != 200
           raise "Can't get .all of object (#{self.class.name}): #{data['error']}"
         end
-        #record_ids: item_ids,
-        #assets: assets,
+
         list = []
-        data.each {|local_data|
+        data.each { |local_data|
           item = new(transport, local_data)
           item.new_instance = false
           list.push item
@@ -116,10 +115,9 @@ module ZammadAPI
         if response.status != 200
           raise "Can't get .search of object (#{self.class.name}): #{data['error']}"
         end
-        #record_ids: item_ids,
-        #assets: assets,
+
         list = []
-        data.each {|local_data|
+        data.each { |local_data|
           item = new(transport, local_data)
           item.new_instance = false
           list.push item
@@ -158,16 +156,14 @@ module ZammadAPI
         true
       end
 
-      def symbolize_keys_deep!(h)
-        h.keys.each do |k|
-          ks    = k.respond_to?(:to_sym) ? k.to_sym : k
-          h[ks] = h.delete k # Preserve order even when k == ks
-          symbolize_keys_deep! h[ks] if h[ks].is_a? Hash
+      def symbolize_keys_deep!(hash)
+        hash.keys.each do |key|
+          key_symbol       = key.respond_to?(:to_sym) ? key.to_sym : key
+          hash[key_symbol] = hash.delete key # Preserve order even when key == key_symbol
+
+          symbolize_keys_deep! hash[key_symbol] if hash[key_symbol].is_a? Hash
         end
       end
-
     end
-
   end
-
 end

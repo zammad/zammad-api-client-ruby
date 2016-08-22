@@ -13,6 +13,5 @@ module ZammadAPI
       return if !@logger
       @logger.send(method, args)
     end
-
   end
 end

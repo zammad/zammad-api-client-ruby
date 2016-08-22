@@ -10,6 +10,5 @@ require 'zammad_api/resources/ticket_priority'
 
 module ZammadAPI
   class Resource
-
   end
 end

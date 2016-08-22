@@ -97,7 +97,7 @@ describe ZammadAPI, 'object basics' do
     tickets = client.ticket.all
 
     ticket_exists = nil
-    tickets.each {|local_ticket|
+    tickets.each { |local_ticket|
       next if local_ticket.id != ticket.id
       ticket_exists = local_ticket
     }
@@ -128,7 +128,7 @@ describe ZammadAPI, 'object basics' do
 
   it 'pagination with all' do
 
-    (1..10).each {|local_count|
+    (1..10).each { |local_count|
       client.ticket.create(
         title: "test count ticket #{local_count}",
         state: 'new',
@@ -149,7 +149,7 @@ describe ZammadAPI, 'object basics' do
     tickets = client.ticket.all
     expect(tickets[0].class).to eq(ZammadAPI::Resources::Ticket)
     count = 0
-    tickets.each {|local_ticket|
+    tickets.each { |local_ticket|
       expect(local_ticket.class).to eq(ZammadAPI::Resources::Ticket)
       count += 1
     }
@@ -157,17 +157,17 @@ describe ZammadAPI, 'object basics' do
 
     count = 0
     tickets = client.ticket.all
-    tickets.page(1, 5) {|local_ticket|
+    tickets.page(1, 5) { |local_ticket|
       expect(local_ticket.class).to eq(ZammadAPI::Resources::Ticket)
       count += 1
     }
     expect(count).to eq(5)
-    tickets.page(2, 5) {|local_ticket|
+    tickets.page(2, 5) { |local_ticket|
       expect(local_ticket.class).to eq(ZammadAPI::Resources::Ticket)
       count += 1
     }
     expect(count).to eq(10)
-    tickets.page(3, 5) {|local_ticket|
+    tickets.page(3, 5) { |local_ticket|
       expect(local_ticket.class).to eq(ZammadAPI::Resources::Ticket)
       count += 1
     }

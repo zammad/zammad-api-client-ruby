@@ -114,7 +114,7 @@ describe ZammadAPI, 'object basics' do
     users = client.user.all
 
     user_exists = nil
-    users.each {|local_user|
+    users.each { |local_user|
       next if local_user.id != user.id
       user_exists = local_user
     }
@@ -154,7 +154,7 @@ describe ZammadAPI, 'object basics' do
   end
 
   it 'pagination with all' do
-    (1..10).each {|local_count|
+    (1..10).each { |local_count|
       client.user.create(
         firstname: "firstname#{local_count}",
         lastname: "lastname#{local_count}",
@@ -171,7 +171,7 @@ describe ZammadAPI, 'object basics' do
 
     expect(users[0].class).to eq(ZammadAPI::Resources::User)
     count = 0
-    users.each {|local_user|
+    users.each { |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     }
@@ -179,18 +179,18 @@ describe ZammadAPI, 'object basics' do
 
     count = 0
     users = client.user.all
-    users.page(1, 4) {|local_user|
+    users.page(1, 4) { |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     }
     expect(count).to eq(4)
-    users.page(2, 5) {|local_user|
+    users.page(2, 5) { |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     }
     expect(count).to eq(9)
     count = 0
-    users.page(1, 200) {|local_user|
+    users.page(1, 200) { |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     }
@@ -201,7 +201,7 @@ describe ZammadAPI, 'object basics' do
     users = client.user.search(query: firstname)
 
     user_exists = nil
-    users.each {|local_user|
+    users.each { |local_user|
       next if local_user.id != user.id
       user_exists = local_user
     }
@@ -240,7 +240,7 @@ describe ZammadAPI, 'object basics' do
 
     count = 0
     user_exists = nil
-    users.each {|local_user|
+    users.each { |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
       next if local_user.id != user.id
@@ -260,12 +260,12 @@ describe ZammadAPI, 'object basics' do
 
     count = 0
     users = client.user.search(query: firstname)
-    users.page(1, 3) {|local_user|
+    users.page(1, 3) { |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     }
     expect(count).to eq(1)
-    users.page(2, 3) {|local_user|
+    users.page(2, 3) { |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     }

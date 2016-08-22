@@ -8,15 +8,15 @@ module ZammadAPI
   class Client
 
     def initialize(config)
-      @internal_config = config
-      @logger = ZammadAPI::Log.new(@internal_config)
-      @transport = ZammadAPI::Transport.new(@internal_config, @logger)
+      @config    = config
+      @logger    = ZammadAPI::Log.new(@config)
+      @transport = ZammadAPI::Transport.new(@config, @logger)
       check_config
     end
 
     def method_missing(method, *_args)
-      method = method.to_s
-      class_name = "ZammadAPI::Resources::#{modulize(method)}"
+      method     = modulize( method.to_s )
+      class_name = "ZammadAPI::Resources::#{method}"
       begin
         class_object = Kernel.const_get(class_name)
       rescue
@@ -28,12 +28,19 @@ module ZammadAPI
     private
 
     def check_config
-      raise 'url is needed' if !@internal_config[:url]
-      raise 'url need to start with http:// or https://' if @internal_config[:url] !~ %r{^(http|https)://}
-      raise 'user is empty' if (!@internal_config[:user] || @internal_config[:user].empty?) && (!@internal_config[:http_token] || @internal_config[:http_token].empty?)
-      if @internal_config[:user] && !@internal_config[:user].empty?
-        raise 'password is empty' if !@internal_config[:password] || @internal_config[:password].empty?
+      raise 'missing url in config' if !@config[:url]
+      raise 'config url needs to start with http:// or https://' if @config[:url] !~ %r{^(http|https)://}
+
+      # check for token auth
+      return if @config[:http_token] && !@config[:http_token].empty?
+
+      if !@config[:user] || @config[:user].empty?
+        raise 'missing user in config'
       end
+
+      return if @config[:password] && !@config[:password].empty?
+
+      raise 'missing password in config'
     end
 
     def modulize(string)
@@ -42,7 +49,5 @@ module ZammadAPI
             .gsub(/(?:_+|-+)([a-z])/) { $1.upcase }
             .gsub(/(\A|\s)([a-z])/) { $1 + $2.upcase }
     end
-
   end
-
 end

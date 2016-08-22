@@ -111,7 +111,7 @@ describe ZammadAPI, 'object basics' do
     ticket_states = client.ticket_state.all
 
     ticket_state_exists = nil
-    ticket_states.each {|local_ticket_state|
+    ticket_states.each { |local_ticket_state|
       next if local_ticket_state.id != ticket_state.id
       ticket_state_exists = local_ticket_state
     }
@@ -152,7 +152,7 @@ describe ZammadAPI, 'object basics' do
     expect(ticket_states[0].class).to eq(ZammadAPI::Resources::TicketState)
 
     count = 0
-    ticket_states.each {|local_ticket_state|
+    ticket_states.each { |local_ticket_state|
       expect(local_ticket_state.class).to eq(ZammadAPI::Resources::TicketState)
       count += 1
     }
@@ -160,17 +160,17 @@ describe ZammadAPI, 'object basics' do
 
     count = 0
     ticket_states = client.ticket_state.all
-    ticket_states.page(1, 3) {|local_ticket_state|
+    ticket_states.page(1, 3) { |local_ticket_state|
       expect(local_ticket_state.class).to eq(ZammadAPI::Resources::TicketState)
       count += 1
     }
     expect(count).to eq(3)
-    ticket_states.page(2, 3) {|local_ticket_state|
+    ticket_states.page(2, 3) { |local_ticket_state|
       expect(local_ticket_state.class).to eq(ZammadAPI::Resources::TicketState)
       count += 1
     }
     expect(count).to eq(6)
-    ticket_states.page(3, 3) {|local_ticket_state|
+    ticket_states.page(3, 3) { |local_ticket_state|
       expect(local_ticket_state.class).to eq(ZammadAPI::Resources::TicketState)
       count += 1
     }
