@@ -93,7 +93,7 @@ describe ZammadAPI, 'object basics' do
     groups = client.group.all
 
     group_exists = nil
-    groups.each {|local_group|
+    groups.each { |local_group|
       next if local_group.id != group.id
       group_exists = local_group
     }
@@ -126,7 +126,7 @@ describe ZammadAPI, 'object basics' do
     expect(groups[0].class).to eq(ZammadAPI::Resources::Group)
 
     count = 0
-    groups.each {|local_group|
+    groups.each { |local_group|
       expect(local_group.class).to eq(ZammadAPI::Resources::Group)
       count += 1
     }
@@ -134,12 +134,12 @@ describe ZammadAPI, 'object basics' do
 
     count = 0
     groups = client.group.all
-    groups.page(1, 3) {|local_group|
+    groups.page(1, 3) { |local_group|
       expect(local_group.class).to eq(ZammadAPI::Resources::Group)
       count += 1
     }
     expect(count).to eq(3)
-    groups.page(2, 3) {|local_group|
+    groups.page(2, 3) { |local_group|
       expect(local_group.class).to eq(ZammadAPI::Resources::Group)
       count += 1
     }

@@ -2,8 +2,8 @@ module ZammadAPI
   class Dispatcher
 
     def initialize(transport, resource)
-      @resource = resource
       @transport = transport
+      @resource  = resource
     end
 
     def method_missing(method, *args)

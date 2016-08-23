@@ -34,8 +34,8 @@ by username/email and password
 
 ```ruby
 client = ZammadAPI::Client.new(
-  url: 'http://localhost:3000/',
-  user: 'user',
+  url:      'http://localhost:3000/',
+  user:     'user',
   password: 'some_pass'
 )
 ```
@@ -44,7 +44,7 @@ by access token
 
 ```ruby
 client = ZammadAPI::Client.new(
-  url: 'http://localhost:3000/',
+  url:        'http://localhost:3000/',
   http_token: '12345678901234567890',
 )
 ```

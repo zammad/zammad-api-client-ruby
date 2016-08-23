@@ -6,23 +6,25 @@ module ZammadAPI
   module Resources
     class Base
       attr_accessor :new_instance, :url, :attributes
+      attr_reader :changes
 
-      def initialize(transport, attributes)
+      def initialize(transport, attributes = {})
         @new_instance = true
-        @transport = transport
+        @transport    = transport
+        @changes      = {}
+        @url          = self.class.get_url
+
         if attributes.nil?
           attributes = {}
         end
         @attributes = attributes
-        @changes = {}
         symbolize_keys_deep!(@attributes)
-        @url = self.class.url_get
       end
 
       def method_missing(method, *args)
         if method.to_s[-1, 1] == '='
-          method = method.to_s[0, method.length - 1].to_sym
-          @changes[method] = [@attributes[method], args[0]]
+          method              = method.to_s[0, method.length - 1].to_sym
+          @changes[method]    = [@attributes[method], args[0]]
           @attributes[method] = args[0]
         end
         @attributes[method]
@@ -31,8 +33,6 @@ module ZammadAPI
       def new_record?
         @new_instance
       end
-
-      attr_reader :changes
 
       def changed?
         return false if @changes.empty?
@@ -60,7 +60,7 @@ module ZammadAPI
           end
         else
           attributes_to_post = { expand: true }
-          @changes.each {|name, values|
+          @changes.each { |name, values|
             attributes_to_post[name] = values[1]
           }
           response = @transport.put(url: "#{@url}/#{@attributes[:id]}", params: attributes_to_post)
@@ -77,7 +77,7 @@ module ZammadAPI
         true
       end
 
-      def self.url_get
+      def self.get_url
         @url
       end
 
@@ -85,54 +85,12 @@ module ZammadAPI
         @url = value
       end
 
-      def self.all_fetch(transport, _data, page_number = nil, per_page_number = 100)
-        url = "#{@url}?expand=true"
-        if page_number && per_page_number
-          url += "&page=#{page_number}&per_page=#{per_page_number}"
-        end
-        response = transport.get(url: url)
-        data = JSON.parse(response.body)
-        if response.status != 200
-          raise "Can't get .all of object (#{self.class.name}): #{data['error']}"
-        end
-        #record_ids: item_ids,
-        #assets: assets,
-        list = []
-        data.each {|local_data|
-          item = new(transport, local_data)
-          item.new_instance = false
-          list.push item
-        }
-        list
+      def self.all(transport, _)
+        ZammadAPI::ListAll.new(self, transport, per_page: 100)
       end
 
-      def self.search_fetch(transport, data, page_number = nil, per_page_number = 100)
-        url = "#{@url}/search?expand=true&term=#{CGI.escape data[:query]}"
-        if page_number
-          url += "&page=#{page_number}&per_page=#{per_page_number}"
-        end
-        response = transport.get(url: url)
-        data = JSON.parse(response.body)
-        if response.status != 200
-          raise "Can't get .search of object (#{self.class.name}): #{data['error']}"
-        end
-        #record_ids: item_ids,
-        #assets: assets,
-        list = []
-        data.each {|local_data|
-          item = new(transport, local_data)
-          item.new_instance = false
-          list.push item
-        }
-        list
-      end
-
-      def self.all(transport, _data)
-        ZammadAPI::ListAll.new(transport, self)
-      end
-
-      def self.search(transport, data)
-        ZammadAPI::ListSearch.new(transport, self, data)
+      def self.search(transport, parameter)
+        ZammadAPI::ListSearch.new(self, transport, parameter)
       end
 
       def self.find(transport, id)
@@ -158,16 +116,16 @@ module ZammadAPI
         true
       end
 
-      def symbolize_keys_deep!(h)
-        h.keys.each do |k|
-          ks    = k.respond_to?(:to_sym) ? k.to_sym : k
-          h[ks] = h.delete k # Preserve order even when k == ks
-          symbolize_keys_deep! h[ks] if h[ks].is_a? Hash
+      private
+
+      def symbolize_keys_deep!(hash)
+        hash.keys.each do |key|
+          key_symbol       = key.respond_to?(:to_sym) ? key.to_sym : key
+          hash[key_symbol] = hash.delete key # Preserve order even when key == key_symbol
+
+          symbolize_keys_deep! hash[key_symbol] if hash[key_symbol].is_a? Hash
         end
       end
-
     end
-
   end
-
 end

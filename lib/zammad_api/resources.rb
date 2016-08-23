@@ -1,3 +1,4 @@
+require 'zammad_api/list_base'
 require 'zammad_api/list_all'
 require 'zammad_api/list_search'
 require 'zammad_api/resources/base'
@@ -10,6 +11,5 @@ require 'zammad_api/resources/ticket_priority'
 
 module ZammadAPI
   class Resource
-
   end
 end
