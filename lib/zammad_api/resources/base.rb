@@ -12,7 +12,7 @@ module ZammadAPI
         @new_instance = true
         @transport    = transport
         @changes      = {}
-        @url          = self.class.url_get
+        @url          = self.class.get_url
 
         if attributes.nil?
           attributes = {}
@@ -77,7 +77,7 @@ module ZammadAPI
         true
       end
 
-      def self.url_get
+      def self.get_url
         @url
       end
 
@@ -85,52 +85,12 @@ module ZammadAPI
         @url = value
       end
 
-      def self.all_fetch(transport, _data, page_number = nil, per_page_number = 100)
-        url = "#{@url}?expand=true"
-        if page_number && per_page_number
-          url += "&page=#{page_number}&per_page=#{per_page_number}"
-        end
-        response = transport.get(url: url)
-        data = JSON.parse(response.body)
-        if response.status != 200
-          raise "Can't get .all of object (#{self.class.name}): #{data['error']}"
-        end
-
-        list = []
-        data.each { |local_data|
-          item = new(transport, local_data)
-          item.new_instance = false
-          list.push item
-        }
-        list
+      def self.all(transport, _)
+        ZammadAPI::ListAll.new(self, transport, per_page: 100)
       end
 
-      def self.search_fetch(transport, data, page_number = nil, per_page_number = 100)
-        url = "#{@url}/search?expand=true&term=#{CGI.escape data[:query]}"
-        if page_number
-          url += "&page=#{page_number}&per_page=#{per_page_number}"
-        end
-        response = transport.get(url: url)
-        data = JSON.parse(response.body)
-        if response.status != 200
-          raise "Can't get .search of object (#{self.class.name}): #{data['error']}"
-        end
-
-        list = []
-        data.each { |local_data|
-          item = new(transport, local_data)
-          item.new_instance = false
-          list.push item
-        }
-        list
-      end
-
-      def self.all(transport, _data)
-        ZammadAPI::ListAll.new(transport, self)
-      end
-
-      def self.search(transport, data)
-        ZammadAPI::ListSearch.new(transport, self, data)
+      def self.search(transport, parameter)
+        ZammadAPI::ListSearch.new(self, transport, parameter)
       end
 
       def self.find(transport, id)
@@ -155,6 +115,8 @@ module ZammadAPI
         item.destroy
         true
       end
+
+      private
 
       def symbolize_keys_deep!(hash)
         hash.keys.each do |key|
