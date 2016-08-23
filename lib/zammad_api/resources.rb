@@ -1,3 +1,4 @@
+require 'zammad_api/list_base'
 require 'zammad_api/list_all'
 require 'zammad_api/list_search'
 require 'zammad_api/resources/base'
