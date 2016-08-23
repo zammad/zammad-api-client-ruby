@@ -49,6 +49,15 @@ client = ZammadAPI::Client.new(
 )
 ```
 
+by oauth
+
+```ruby
+client = ZammadAPI::Client.new(
+  url: 'http://localhost:3000/',
+  oauth2_token: '12345678901234567890',
+)
+```
+
 ## Resource management
 
 Individual resources can be created, modified, saved, and destroyed.
@@ -176,10 +185,12 @@ create ticket
 ticket = client.ticket.create(
   title: 'a new ticket #1',
   state: 'new',
-  priority: '3 normal',
+  group: 'Users',
+  priority: '2 normal',
+  customer: 'some_customer@example.com',
   article: {
-    content_type: 'text/plain', # or text/html
-    body: 'some body'
+    content_type: 'text/plain', # or text/html, if not given test/plain is used
+    body: 'some body',
   }
 )
 
@@ -202,7 +213,7 @@ ticket[0].group # 'Support'
 ticket[0].created_at # '2022-01-01T12:42:01Z'
 
 tickets.each {|ticket|
-  p "ticket: #{ticket.number} - #{ticket.title}"
+  p "ticket: #{ticket.number} - #{ticket.number}"
 }
 ```
 
