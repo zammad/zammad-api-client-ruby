@@ -77,6 +77,23 @@ describe ZammadAPI, 'object basics' do
     expect(ticket.owner_id).to eq(1)
     expect(ticket.created_by).to eq('master@example.com')
     expect(ticket.updated_by).to eq('master@example.com')
+
+    articles = ticket.articles
+    expect(articles.length).to eq(1)
+    expect(articles[0].class).to eq(ZammadAPI::Resources::TicketArticle)
+    expect(articles[0].subject).to eq('some subject')
+    expect(articles[0].body).to eq('some body')
+
+    ticket.article(
+      subject: 'some subject2',
+      body: 'some body2',
+    )
+
+    articles = ticket.articles
+    expect(articles.length).to eq(2)
+    expect(articles[1].class).to eq(ZammadAPI::Resources::TicketArticle)
+    expect(articles[1].subject).to eq('some subject2')
+    expect(articles[1].body).to eq('some body2')
   end
 
   it 'find' do

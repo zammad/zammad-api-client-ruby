@@ -23,6 +23,7 @@ gem 'zammad_api'
 * organization
 * group
 * ticket
+* ticket_article
 * ticket_state
 * ticket_priority
 
@@ -53,7 +54,7 @@ by oauth
 
 ```ruby
 client = ZammadAPI::Client.new(
-  url: 'http://localhost:3000/',
+  url:          'http://localhost:3000/',
   oauth2_token: '12345678901234567890',
 )
 ```
@@ -215,6 +216,50 @@ ticket[0].created_at # '2022-01-01T12:42:01Z'
 tickets.each {|ticket|
   p "ticket: #{ticket.number} - #{ticket.number}"
 }
+```
+
+get all articles of an ticket
+```ruby
+ticket = client.ticket.find(123)
+articles = ticket.articles
+
+articles[0].id # id of record
+articles[0].from # creator of article
+articles[0].to # recipients of article
+articles[0].subject # article subject
+articles[0].body # text of message
+articles[0].content_type # text/plain or text/html of .body
+articles[0].type # 'note'
+articles[0].sender # 'Customer'
+articles[0].created_at # '2022-01-01T12:42:01Z'
+
+p "ticket: #{ticket.number} - #{ticket.title}"
+articles.each {|article|
+  p "article: #{article.from} - #{article.subject}"
+}
+```
+
+create an articles for an ticket
+```ruby
+ticket = client.ticket.find(123)
+
+article = ticket.article(
+  type: 'note',
+  subject: 'some subject 2',
+  body: 'some body 2',
+)
+
+article.id # id of record
+article.from # creator of article
+article.to # recipients of article
+article.subject # article subject
+article.body # text of message
+article.content_type # text/plain or text/html of .body
+article.type # 'note'
+article.sender # 'Customer'
+article.created_at # '2022-01-01T12:42:01Z'
+
+p "article: #{article.from} - #{article.subject}"
 ```
 
 ## Testing
