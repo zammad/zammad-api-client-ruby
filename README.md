@@ -1,21 +1,23 @@
 # Zammad API Client (Ruby)
 
 ## API version support
-This client supports Zammad version 1.0 API.
+This client supports Zammad API version 1.0.
 
 ## Installation
 
-The Zammad API client can be installed using Rubygems or Bundler.
-
-```ruby
-gem install zammad_api
-```
-
-or add the following to your Gemfile
+Add this line to your application's Gemfile:
 
 ```ruby
 gem 'zammad_api'
 ```
+
+And then execute:
+
+    $ bundle
+
+Or install it yourself as:
+
+    $ gem install zammad_api
 
 ## Available objects
 
@@ -29,9 +31,9 @@ gem 'zammad_api'
 
 ## Usage
 
-### create instanze
+### create instance
 
-by username/email and password
+#### username/email and password
 
 ```ruby
 client = ZammadAPI::Client.new(
@@ -41,7 +43,7 @@ client = ZammadAPI::Client.new(
 )
 ```
 
-by access token
+#### access token
 
 ```ruby
 client = ZammadAPI::Client.new(
@@ -50,7 +52,7 @@ client = ZammadAPI::Client.new(
 )
 ```
 
-by oauth
+#### OAuth2
 
 ```ruby
 client = ZammadAPI::Client.new(
@@ -214,7 +216,7 @@ ticket[0].group # 'Support'
 ticket[0].created_at # '2022-01-01T12:42:01Z'
 
 tickets.each {|ticket|
-  p "ticket: #{ticket.number} - #{ticket.number}"
+  p "ticket: #{ticket.number} - #{ticket.title}"
 }
 ```
 
@@ -266,12 +268,26 @@ p "article: #{article.from} - #{article.subject}"
 
 ### setup an (empty Zammad) test env
 
-* git clone git@github.com:zammad/zammad.git
-* cd zammad
-* cp contrib/auto_wizard_test.json auto_wizard.json
-* ./script/bootstrap.sh
-* rails s
+```
+git clone git@github.com:zammad/zammad.git
+cd zammad
+
+export RAILS_ENV=test
+export WS_PORT=6042
+export BROWSER_PORT=3001
+export IP=localhost
+export TEST_URL=http://$IP:$BROWSER_PORT
+
+script/build/test_startup.sh $RAILS_ENV $BROWSER_PORT $WS_PORT 1
+cp contrib/auto_wizard_test.json auto_wizard.json
+```
 
 ### execute client tests
 
-* rspec spec/zammad_api_spec.rb
+Run tests via `rake spec`. (Remember to export the vars above if you are running this in another shell.)
+
+Cleanup your test system with `script/build/test_shutdown.sh $RAILS_ENV $BROWSER_PORT $WS_PORT 0 1` after the tests have run.
+
+## Contributing
+
+Bug reports and pull requests are welcome on GitHub at https://github.com/martini/zammad_api_client_ruby. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [Contributor Covenant](http://contributor-covenant.org) code of conduct.

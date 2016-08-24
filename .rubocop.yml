@@ -207,3 +207,9 @@ Performance/Casecmp:
   Description: 'Use `casecmp` rather than `downcase ==`.'
   Reference: 'https://github.com/JuanitoFatas/fast-ruby#stringcasecmp-vs-stringdowncase---code'
   Enabled: false
+
+# Disabled since we want that explicitly
+Style/MethodMissing:
+  Description: 'Avoid using `method_missing`.'
+  StyleGuide: 'https://github.com/bbatsov/ruby-style-guide#no-method-missing'
+  Enabled: false

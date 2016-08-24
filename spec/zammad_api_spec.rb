@@ -1,6 +1,8 @@
+require 'spec_helper'
 require 'authentication'
-require 'resources/user_spec'
-require 'resources/group_spec'
-require 'resources/organization_spec'
-require 'resources/ticket_state_spec'
-require 'resources/ticket_priority_spec'
+
+describe ZammadAPI do
+  it 'has a version number' do
+    expect(ZammadAPI::VERSION).not_to be nil
+  end
+end

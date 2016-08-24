@@ -1,6 +1,6 @@
 require 'spec_helper'
 
-describe ZammadAPI, 'object basics' do
+describe ZammadAPI, 'ticket object basics' do
   client = Helper.client()
 
   title = "some ticket title ##{Helper.random()}"
@@ -170,7 +170,7 @@ describe ZammadAPI, 'object basics' do
       expect(local_ticket.class).to eq(ZammadAPI::Resources::Ticket)
       count += 1
     }
-    expect(count).to eq(13)
+    expect(count).to eq(12)
 
     count = 0
     tickets = client.ticket.all
@@ -188,7 +188,7 @@ describe ZammadAPI, 'object basics' do
       expect(local_ticket.class).to eq(ZammadAPI::Resources::Ticket)
       count += 1
     }
-    expect(count).to eq(13)
+    expect(count).to eq(12)
   end
 
   it 'destroy' do
