@@ -1,5 +1,4 @@
 source 'https://rubygems.org'
 
-gem 'faraday'
-gem 'rspec'
-gem 'logger'
+# Specify your gem's dependencies in zammad_api.gemspec
+gemspec

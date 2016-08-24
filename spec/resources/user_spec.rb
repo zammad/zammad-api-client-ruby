@@ -1,6 +1,6 @@
 require 'spec_helper'
 
-describe ZammadAPI, 'object basics' do
+describe ZammadAPI, 'user object basics' do
   client = Helper.client()
 
   random = Helper.random()

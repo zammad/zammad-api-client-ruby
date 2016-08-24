@@ -1,6 +1,6 @@
 require 'spec_helper'
 
-describe ZammadAPI, 'object basics' do
+describe ZammadAPI, 'ticket state object basics' do
   client = Helper.client()
 
   name = "some_ticket_state#{Helper.random()}"
