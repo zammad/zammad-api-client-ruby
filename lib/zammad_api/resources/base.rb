@@ -52,18 +52,17 @@ module ZammadAPI
 
       def save
         if @new_instance
-          @attributes[:expand] = true
-          response = @transport.post(url: @url, params: @attributes)
+          response = @transport.post(url: "#{@url}?expand=true", params: @attributes)
           attributes = JSON.parse(response.body)
           if response.status != 201
             raise "Can't create new object (#{self.class.name}): #{attributes['error']}"
           end
         else
-          attributes_to_post = { expand: true }
+          attributes_to_post = {}
           @changes.each { |name, values|
             attributes_to_post[name] = values[1]
           }
-          response = @transport.put(url: "#{@url}/#{@attributes[:id]}", params: attributes_to_post)
+          response = @transport.put(url: "#{@url}/#{@attributes[:id]}?expand=true", params: attributes_to_post)
           attributes = JSON.parse(response.body)
           if response.status != 200
             raise "Can't update new object (#{self.class.name}): #{attributes['error']}"

@@ -197,7 +197,7 @@ describe ZammadAPI, 'user object basics' do
   end
 
   it 'search' do
-    users = client.user.search(term: firstname)
+    users = client.user.search(query: firstname)
 
     user_exists = nil
     users.each { |local_user|
@@ -233,7 +233,7 @@ describe ZammadAPI, 'user object basics' do
   end
 
   it 'pagination with search' do
-    users = client.user.search(term: firstname)
+    users = client.user.search(query: firstname)
 
     expect(users[0].class).to eq(ZammadAPI::Resources::User)
 
@@ -258,7 +258,7 @@ describe ZammadAPI, 'user object basics' do
     expect(user_exists.updated_by).to eq('master@example.com')
 
     count = 0
-    users = client.user.search(term: firstname)
+    users = client.user.search(query: firstname)
     users.page(1, 3) { |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1

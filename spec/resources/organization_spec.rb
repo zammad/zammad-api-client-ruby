@@ -140,7 +140,7 @@ describe ZammadAPI, 'organization object basics' do
   end
 
   it 'search' do
-    organizations = client.organization.search(term: name)
+    organizations = client.organization.search(query: name)
 
     organization_exists = nil
     organizations.each { |local_organization|
@@ -169,7 +169,7 @@ describe ZammadAPI, 'organization object basics' do
   end
 
   it 'pagination with search' do
-    organizations = client.organization.search(term: "#{name}-2")
+    organizations = client.organization.search(query: "#{name}-2")
 
     expect(organizations[0].class).to eq(ZammadAPI::Resources::Organization)
 
@@ -191,7 +191,7 @@ describe ZammadAPI, 'organization object basics' do
     expect(organization_exists.updated_by).to eq('master@example.com')
 
     count = 0
-    organizations = client.organization.search(term: 'zammad')
+    organizations = client.organization.search(query: 'zammad')
     organizations.page(1, 3) { |local_organization|
       expect(local_organization.class).to eq(ZammadAPI::Resources::Organization)
       count += 1
