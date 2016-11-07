@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
 
   spec.summary       = 'Zammad API v1.0 client.'
   spec.description   = 'Ruby wrapper for the Zammad API v1.0.'
-  spec.homepage      = 'https://github.com/zammad/zammad_api_client_ruby'
+  spec.homepage      = 'https://github.com/zammad/zammad-api-client-ruby'
 
   spec.files         = Dir['{lib}/**/*']
   spec.require_paths = ['lib']

@@ -10,4 +10,4 @@ deploy:
   gem: zammad_api
   on:
     tags: true
-    repo: zammad/zammad_api_client_ruby
+    repo: zammad/zammad-api-client-ruby

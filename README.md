@@ -290,4 +290,4 @@ Cleanup your test system with `script/build/test_shutdown.sh $RAILS_ENV $BROWSER
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/zammad/zammad_api_client_ruby. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [Contributor Covenant](http://contributor-covenant.org) code of conduct.
+Bug reports and pull requests are welcome on GitHub at https://github.com/zammad/zammad-api-client-ruby. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [Contributor Covenant](http://contributor-covenant.org) code of conduct.
