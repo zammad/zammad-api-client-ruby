@@ -17,6 +17,8 @@ module ZammadAPI
       @conn.headers[:user_agent] = 'Zammad API Ruby'
       if config[:http_token] && !config[:http_token].empty?
         @conn.token_auth(config[:http_token])
+      elsif config[:oauth2_token] && !config[:oauth2_token].empty?
+        @conn.authorization :Bearer, config[:oauth2_token]
       else
         @conn.basic_auth(config[:user], config[:password])
       end

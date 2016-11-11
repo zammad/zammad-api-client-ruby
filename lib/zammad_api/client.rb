@@ -33,6 +33,7 @@ module ZammadAPI
 
       # check for token auth
       return if @config[:http_token] && !@config[:http_token].empty?
+      return if @config[:oauth2_token] && !@config[:oauth2_token].empty?
 
       if !@config[:user] || @config[:user].empty?
         raise 'missing user in config'
