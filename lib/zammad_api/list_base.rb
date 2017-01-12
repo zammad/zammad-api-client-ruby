@@ -1,5 +1,6 @@
 module ZammadAPI
   class ListBase
+    include Enumerable
 
     def initialize(resource, transport, parameter = {})
       @resource  = resource
