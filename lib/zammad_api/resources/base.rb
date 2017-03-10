@@ -22,7 +22,7 @@ module ZammadAPI
       end
 
       def method_missing(method, *args)
-        return @attributes[method] if !method.end_with?('=')
+        return @attributes[method] if !method.to_s.end_with?('=')
         method              = method.to_s[0, method.length - 1].to_sym
         @changes[method]    = [@attributes[method], args[0]]
         @attributes[method] = args[0]
