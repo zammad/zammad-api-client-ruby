@@ -22,12 +22,11 @@ module ZammadAPI
       end
 
       def method_missing(method, *args)
-        if method.to_s[-1, 1] == '='
-          method              = method.to_s[0, method.length - 1].to_sym
-          @changes[method]    = [@attributes[method], args[0]]
-          @attributes[method] = args[0]
-        end
-        @attributes[method]
+        return @attributes[method] if !method.end_with?('=')
+        method              = method.to_s[0, method.length - 1].to_sym
+        @changes[method]    = [@attributes[method], args[0]]
+        @attributes[method] = args[0]
+        nil
       end
 
       def new_record?
@@ -35,8 +34,7 @@ module ZammadAPI
       end
 
       def changed?
-        return false if @changes.empty?
-        true
+        @changes.present?
       end
 
       def destroy
@@ -44,35 +42,17 @@ module ZammadAPI
         if response.body.to_s != '' && response.body.to_s != ' '
           data = JSON.parse(response.body)
         end
-        if response.status != 200
-          raise "Can't destroy object (#{self.class.name}): #{data['error']}"
-        end
-        true
+        return true if response.status == 200
+        raise "Can't destroy object (#{self.class.name}): #{data['error']}"
       end
 
       def save
-        if @new_instance
-          response = @transport.post(url: "#{@url}?expand=true", params: @attributes)
-          attributes = JSON.parse(response.body)
-          if response.status != 201
-            raise "Can't create new object (#{self.class.name}): #{attributes['error']}"
-          end
-        else
-          attributes_to_post = {}
-          @changes.each { |name, values|
-            attributes_to_post[name] = values[1]
-          }
-          response = @transport.put(url: "#{@url}/#{@attributes[:id]}?expand=true", params: attributes_to_post)
-          attributes = JSON.parse(response.body)
-          if response.status != 200
-            raise "Can't update new object (#{self.class.name}): #{attributes['error']}"
-          end
-        end
+        attributes = saved_attributes
         symbolize_keys_deep!(attributes)
         attributes.delete(:article)
-        @attributes = attributes
+        @attributes   = attributes
         @new_instance = false
-        @changes = {}
+        @changes      = {}
         true
       end
 
@@ -116,6 +96,34 @@ module ZammadAPI
       end
 
       private
+
+      def saved_attributes
+        return save_new if @new_instance
+        save_existing
+      end
+
+      def save_new
+        response   = @transport.post(url: "#{@url}?expand=true", params: @attributes)
+        attributes = JSON.parse(response.body)
+        return attributes if response.status == 201
+        save_error(attributes)
+      end
+
+      def save_existing
+        attributes_to_post = {}
+        @changes.each { |name, values|
+          attributes_to_post[name] = values[1]
+        }
+        response   = @transport.put(url: "#{@url}/#{@attributes[:id]}?expand=true", params: attributes_to_post)
+        attributes = JSON.parse(response.body)
+
+        return attributes if response.status == 200
+        save_error(attributes)
+      end
+
+      def save_error(attributes)
+        raise "Can't save object (#{self.class.name}): #{attributes['error']}"
+      end
 
       def symbolize_keys_deep!(hash)
         hash.keys.each do |key|

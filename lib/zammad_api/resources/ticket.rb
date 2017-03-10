@@ -7,17 +7,16 @@ class ZammadAPI::Resources::Ticket < ZammadAPI::Resources::Base
     if response.status != 200
       raise "Can't get articles (#{self.class.name}): #{data['error']}"
     end
-    articles = []
-    data.each { |raw|
+
+    data.collect { |raw|
       item = ZammadAPI::Resources::TicketArticle.new(@transport, raw)
       item.new_instance = false
-      articles.push item
+      item
     }
-    articles
   end
 
   def article(data)
-    data['ticket_id'] = @attributes[:id]
+    data[:ticket_id] = @attributes[:id]
     item = ZammadAPI::Resources::TicketArticle.new(@transport, data)
     item.save
     item

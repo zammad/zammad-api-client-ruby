@@ -94,6 +94,28 @@ describe ZammadAPI, 'ticket object basics' do
     expect(articles[1].class).to eq(ZammadAPI::Resources::TicketArticle)
     expect(articles[1].subject).to eq('some subject2')
     expect(articles[1].body).to eq('some body2')
+    expect(articles[1].attachments.count).to eq(0)
+
+    ticket.article(
+      subject: 'some subject3',
+      body: 'some body3',
+      attachments: [
+        'filename' => 'some_file.txt',
+        'data' => 'dGVzdCAxMjM=',
+        'mime-type' => 'text/plain',
+      ]
+    )
+
+    articles = ticket.articles
+    expect(articles.length).to eq(3)
+    expect(articles[2].class).to eq(ZammadAPI::Resources::TicketArticle)
+    expect(articles[2].subject).to eq('some subject3')
+    expect(articles[2].body).to eq('some body3')
+    expect(articles[2].attachments.count).to eq(1)
+    expect(articles[2].attachments[0].filename).to eq('some_file.txt')
+    expect(articles[2].attachments[0].download).to eq('test 123')
+    expect(articles[2].attachments[0].size).to eq('8')
+    expect(articles[2].attachments[0].preferences[:'Mime-Type']).to eq('text/plain')
   end
 
   it 'find' do
