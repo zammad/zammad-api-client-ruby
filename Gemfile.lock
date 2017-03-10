@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    zammad_api (1.0.2)
+    zammad_api (1.0.3)
       faraday (~> 0.9)
       logger (~> 1.2)
 
