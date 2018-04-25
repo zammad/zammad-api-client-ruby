@@ -24,42 +24,38 @@ module ZammadAPI
       end
     end
 
-    def get(param)
-      @logger.debug "GET: #{@url}#{param[:url]}"
-      response = @conn.get param[:url]
-      response
+    %w[get post put delete].each do |method|
+      class_eval <<-RUBY, __FILE__, __LINE__ + 1
+        def #{method}(params)
+          run_request(:#{method}, params)
+        end
+      RUBY
     end
 
-    def post(param)
-      @logger.debug "POST: #{@url}#{param[:url]}"
-      @logger.debug "Params: #{param[:params].inspect}"
-      response = @conn.post do |req|
-        req.url param[:url]
-        req.headers['Content-Type'] = 'application/json'
-        req.body = param[:params].to_json
+    private
+
+    def run_request(verb, param)
+
+      @logger.debug "#{verb.to_s.upcase}: #{@url}#{param[:url]}"
+
+      with_params = !param[:params].nil?
+      if with_params
+        @logger.debug "Params: #{param[:params].inspect}"
       end
-      @logger.debug "Response: #{response.body}"
-      response
-    end
 
-    def put(param)
-      @logger.debug "PUT: #{@url}#{param[:url]}"
-      @logger.debug "Params: #{param[:params].inspect}"
-      response = @conn.put do |req|
+      response = @conn.public_send(verb) do |req|
         req.url param[:url]
-        req.headers['Content-Type'] = 'application/json'
-        req.body = param[:params].to_json
+
+        if with_params
+          req.headers['Content-Type'] = 'application/json'
+          req.body                    = param[:params].to_json
+        end
+
+        yield(req) if block_given?
       end
+
       @logger.debug "Response: #{response.body}"
       response
     end
-
-    def delete(param)
-      @logger.debug "DELETE: #{@url}#{param[:url]}"
-      response = @conn.delete param[:url]
-      @logger.debug "Response: #{response.body}"
-      response
-    end
-
   end
 end
