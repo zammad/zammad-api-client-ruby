@@ -1,5 +1,15 @@
 $LOAD_PATH.unshift File.expand_path('../../lib', __FILE__)
 
+# we don't require 'webmock/rspec' over here
+# since we want to mock only certain requests
+# but the API should be available in general
+require 'webmock'
+
+RSpec.configure do |config|
+  config.include WebMock::API
+  config.include WebMock::Matchers
+end
+
 require 'zammad_api'
 
 class Helper

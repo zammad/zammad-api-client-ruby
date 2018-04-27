@@ -4,7 +4,7 @@ require 'openssl'
 module ZammadAPI
   class Transport
 
-    attr_accessor :url, :user, :password
+    attr_accessor :url, :user, :password, :on_behalf_of
 
     def initialize(config, logger)
       @logger = logger
@@ -49,6 +49,10 @@ module ZammadAPI
         if with_params
           req.headers['Content-Type'] = 'application/json'
           req.body                    = param[:params].to_json
+        end
+
+        if !on_behalf_of.nil?
+          req.headers['X-On-Behalf-Of'] = on_behalf_of
         end
 
         yield(req) if block_given?

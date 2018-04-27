@@ -1,3 +1,5 @@
+require 'forwardable'
+
 require 'zammad_api/log'
 require 'zammad_api/transport'
 require 'zammad_api/dispatcher'
@@ -6,12 +8,22 @@ require 'zammad_api/resources'
 module ZammadAPI
 
   class Client
+    extend Forwardable
+
+    def_delegators :@transport, :on_behalf_of, :on_behalf_of=
 
     def initialize(config)
       @config    = config
       @logger    = ZammadAPI::Log.new(@config)
       @transport = ZammadAPI::Transport.new(@config, @logger)
       check_config
+    end
+
+    def perform_on_behalf_of(identifier)
+      self.on_behalf_of = identifier
+      yield.tap do |_|
+        self.on_behalf_of = nil
+      end
     end
 
     def method_missing(method, *_args)
