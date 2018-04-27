@@ -181,6 +181,36 @@ groups.page(2,3) {|group|
 }
 ```
 
+### perform actions on behalf of other user
+
+As described in the [Zammad API documentation](https://docs.zammad.org/en/latest/api-intro.html#example-curl-request-on-behalf-of-a-different-user) it is possible to perfom actions on behalf other users. To use this feature you can set the attribute of the client accordingly:
+
+```ruby
+client.on_behalf_of = 'some_login'
+```
+
+All following actions with the client will be performed on behalf of the user with the `login` "some_login".
+
+To reset this back to regular requests just set `nil`:
+
+```ruby
+client.on_behalf_of = nil
+```
+
+It's possible to perform only a block of actions on behalf of another user via:
+
+```ruby
+client.perform_on_behalf_of('some_login') do
+  # ticket is created on behalf of the user with
+  # the login "some_login"
+  client.ticket.create(
+    ...
+  )
+end
+
+# further actions are performed regularly.
+```
+
 ## Examples
 
 create ticket
