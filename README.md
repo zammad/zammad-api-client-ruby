@@ -181,7 +181,7 @@ groups.page(2,3) {|group|
 }
 ```
 
-### perform actions on behalf of other user
+## perform actions on behalf of other user
 
 As described in the [Zammad API documentation](https://docs.zammad.org/en/latest/api-intro.html#example-curl-request-on-behalf-of-a-different-user) it is possible to perfom actions on behalf other users. To use this feature you can set the attribute of the client accordingly:
 
