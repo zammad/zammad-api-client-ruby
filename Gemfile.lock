@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    zammad_api (1.0.3)
+    zammad_api (1.0.4)
       faraday (~> 0.9)
       logger (~> 1.2)
 
@@ -13,7 +13,7 @@ GEM
     crack (0.4.3)
       safe_yaml (~> 1.0.0)
     diff-lcs (1.2.5)
-    faraday (0.11.0)
+    faraday (0.14.0)
       multipart-post (>= 1.2, < 3)
     hashdiff (0.3.7)
     logger (1.2.8)
