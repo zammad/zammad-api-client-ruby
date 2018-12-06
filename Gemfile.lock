@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    zammad_api (1.0.4)
+    zammad_api (1.0.5)
       faraday (~> 0.9)
 
 GEM
