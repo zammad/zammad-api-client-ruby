@@ -224,13 +224,13 @@ ticket = client.ticket.create(
   article: {
     content_type: 'text/plain', # or text/html, if not given test/plain is used
     body: 'some body',
+    # attachments can be optional, data needs to be base64 encoded
+    attachments: [
+      'filename' => 'some_file.txt',
+      'data' => 'dGVzdCAxMjM=',
+      'mime-type' => 'text/plain',
+    ],
   },
-  # attachments can be optional, data needs to be base64 encoded
-  attachments: [
-    'filename' => 'some_file.txt',
-    'data' => 'dGVzdCAxMjM=',
-    'mime-type' => 'text/plain',
-  ],
 )
 
 ticket.id # id of record
