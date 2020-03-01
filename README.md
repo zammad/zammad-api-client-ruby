@@ -349,22 +349,16 @@ p "article: #{article.from} - #{article.subject}"
 ```
 git clone git@github.com:zammad/zammad.git
 cd zammad
-
-export RAILS_ENV=test
-export WS_PORT=6042
-export BROWSER_PORT=3001
-export IP=localhost
-export TEST_URL=http://$IP:$BROWSER_PORT
-
-script/build/test_startup.sh $RAILS_ENV $BROWSER_PORT $WS_PORT 1
-cp contrib/auto_wizard_test.json auto_wizard.json
+export RAILS_ENV: "production"
+export APP_RESTART_CMD: "bundle exec rake zammad:ci:app:restart"
+RAILS_ENV=test bundle exec rake db:create
+rake zammad:setup:auto_wizard
+bundle exec rake zammad:ci:test:start
 ```
 
 ### execute client tests
 
 Run tests via `rake spec`. (Remember to export the vars above if you are running this in another shell.)
-
-Cleanup your test system with `script/build/test_shutdown.sh $RAILS_ENV $BROWSER_PORT $WS_PORT 0 1` after the tests have run.
 
 ## Contributing
 

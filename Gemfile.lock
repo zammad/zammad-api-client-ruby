@@ -17,7 +17,7 @@ GEM
     hashdiff (0.3.7)
     multipart-post (2.0.0)
     public_suffix (3.0.2)
-    rake (10.5.0)
+    rake (13.0.1)
     rspec (3.5.0)
       rspec-core (~> 3.5.0)
       rspec-expectations (~> 3.5.0)
@@ -42,10 +42,10 @@ PLATFORMS
 
 DEPENDENCIES
   bundler (~> 1.12)
-  rake (~> 10.0)
+  rake (~> 13)
   rspec (~> 3.0)
   webmock
   zammad_api!
 
 BUNDLED WITH
-   1.16.2
+   1.17.3
