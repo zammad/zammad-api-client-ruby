@@ -349,10 +349,10 @@ p "article: #{article.from} - #{article.subject}"
 ```
 git clone git@github.com:zammad/zammad.git
 cd zammad
-export RAILS_ENV: "production"
-export APP_RESTART_CMD: "bundle exec rake zammad:ci:app:restart"
-RAILS_ENV=test bundle exec rake db:create
-rake zammad:setup:auto_wizard
+export RAILS_ENV="test"
+export APP_RESTART_CMD="bundle exec rake zammad:ci:app:restart"
+script/bootstrap.sh && echo '' > log/test.log
+cp contrib/auto_wizard_test.json auto_wizard.json
 bundle exec rake zammad:ci:test:start
 ```
 
