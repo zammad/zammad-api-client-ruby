@@ -360,6 +360,13 @@ bundle exec rake zammad:ci:test:start
 
 Run tests via `rake spec`. (Remember to export the vars above if you are running this in another shell.)
 
+## Publishing
+
+```
+gem build -o pkg/zammad_api-1.0.6.gem zammad_api.gemspec
+gem push pkg/zammad_api-1.0.6.gem
+```
+
 ## Contributing
 
 Bug reports and pull requests are welcome on GitHub at https://github.com/zammad/zammad-api-client-ruby. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [Contributor Covenant](http://contributor-covenant.org) code of conduct.
