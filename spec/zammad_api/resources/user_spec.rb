@@ -266,11 +266,12 @@ describe ZammadAPI, 'user object basics' do
   it 'destroy' do
 
     # wait until zammad scheduler wrote some entries to activity stream
-    # to have some references
+    # to have some references and not allow users to delete
     sleep 12
 
-    result = user.destroy
-    expect(result).to eq(true)
+    expect { user.destroy }.to raise_error(RuntimeError)
+    #result = user.destroy
+    #expect(result).to eq(true)
   end
 
 end
