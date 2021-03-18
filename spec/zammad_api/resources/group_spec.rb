@@ -20,7 +20,7 @@ describe ZammadAPI, 'group object basics' do
       name: name,
       assignment_timeout: 100,
       follow_up_assignment: false,
-      follow_up_possible: 'reject',
+      follow_up_possible: 'yes',
       note: '',
       active: true,
     )
@@ -31,7 +31,7 @@ describe ZammadAPI, 'group object basics' do
     expect(group.name).to eq(name)
     expect(group.assignment_timeout).to eq(100)
     expect(group.follow_up_assignment).to eq(false)
-    expect(group.follow_up_possible).to eq('reject')
+    expect(group.follow_up_possible).to eq('yes')
     expect(group.note).to eq('')
     expect(group.active).to eq(true)
   end
@@ -44,7 +44,7 @@ describe ZammadAPI, 'group object basics' do
     expect(group.name).to eq(name)
     expect(group.assignment_timeout).to eq(100)
     expect(group.follow_up_assignment).to eq(false)
-    expect(group.follow_up_possible).to eq('reject')
+    expect(group.follow_up_possible).to eq('yes')
     expect(group.note).to eq('')
     expect(group.active).to eq(true)
 
@@ -70,7 +70,7 @@ describe ZammadAPI, 'group object basics' do
     expect(group.name).to eq("#{name}-2")
     expect(group.assignment_timeout).to eq(4711)
     expect(group.follow_up_assignment).to eq(false)
-    expect(group.follow_up_possible).to eq('reject')
+    expect(group.follow_up_possible).to eq('yes')
     expect(group.note).to eq('some note')
     expect(group.active).to eq(false)
 
@@ -84,7 +84,7 @@ describe ZammadAPI, 'group object basics' do
     expect(group_lookup.name).to eq("#{name}-2")
     expect(group_lookup.assignment_timeout).to eq(4711)
     expect(group_lookup.follow_up_assignment).to eq(false)
-    expect(group_lookup.follow_up_possible).to eq('reject')
+    expect(group_lookup.follow_up_possible).to eq('yes')
     expect(group_lookup.note).to eq('some note')
     expect(group_lookup.active).to eq(false)
   end
@@ -102,7 +102,7 @@ describe ZammadAPI, 'group object basics' do
     expect(group_exists.name).to eq("#{name}-2")
     expect(group_exists.assignment_timeout).to eq(4711)
     expect(group_exists.follow_up_assignment).to eq(false)
-    expect(group_exists.follow_up_possible).to eq('reject')
+    expect(group_exists.follow_up_possible).to eq('yes')
     expect(group_exists.note).to eq('some note')
     expect(group_exists.active).to eq(false)
 
@@ -115,7 +115,7 @@ describe ZammadAPI, 'group object basics' do
     expect(group_lookup.name).to eq("#{name}-2")
     expect(group_lookup.assignment_timeout).to eq(4711)
     expect(group_lookup.follow_up_assignment).to eq(false)
-    expect(group_lookup.follow_up_possible).to eq('reject')
+    expect(group_lookup.follow_up_possible).to eq('yes')
     expect(group_lookup.note).to eq('some note')
     expect(group_lookup.active).to eq(true)
   end
