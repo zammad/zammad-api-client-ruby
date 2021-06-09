@@ -41,11 +41,11 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
-  bundler (~> 1.12)
+  bundler (>= 2.2.10)
   rake (~> 13)
   rspec (~> 3.0)
   webmock
   zammad_api!
 
 BUNDLED WITH
-   1.17.3
+   2.2.19
