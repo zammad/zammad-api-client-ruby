@@ -41,8 +41,8 @@ describe ZammadAPI, 'organization object basics' do
     expect(organization.shared).to eq(false)
     expect(organization.note).to eq('')
     expect(organization.active).to eq(true)
-    expect(organization.created_by).to eq('master@example.com')
-    expect(organization.updated_by).to eq('master@example.com')
+    expect(organization.created_by).to eq('admin@example.com')
+    expect(organization.updated_by).to eq('admin@example.com')
 
     organization.name = "#{name}-2"
     organization.note = 'some note'
@@ -67,8 +67,8 @@ describe ZammadAPI, 'organization object basics' do
     expect(organization.shared).to eq(true)
     expect(organization.note).to eq('some note')
     expect(organization.active).to eq(false)
-    expect(organization.created_by).to eq('master@example.com')
-    expect(organization.updated_by).to eq('master@example.com')
+    expect(organization.created_by).to eq('admin@example.com')
+    expect(organization.updated_by).to eq('admin@example.com')
   end
 
   it 'find' do
@@ -80,8 +80,8 @@ describe ZammadAPI, 'organization object basics' do
     expect(organization_lookup.shared).to eq(true)
     expect(organization_lookup.note).to eq('some note')
     expect(organization_lookup.active).to eq(false)
-    expect(organization_lookup.created_by).to eq('master@example.com')
-    expect(organization_lookup.updated_by).to eq('master@example.com')
+    expect(organization_lookup.created_by).to eq('admin@example.com')
+    expect(organization_lookup.updated_by).to eq('admin@example.com')
   end
 
   it 'all' do
@@ -97,8 +97,8 @@ describe ZammadAPI, 'organization object basics' do
     expect(organization_exists.name).to eq("#{name}-2")
     expect(organization_exists.note).to eq('some note')
     expect(organization_exists.active).to eq(false)
-    expect(organization_exists.created_by).to eq('master@example.com')
-    expect(organization_exists.updated_by).to eq('master@example.com')
+    expect(organization_exists.created_by).to eq('admin@example.com')
+    expect(organization_exists.updated_by).to eq('admin@example.com')
 
     organization_exists.active = true
     organization_exists.save
@@ -109,8 +109,8 @@ describe ZammadAPI, 'organization object basics' do
     expect(organization_lookup.name).to eq("#{name}-2")
     expect(organization_lookup.note).to eq('some note')
     expect(organization_lookup.active).to eq(true)
-    expect(organization_lookup.created_by).to eq('master@example.com')
-    expect(organization_lookup.updated_by).to eq('master@example.com')
+    expect(organization_lookup.created_by).to eq('admin@example.com')
+    expect(organization_lookup.updated_by).to eq('admin@example.com')
   end
 
   it 'pagination with all' do
@@ -152,8 +152,8 @@ describe ZammadAPI, 'organization object basics' do
     expect(organization_exists.name).to eq("#{name}-2")
     expect(organization_exists.note).to eq('some note')
     expect(organization_exists.active).to eq(true)
-    expect(organization_exists.created_by).to eq('master@example.com')
-    expect(organization_exists.updated_by).to eq('master@example.com')
+    expect(organization_exists.created_by).to eq('admin@example.com')
+    expect(organization_exists.updated_by).to eq('admin@example.com')
 
     organization_exists.active = false
     organization_exists.save
@@ -164,8 +164,8 @@ describe ZammadAPI, 'organization object basics' do
     expect(organization_lookup.name).to eq("#{name}-2")
     expect(organization_lookup.note).to eq('some note')
     expect(organization_lookup.active).to eq(false)
-    expect(organization_lookup.created_by).to eq('master@example.com')
-    expect(organization_lookup.updated_by).to eq('master@example.com')
+    expect(organization_lookup.created_by).to eq('admin@example.com')
+    expect(organization_lookup.updated_by).to eq('admin@example.com')
   end
 
   it 'pagination with search' do
@@ -187,8 +187,8 @@ describe ZammadAPI, 'organization object basics' do
     expect(organization_exists.name).to eq("#{name}-2")
     expect(organization_exists.note).to eq('some note')
     expect(organization_exists.active).to eq(false)
-    expect(organization_exists.created_by).to eq('master@example.com')
-    expect(organization_exists.updated_by).to eq('master@example.com')
+    expect(organization_exists.created_by).to eq('admin@example.com')
+    expect(organization_exists.updated_by).to eq('admin@example.com')
 
     count = 0
     organizations = client.organization.search(query: 'zammad')

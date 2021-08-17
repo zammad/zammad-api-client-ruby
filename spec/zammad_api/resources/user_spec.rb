@@ -58,8 +58,8 @@ describe ZammadAPI, 'user object basics' do
     expect(user.preferences).to eq({ key1: 123, key2: 'abc' })
     expect(user.note).to eq('')
     expect(user.active).to eq(true)
-    expect(user.created_by).to eq('master@example.com')
-    expect(user.updated_by).to eq('master@example.com')
+    expect(user.created_by).to eq('admin@example.com')
+    expect(user.updated_by).to eq('admin@example.com')
 
     user.firstname = "firstname#{random}-2"
     user.roles = ['Agent']
@@ -83,8 +83,8 @@ describe ZammadAPI, 'user object basics' do
     expect(user.role_ids).to eq([2])
     expect(user.roles).to eq(['Agent'])
     expect(user.note).to eq('some note')
-    expect(user.created_by).to eq('master@example.com')
-    expect(user.updated_by).to eq('master@example.com')
+    expect(user.created_by).to eq('admin@example.com')
+    expect(user.updated_by).to eq('admin@example.com')
   end
 
   it 'find' do
@@ -100,8 +100,8 @@ describe ZammadAPI, 'user object basics' do
     expect(user_lookup.role_ids).to eq([2])
     expect(user_lookup.roles).to eq(['Agent'])
     expect(user_lookup.note).to eq('some note')
-    expect(user_lookup.created_by).to eq('master@example.com')
-    expect(user_lookup.updated_by).to eq('master@example.com')
+    expect(user_lookup.created_by).to eq('admin@example.com')
+    expect(user_lookup.updated_by).to eq('admin@example.com')
 
   end
 
@@ -124,8 +124,8 @@ describe ZammadAPI, 'user object basics' do
     expect(user_exists.role_ids).to eq([2])
     expect(user_exists.roles).to eq(['Agent'])
     expect(user_exists.note).to eq('some note')
-    expect(user_exists.created_by).to eq('master@example.com')
-    expect(user_exists.updated_by).to eq('master@example.com')
+    expect(user_exists.created_by).to eq('admin@example.com')
+    expect(user_exists.updated_by).to eq('admin@example.com')
     user_exists.save
 
     user_lookup = client.user.find(user.id)
@@ -140,8 +140,8 @@ describe ZammadAPI, 'user object basics' do
     expect(user_lookup.roles).to eq(['Agent'])
     expect(user_lookup.note).to eq('some note')
     expect(user_lookup.active).to eq(true)
-    expect(user_lookup.created_by).to eq('master@example.com')
-    expect(user_lookup.updated_by).to eq('master@example.com')
+    expect(user_lookup.created_by).to eq('admin@example.com')
+    expect(user_lookup.updated_by).to eq('admin@example.com')
 
   end
 
@@ -204,8 +204,8 @@ describe ZammadAPI, 'user object basics' do
     expect(user_exists.role_ids).to eq([2])
     expect(user_exists.roles).to eq(['Agent'])
     expect(user_exists.active).to eq(true)
-    expect(user_exists.created_by).to eq('master@example.com')
-    expect(user_exists.updated_by).to eq('master@example.com')
+    expect(user_exists.created_by).to eq('admin@example.com')
+    expect(user_exists.updated_by).to eq('admin@example.com')
 
     user_exists.active = false
     user_exists.save
@@ -219,8 +219,8 @@ describe ZammadAPI, 'user object basics' do
     expect(user_lookup.role_ids).to eq([2])
     expect(user_lookup.roles).to eq(['Agent'])
     expect(user_lookup.active).to eq(false)
-    expect(user_lookup.created_by).to eq('master@example.com')
-    expect(user_lookup.updated_by).to eq('master@example.com')
+    expect(user_lookup.created_by).to eq('admin@example.com')
+    expect(user_lookup.updated_by).to eq('admin@example.com')
 
   end
 
@@ -246,8 +246,8 @@ describe ZammadAPI, 'user object basics' do
     expect(user_exists.role_ids).to eq([2])
     expect(user_exists.roles).to eq(['Agent'])
     expect(user_exists.active).to eq(false)
-    expect(user_exists.created_by).to eq('master@example.com')
-    expect(user_exists.updated_by).to eq('master@example.com')
+    expect(user_exists.created_by).to eq('admin@example.com')
+    expect(user_exists.updated_by).to eq('admin@example.com')
 
     count = 0
     users = client.user.search(query: firstname)

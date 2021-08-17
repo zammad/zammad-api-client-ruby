@@ -17,7 +17,7 @@ class Helper
   def self.config
     {
       url:      ENV['TEST_URL']      || 'http://localhost:3000/',
-      user:     ENV['TEST_USER']     || 'master@example.com',
+      user:     ENV['TEST_USER']     || 'admin@example.com',
       password: ENV['TEST_PASSWORD'] || 'test'
     }
   end

@@ -52,8 +52,8 @@ describe ZammadAPI, 'ticket object basics' do
     expect(ticket.state_id).to eq(1)
     expect(ticket.owner).to eq('-')
     expect(ticket.owner_id).to eq(1)
-    expect(ticket.created_by).to eq('master@example.com')
-    expect(ticket.updated_by).to eq('master@example.com')
+    expect(ticket.created_by).to eq('admin@example.com')
+    expect(ticket.updated_by).to eq('admin@example.com')
 
     ticket.title = "#{title}-2"
     ticket.state = 'open'
@@ -75,8 +75,8 @@ describe ZammadAPI, 'ticket object basics' do
     expect(ticket.state_id).to eq(2)
     expect(ticket.owner).to eq('-')
     expect(ticket.owner_id).to eq(1)
-    expect(ticket.created_by).to eq('master@example.com')
-    expect(ticket.updated_by).to eq('master@example.com')
+    expect(ticket.created_by).to eq('admin@example.com')
+    expect(ticket.updated_by).to eq('admin@example.com')
 
     articles = ticket.articles
     expect(articles.length).to eq(1)
@@ -128,8 +128,8 @@ describe ZammadAPI, 'ticket object basics' do
     expect(ticket_lookup.state_id).to eq(2)
     expect(ticket_lookup.owner).to eq('-')
     expect(ticket_lookup.owner_id).to eq(1)
-    expect(ticket_lookup.created_by).to eq('master@example.com')
-    expect(ticket_lookup.updated_by).to eq('master@example.com')
+    expect(ticket_lookup.created_by).to eq('admin@example.com')
+    expect(ticket_lookup.updated_by).to eq('admin@example.com')
   end
 
   it 'all' do
@@ -147,8 +147,8 @@ describe ZammadAPI, 'ticket object basics' do
     expect(ticket_exists.state_id).to eq(2)
     expect(ticket_exists.owner).to eq('-')
     expect(ticket_exists.owner_id).to eq(1)
-    expect(ticket_exists.created_by).to eq('master@example.com')
-    expect(ticket_exists.updated_by).to eq('master@example.com')
+    expect(ticket_exists.created_by).to eq('admin@example.com')
+    expect(ticket_exists.updated_by).to eq('admin@example.com')
 
     ticket_exists.state = 'closed'
     ticket_exists.save
@@ -161,8 +161,8 @@ describe ZammadAPI, 'ticket object basics' do
     expect(ticket_lookup.state_id).to eq(4)
     expect(ticket_lookup.owner).to eq('-')
     expect(ticket_lookup.owner_id).to eq(1)
-    expect(ticket_lookup.created_by).to eq('master@example.com')
-    expect(ticket_lookup.updated_by).to eq('master@example.com')
+    expect(ticket_lookup.created_by).to eq('admin@example.com')
+    expect(ticket_lookup.updated_by).to eq('admin@example.com')
   end
 
   it 'pagination with all' do

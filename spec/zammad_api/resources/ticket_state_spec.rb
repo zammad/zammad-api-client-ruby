@@ -49,8 +49,8 @@ describe ZammadAPI, 'ticket state object basics' do
     expect(ticket_state.ignore_escalation).to eq(false)
     expect(ticket_state.note).to eq('')
     expect(ticket_state.active).to eq(true)
-    expect(ticket_state.created_by).to eq('master@example.com')
-    expect(ticket_state.updated_by).to eq('master@example.com')
+    expect(ticket_state.created_by).to eq('admin@example.com')
+    expect(ticket_state.updated_by).to eq('admin@example.com')
 
     ticket_state.name = "#{name}-2"
     ticket_state.note = 'some note'
@@ -86,8 +86,8 @@ describe ZammadAPI, 'ticket state object basics' do
     expect(ticket_state.ignore_escalation).to eq(true)
     expect(ticket_state.note).to eq('some note')
     expect(ticket_state.active).to eq(false)
-    expect(ticket_state.created_by).to eq('master@example.com')
-    expect(ticket_state.updated_by).to eq('master@example.com')
+    expect(ticket_state.created_by).to eq('admin@example.com')
+    expect(ticket_state.updated_by).to eq('admin@example.com')
   end
 
   it 'find' do
@@ -103,8 +103,8 @@ describe ZammadAPI, 'ticket state object basics' do
     expect(ticket_state_lookup.ignore_escalation).to eq(true)
     expect(ticket_state_lookup.note).to eq('some note')
     expect(ticket_state_lookup.active).to eq(false)
-    expect(ticket_state_lookup.created_by).to eq('master@example.com')
-    expect(ticket_state_lookup.updated_by).to eq('master@example.com')
+    expect(ticket_state_lookup.created_by).to eq('admin@example.com')
+    expect(ticket_state_lookup.updated_by).to eq('admin@example.com')
   end
 
   it 'all' do
@@ -125,8 +125,8 @@ describe ZammadAPI, 'ticket state object basics' do
     expect(ticket_state_exists.ignore_escalation).to eq(true)
     expect(ticket_state_exists.note).to eq('some note')
     expect(ticket_state_exists.active).to eq(false)
-    expect(ticket_state_exists.created_by).to eq('master@example.com')
-    expect(ticket_state_exists.updated_by).to eq('master@example.com')
+    expect(ticket_state_exists.created_by).to eq('admin@example.com')
+    expect(ticket_state_exists.updated_by).to eq('admin@example.com')
 
     ticket_state_exists.active = true
     ticket_state_exists.save
@@ -141,8 +141,8 @@ describe ZammadAPI, 'ticket state object basics' do
     expect(ticket_state_lookup.next_state_id).to eq(4)
     expect(ticket_state_lookup.note).to eq('some note')
     expect(ticket_state_lookup.active).to eq(true)
-    expect(ticket_state_lookup.created_by).to eq('master@example.com')
-    expect(ticket_state_lookup.updated_by).to eq('master@example.com')
+    expect(ticket_state_lookup.created_by).to eq('admin@example.com')
+    expect(ticket_state_lookup.updated_by).to eq('admin@example.com')
 
   end
 
