@@ -20,7 +20,7 @@ module ZammadAPI
       elsif config[:oauth2_token] && !config[:oauth2_token].empty?
         @conn.request :authorization, 'Bearer', config[:oauth2_token]
       else
-        @conn.request :authorization, :basic, config[:user], config[:password]
+        @conn.request :basic_auth, config[:user], config[:password]
       end
     end
 
