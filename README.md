@@ -1,4 +1,4 @@
-# Zammad API Client (Ruby)
+# Zammad API Client (Ruby) [![Gem Version](https://badge.fury.io/rb/zammad_api.svg)](https://badge.fury.io/rb/zammad_api)
 
 ## API version support
 This client supports Zammad API version 1.0.
