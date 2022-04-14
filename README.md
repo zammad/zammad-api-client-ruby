@@ -31,9 +31,9 @@ Or install it yourself as:
 
 ## Usage
 
-### create instance
+### Create instance
 
-#### username/email and password
+#### Username/email and password
 
 ```ruby
 client = ZammadAPI::Client.new(
@@ -43,7 +43,7 @@ client = ZammadAPI::Client.new(
 )
 ```
 
-#### access token
+#### Access token
 
 ```ruby
 client = ZammadAPI::Client.new(
@@ -65,9 +65,9 @@ client = ZammadAPI::Client.new(
 
 Individual resources can be created, modified, saved, and destroyed.
 
-### create object
+### Create object
 
-with new and save
+With new and save:
 ```ruby
 group = client.group.new(
   name: 'Support',
@@ -79,7 +79,7 @@ group.id # id of record
 group.name # 'Support'
 ```
 
-with create
+With create:
 ```ruby
 group = client.group.create(
   name: 'Support',
@@ -90,13 +90,13 @@ group.id # id of record
 group.name # 'Support'
 ```
 
-### fetch object
+### Fetch object
 
 ```ruby
 group = client.group.find(123)
 puts group.inspect
 ```
-### update object
+### Update object
 
 ```ruby
 group = client.group.find(123)
@@ -104,7 +104,7 @@ group.name = 'Support 2'
 group.save
 ```
 
-### destroy object
+### Destroy object
 
 ```ruby
 group = client.group.find(123)
@@ -115,7 +115,7 @@ group.destroy
 
 A list of individual resources.
 
-### all
+### All
 
 ```ruby
 groups = client.group.all
@@ -129,7 +129,7 @@ groups.each {|group|
 }
 ```
 
-### search
+### Search
 ```ruby
 groups = client.group.search(query: 'some name')
 
@@ -142,7 +142,7 @@ groups.each {|group|
 }
 ```
 
-### all with pagination (beta)
+### All with pagination (beta)
 
 ```ruby
 groups = client.group.all
@@ -162,7 +162,7 @@ groups.page(2,3) {|group|
 }
 ```
 
-### search with pagination (beta)
+### Search with pagination (beta)
 ```ruby
 groups = client.group.search(query: 'some name')
 
@@ -181,7 +181,7 @@ groups.page(2,3) {|group|
 }
 ```
 
-## perform actions on behalf of other user
+## Perform actions on behalf of another user
 
 As described in the [Zammad API documentation](https://docs.zammad.org/en/latest/api-intro.html#example-curl-request-on-behalf-of-a-different-user) it is possible to perfom actions on behalf other users. To use this feature you can set the attribute of the client accordingly:
 
@@ -213,7 +213,7 @@ end
 
 ## Examples
 
-create ticket
+Create a ticket:
 ```ruby
 ticket = client.ticket.create(
   title: 'a new ticket #1',
@@ -241,7 +241,7 @@ ticket.created_at # '2022-01-01T12:42:01Z'
 # ...
 ```
 
-list of all new or open
+List all new or open tickets:
 ```ruby
 tickets = client.ticket.search(query: 'state:new OR state:open')
 
@@ -256,7 +256,7 @@ tickets.each {|ticket|
 }
 ```
 
-get all articles of a ticket
+Get all articles of a ticket:
 ```ruby
 ticket = client.ticket.find(123)
 articles = ticket.articles
@@ -277,7 +277,7 @@ articles.each {|article|
 }
 ```
 
-create an article for a ticket
+Create an article for a ticket:
 ```ruby
 ticket = client.ticket.find(123)
 
@@ -312,7 +312,7 @@ article.attachments.each { |attachment|
 p "article: #{article.from} - #{article.subject}"
 ```
 
-create an article with html and inline images for a ticket
+Create an article with html and inline images for a ticket:
 ```ruby
 ticket = client.ticket.find(123)
 
@@ -344,7 +344,7 @@ p "article: #{article.from} - #{article.subject}"
 
 ## Testing
 
-### setup an (empty Zammad) test env
+### Setup an (empty Zammad) test env
 
 ```
 git clone git@github.com:zammad/zammad.git
@@ -356,17 +356,33 @@ cp contrib/auto_wizard_test.json auto_wizard.json
 bundle exec rake zammad:ci:test:start
 ```
 
-### execute client tests
+### Execute client tests
 
 Run tests via `rake spec`. (Remember to export the vars above if you are running this in another shell.)
 
 ## Publishing
 
+1. Update version in [version.rb](lib/zammad_api/version.rb).
+2. Add release to [CHANGELOG.md](CHANGELOG.md)
+3. Commit.
+4. Test build.
 ```
-gem build -o pkg/zammad_api-1.0.6.gem zammad_api.gemspec
-gem push pkg/zammad_api-1.0.6.gem
+> rake build
+zammad_api 1.0.7 built to pkg/zammad_api-1.0.7.gem.
+```
+5. Release
+```
+> rake release
+zammad_api 1.0.7 built to pkg/zammad_api-1.0.7.gem.
+Tag v1.0.7 has already been created.
+Pushing gem to https://rubygems.org...
+You have enabled multi-factor authentication. Please enter OTP code.
+Code:   ......
+Successfully registered gem: zammad_api (1.0.7)
+Pushed zammad_api 1.0.7 to https://rubygems.org
+
 ```
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/zammad/zammad-api-client-ruby. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [Contributor Covenant](http://contributor-covenant.org) code of conduct.
+Bug reports and pull requests are welcome on [GitHub](https://github.com/zammad/zammad-api-client-ruby). This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [Contributor Covenant](http://contributor-covenant.org) code of conduct.
