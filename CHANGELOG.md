@@ -1,4 +1,4 @@
-## [1.0.8] - 2022-??-?? (unreleased)
+## [1.0.8] - 2022-04-28
 - Fixed Faraday deprecation warnings.
 
 ## [1.0.7] - 2022-04-14
