@@ -34,7 +34,7 @@ jobs:
           RAILS_ENV=test bundle exec rake db:create
           cp contrib/auto_wizard_test.json auto_wizard.json
           bundle exec rake zammad:ci:test:start
-      - name: Run PHP API integration tests
+      - name: Run Ruby API integration tests
         shell: bash
         run: |
           source /etc/profile.d/rvm.sh # ensure RVM is loaded
