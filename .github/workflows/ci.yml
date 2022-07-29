@@ -1,0 +1,44 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  CI:
+    runs-on: ubuntu-20.04
+    container:
+      image: registry.zammad.com/docker/zammad-ci:stable
+      credentials:
+        username: ${{ secrets.ZAMMAD_DOCKER_REGISTRY_USERNAME }}
+        password: ${{ secrets.ZAMMAD_DOCKER_REGISTRY_PASSWORD }}
+    services:
+      postgresql:
+        image: registry.zammad.com/docker/zammad-postgresql:stable
+        credentials:
+          username: ${{ secrets.ZAMMAD_DOCKER_REGISTRY_USERNAME }}
+          password: ${{ secrets.ZAMMAD_DOCKER_REGISTRY_PASSWORD }}
+    env:
+      ZAMMAD_PHP_API_CLIENT_UNIT_TESTS_URL: "http://localhost:3000"
+      ZAMMAD_PHP_API_CLIENT_UNIT_TESTS_USERNAME: "admin@example.com"
+      ZAMMAD_PHP_API_CLIENT_UNIT_TESTS_PASSWORD: "test"
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Zammad
+        shell: bash
+        run: |
+          git clone https://github.com/zammad/zammad.git
+          cd zammad
+          source /etc/profile.d/rvm.sh # ensure RVM is loaded
+          bundle config set --local frozen 'true'
+          bundle config set --local path 'vendor'
+          bundle install -j $(nproc)
+          bundle exec ruby .gitlab/configure_environment.rb
+          source .gitlab/environment.env
+          RAILS_ENV=test bundle exec rake db:create
+          cp contrib/auto_wizard_test.json auto_wizard.json
+          bundle exec rake zammad:ci:test:start
+      - name: Run PHP API integration tests
+        shell: bash
+        run: |
+          source /etc/profile.d/rvm.sh # ensure RVM is loaded
+          bundle update --bundler
+          bundle config set --local frozen 'true'
+          bundle install -j $(nproc)
+          bundle exec rspec
