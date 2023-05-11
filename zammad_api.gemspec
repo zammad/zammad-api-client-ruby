@@ -12,7 +12,7 @@ Gem::Specification.new do |spec|
   spec.summary       = 'Zammad API v1.0 client.'
   spec.description   = 'Ruby wrapper for the Zammad API v1.0.'
   spec.homepage      = 'https://github.com/zammad/zammad-api-client-ruby'
-  spec.license       = 'AGPL-3.0-only'
+  spec.licenses      =  ['AGPL-3.0-only', 'MIT']
 
   spec.metadata["allowed_push_host"] = "https://rubygems.org"
 
