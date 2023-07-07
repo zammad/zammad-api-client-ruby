@@ -44,6 +44,5 @@ jobs:
         run: |
           source /etc/profile.d/rvm.sh # ensure RVM is loaded
           bundle update --bundler
-          bundle config set --local frozen 'true'
           bundle install -j $(nproc)
           bundle exec rspec
