@@ -23,10 +23,10 @@ Gem::Specification.new do |spec|
   spec.files         = Dir['{lib}/**/*']
   spec.require_paths = ['lib']
 
-  spec.add_runtime_dependency 'faraday', '~> 1'
+  spec.add_runtime_dependency 'faraday', '~> 2'
 
   spec.add_development_dependency 'bundler', '>= 2.2.10'
-  spec.add_development_dependency 'rake', '~> 13'
-  spec.add_development_dependency 'rspec', '~> 3.0'
+  spec.add_development_dependency 'rake'
+  spec.add_development_dependency 'rspec'
   spec.add_development_dependency 'webmock'
 end

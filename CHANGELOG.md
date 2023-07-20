@@ -1,3 +1,6 @@
+## [1.2.0] - 2023-07-20
+- Updated dependency `faraday` to `v2`.
+
 ## [1.1.0] - 2023-05-11
 - Switch to dual licensing under AGPL-3.0 or MIT licenses.
 
