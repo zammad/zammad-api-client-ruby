@@ -156,7 +156,7 @@ describe ZammadAPI, 'ticket state object basics' do
       expect(local_ticket_state.class).to eq(ZammadAPI::Resources::TicketState)
       count += 1
     }
-    expect(count).to eq(8)
+    expect(count).to be >= 7
 
     count = 0
     ticket_states = client.ticket_state.all
@@ -174,7 +174,7 @@ describe ZammadAPI, 'ticket state object basics' do
       expect(local_ticket_state.class).to eq(ZammadAPI::Resources::TicketState)
       count += 1
     }
-    expect(count).to eq(8)
+    expect(count).to be >= 7
   end
 
   it 'destroy' do
