@@ -62,7 +62,7 @@ describe ZammadAPI, 'organization object basics' do
 
     result = organization.save
     expect(result).to be(true)
-    expect(organization.id).to be_present
+    expect(organization.id).to be_a_kind_of(Integer)
     expect(organization.name).to eq("#{name}-2")
     expect(organization.shared).to be(true)
     expect(organization.note).to eq('some note')

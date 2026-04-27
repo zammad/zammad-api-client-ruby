@@ -74,7 +74,7 @@ describe ZammadAPI, 'user object basics' do
 
     result = user.save
     expect(result).to be(true)
-    expect(user.id).to be_present
+    expect(user.id).to be_a_kind_of(Integer)
     expect(user.firstname).to eq("#{firstname}-2")
     expect(user.lastname).to eq(lastname)
     expect(user.email).to eq(email)

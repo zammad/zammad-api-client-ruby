@@ -77,7 +77,7 @@ describe ZammadAPI, 'ticket state object basics' do
 
     result = ticket_state.save
     expect(result).to be(true)
-    expect(ticket_state.id).to be_present
+    expect(ticket_state.id).to be_a_kind_of(Integer)
     expect(ticket_state.name).to eq("#{name}-2")
     expect(ticket_state.state_type).to eq('open')
     expect(ticket_state.state_type_id).to eq(2)

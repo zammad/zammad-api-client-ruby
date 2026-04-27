@@ -69,7 +69,7 @@ describe ZammadAPI, 'ticket object basics' do
     result = ticket.save
     expect(result).to be(true)
     expect(ticket.new_record?).to be(false)
-    expect(ticket.id).to be_present
+    expect(ticket.id).to be_a_kind_of(Integer)
     expect(ticket.title).to eq("#{title}-2")
     expect(ticket.state).to eq('open')
     expect(ticket.state_id).to eq(2)
