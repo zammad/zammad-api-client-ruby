@@ -54,7 +54,7 @@ describe ZammadAPI, 'ticket priority object basics' do
 
     result = ticket_priority.save
     expect(result).to be(true)
-    expect(ticket_priority.id).to be_a_kind_of(Integer)
+    expect(ticket_priority.id).to be_a(Integer)
     expect(ticket_priority.name).to eq("#{name}-2")
     expect(ticket_priority.note).to eq('some note')
     expect(ticket_priority.active).to be(false)

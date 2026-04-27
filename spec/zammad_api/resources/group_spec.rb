@@ -66,7 +66,7 @@ describe ZammadAPI, 'group object basics' do
 
     result = group.save
     expect(result).to be(true)
-    expect(group.id).to be_a_kind_of(Integer)
+    expect(group.id).to be_a(Integer)
     expect(group.name).to eq("#{name}-2")
     expect(group.assignment_timeout).to eq(4711)
     expect(group.follow_up_assignment).to be(false)

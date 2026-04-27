@@ -3,6 +3,7 @@
 
 plugins:
   - rubocop-performance
+  - rubocop-rake
   - rubocop-rspec
 
 inherit_from:
