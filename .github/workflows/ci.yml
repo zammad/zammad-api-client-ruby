@@ -26,7 +26,7 @@ jobs:
       ZAMMAD_PHP_API_CLIENT_UNIT_TESTS_USERNAME: "admin@example.com"
       ZAMMAD_PHP_API_CLIENT_UNIT_TESTS_PASSWORD: "test"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Set up Zammad
         shell: bash
         run: |
