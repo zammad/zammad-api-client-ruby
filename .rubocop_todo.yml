@@ -1,0 +1,47 @@
+Gemspec/RequiredRubyVersion:
+  Enabled: false
+
+Gemspec/RequireMFA:
+  Enabled: false
+
+Gemspec/AddRuntimeDependency:
+  Enabled: false
+
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+Naming/PredicateMethod:
+  Enabled: false
+
+Style/MissingRespondToMissing:
+  Enabled: false
+
+Style/StringConcatenation:
+  Enabled: false
+
+Naming/AccessorMethodName:
+  Enabled: false
+
+RSpec/MultipleExpectations:
+  Enabled: false
+
+RSpec/ExampleLength:
+  Enabled: false
+
+RSpec/SpecFilePathFormat:
+  Enabled: false
+
+RSpec/NoExpectationExample:
+  Enabled: false
+
+RSpec/DescribeMethod:
+  Enabled: false
+
+RSpec/ContextWording:
+  Enabled: false
+
+RSpec/BeforeAfterAll:
+  Enabled: false
+
+RSpec/LeakyLocalVariable:
+  Enabled: false

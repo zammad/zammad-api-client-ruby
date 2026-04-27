@@ -8,11 +8,11 @@ class ZammadAPI::Resources::Ticket < ZammadAPI::Resources::Base
       raise "Can't get articles (#{self.class.name}): #{data['error']}"
     end
 
-    data.collect { |raw|
+    data.collect do |raw|
       item = ZammadAPI::Resources::TicketArticle.new(@transport, raw)
       item.new_instance = false
       item
-    }
+    end
   end
 
   def article(data)
@@ -21,5 +21,4 @@ class ZammadAPI::Resources::Ticket < ZammadAPI::Resources::Base
     item.save
     item
   end
-
 end

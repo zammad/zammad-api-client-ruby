@@ -1,53 +1,53 @@
 require 'spec_helper'
 
 describe ZammadAPI, 'user object basics' do
-  client = Helper.client()
+  client = Helper.client
 
-  random = Helper.random()
+  random = Helper.random
   firstname = "firstname#{random}"
   lastname = "lastname#{random}"
   email = "some_user#{random}@example.com"
   user = nil
 
   it 'new with invalid attributes' do
-    user_invalid = client.user.new()
+    user_invalid = client.user.new
 
     expect(user_invalid.class).to eq(ZammadAPI::Resources::User)
-    expect(user_invalid.new_record?).to eq(true)
+    expect(user_invalid.new_record?).to be(true)
 
     expect { user_invalid.save }.to raise_error(RuntimeError)
   end
 
   it 'new with valid attributes' do
     user = client.user.new(
-      firstname: firstname,
-      lastname: lastname,
-      email: email,
-      groups: {
-        :Users => ['full']
+      firstname:   firstname,
+      lastname:    lastname,
+      email:       email,
+      groups:      {
+        Users: ['full']
       },
-      roles: ['Customer'],
+      roles:       ['Customer'],
       preferences: { key1: 123, key2: 'abc' },
-      note: '',
-      active: true,
+      note:        '',
+      active:      true,
     )
 
     expect(user.class).to eq(ZammadAPI::Resources::User)
-    expect(user.new_record?).to eq(true)
-    expect(user.id).to eq(nil)
+    expect(user.new_record?).to be(true)
+    expect(user.id).to be_nil
     expect(user.firstname).to eq(firstname)
     expect(user.lastname).to eq(lastname)
     expect(user.email).to eq(email)
     expect(user.preferences).to eq({ key1: 123, key2: 'abc' })
     expect(user.note).to eq('')
-    expect(user.active).to eq(true)
+    expect(user.active).to be(true)
   end
 
   it 'save' do
     result = user.save
 
-    expect(result).to eq(true)
-    expect(user.id).not_to eq(nil)
+    expect(result).to be(true)
+    expect(user.id).not_to be_nil
     expect(user.firstname).to eq(firstname)
     expect(user.lastname).to eq(lastname)
     expect(user.email).to eq(email)
@@ -57,7 +57,7 @@ describe ZammadAPI, 'user object basics' do
     expect(user.roles).to eq(['Customer'])
     expect(user.preferences).to eq({ key1: 123, key2: 'abc' })
     expect(user.note).to eq('')
-    expect(user.active).to eq(true)
+    expect(user.active).to be(true)
     expect(user.created_by).to eq('admin@example.com')
     expect(user.updated_by).to eq('admin@example.com')
 
@@ -66,20 +66,20 @@ describe ZammadAPI, 'user object basics' do
     user.note = 'some note'
 
     changes = user.changes
-    expect(changes.key?(:lastname)).to eq(false)
+    expect(changes.key?(:lastname)).to be(false)
     expect(changes[:firstname][0]).to eq(firstname)
     expect(changes[:firstname][1]).to eq("#{firstname}-2")
     expect(changes[:note][0]).to eq('')
     expect(changes[:note][1]).to eq('some note')
 
     result = user.save
-    expect(result).to eq(true)
-    expect(user.id).to eq(user.id)
+    expect(result).to be(true)
+    expect(user.id).to be_present
     expect(user.firstname).to eq("#{firstname}-2")
     expect(user.lastname).to eq(lastname)
     expect(user.email).to eq(email)
-    expect(user.group_ids).to eq({:'1' => ['full']})
-    expect(user.groups).to eq({:Users => ['full']})
+    expect(user.group_ids).to eq({ '1': ['full'] })
+    expect(user.groups).to eq({ Users: ['full'] })
     expect(user.role_ids).to eq([2])
     expect(user.roles).to eq(['Agent'])
     expect(user.note).to eq('some note')
@@ -95,32 +95,32 @@ describe ZammadAPI, 'user object basics' do
     expect(user_lookup.firstname).to eq("#{firstname}-2")
     expect(user_lookup.lastname).to eq(lastname)
     expect(user_lookup.email).to eq(email)
-    expect(user_lookup.group_ids).to eq({:'1' => ['full']})
-    expect(user_lookup.groups).to eq({:Users => ['full']})
+    expect(user_lookup.group_ids).to eq({ '1': ['full'] })
+    expect(user_lookup.groups).to eq({ Users: ['full'] })
     expect(user_lookup.role_ids).to eq([2])
     expect(user_lookup.roles).to eq(['Agent'])
     expect(user_lookup.note).to eq('some note')
     expect(user_lookup.created_by).to eq('admin@example.com')
     expect(user_lookup.updated_by).to eq('admin@example.com')
-
   end
 
   it 'all' do
     users = client.user.all
 
     user_exists = nil
-    users.each { |local_user|
+    users.each do |local_user|
       next if local_user.id != user.id
+
       user_exists = local_user
-    }
+    end
     expect(user_exists.class).to eq(ZammadAPI::Resources::User)
     expect(user_exists.id).to eq(user.id)
     expect(user_exists.id).to eq(user.id)
     expect(user_exists.firstname).to eq("#{firstname}-2")
     expect(user_exists.lastname).to eq(lastname)
     expect(user_exists.email).to eq(email)
-    expect(user_exists.group_ids).to eq({:'1' => ['full']})
-    expect(user_exists.groups).to eq({:Users => ['full']})
+    expect(user_exists.group_ids).to eq({ '1': ['full'] })
+    expect(user_exists.groups).to eq({ Users: ['full'] })
     expect(user_exists.role_ids).to eq([2])
     expect(user_exists.roles).to eq(['Agent'])
     expect(user_exists.note).to eq('some note')
@@ -134,57 +134,56 @@ describe ZammadAPI, 'user object basics' do
     expect(user_lookup.firstname).to eq("#{firstname}-2")
     expect(user_lookup.lastname).to eq(lastname)
     expect(user_lookup.email).to eq(email)
-    expect(user_lookup.group_ids).to eq({:'1' => ['full']})
-    expect(user_lookup.groups).to eq({:Users => ['full']})
+    expect(user_lookup.group_ids).to eq({ '1': ['full'] })
+    expect(user_lookup.groups).to eq({ Users: ['full'] })
     expect(user_lookup.role_ids).to eq([2])
     expect(user_lookup.roles).to eq(['Agent'])
     expect(user_lookup.note).to eq('some note')
-    expect(user_lookup.active).to eq(true)
+    expect(user_lookup.active).to be(true)
     expect(user_lookup.created_by).to eq('admin@example.com')
     expect(user_lookup.updated_by).to eq('admin@example.com')
-
   end
 
   it 'pagination with all' do
-    (1..10).each { |local_count|
+    (1..10).each do |local_count|
       client.user.create(
         firstname: "firstname#{local_count}",
-        lastname: "lastname#{local_count}",
-        email: "customer_email#{local_count}@example.com",
-        groups: {:Users => ['full']},
-        roles: ['Customer'],
-        note: '',
-        active: true,
+        lastname:  "lastname#{local_count}",
+        email:     "customer_email#{local_count}@example.com",
+        groups:    { Users: ['full'] },
+        roles:     ['Customer'],
+        note:      '',
+        active:    true,
       )
-    }
+    end
 
     users = client.user.all
 
     expect(users[0].class).to eq(ZammadAPI::Resources::User)
     count = 0
-    users.each { |local_user|
+    users.each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
-    }
+    end
     expect(count).to eq(15)
 
     count = 0
     users = client.user.all
-    users.page(1, 4) { |local_user|
+    users.page(1, 4) do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
-    }
+    end
     expect(count).to eq(4)
-    users.page(2, 5) { |local_user|
+    users.page(2, 5) do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
-    }
+    end
     expect(count).to eq(9)
     count = 0
-    users.page(1, 200) { |local_user|
+    users.page(1, 200) do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
-    }
+    end
     expect(count).to eq(15)
   end
 
@@ -192,18 +191,19 @@ describe ZammadAPI, 'user object basics' do
     users = client.user.search(query: firstname)
 
     user_exists = nil
-    users.each { |local_user|
+    users.each do |local_user|
       next if local_user.id != user.id
+
       user_exists = local_user
-    }
+    end
     expect(user_exists.class).to eq(ZammadAPI::Resources::User)
     expect(user_exists.id).to eq(user.id)
     expect(user_exists.firstname).to eq("#{firstname}-2")
-    expect(user_exists.group_ids).to eq({:'1' => ['full']})
-    expect(user_exists.groups).to eq({:Users => ['full']})
+    expect(user_exists.group_ids).to eq({ '1': ['full'] })
+    expect(user_exists.groups).to eq({ Users: ['full'] })
     expect(user_exists.role_ids).to eq([2])
     expect(user_exists.roles).to eq(['Agent'])
-    expect(user_exists.active).to eq(true)
+    expect(user_exists.active).to be(true)
     expect(user_exists.created_by).to eq('admin@example.com')
     expect(user_exists.updated_by).to eq('admin@example.com')
 
@@ -218,10 +218,9 @@ describe ZammadAPI, 'user object basics' do
     expect(user_lookup.groups).to be_empty
     expect(user_lookup.role_ids).to eq([2])
     expect(user_lookup.roles).to eq(['Agent'])
-    expect(user_lookup.active).to eq(false)
+    expect(user_lookup.active).to be(false)
     expect(user_lookup.created_by).to eq('admin@example.com')
     expect(user_lookup.updated_by).to eq('admin@example.com')
-
   end
 
   it 'pagination with search' do
@@ -231,12 +230,13 @@ describe ZammadAPI, 'user object basics' do
 
     count = 0
     user_exists = nil
-    users.each { |local_user|
+    users.each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
       next if local_user.id != user.id
+
       user_exists = local_user
-    }
+    end
     expect(count).to eq(1)
     expect(user_exists.class).to eq(ZammadAPI::Resources::User)
     expect(user_exists.id).to eq(user.id)
@@ -245,26 +245,25 @@ describe ZammadAPI, 'user object basics' do
     expect(user_exists.groups).to be_empty
     expect(user_exists.role_ids).to eq([2])
     expect(user_exists.roles).to eq(['Agent'])
-    expect(user_exists.active).to eq(false)
+    expect(user_exists.active).to be(false)
     expect(user_exists.created_by).to eq('admin@example.com')
     expect(user_exists.updated_by).to eq('admin@example.com')
 
     count = 0
     users = client.user.search(query: firstname)
-    users.page(1, 3) { |local_user|
+    users.page(1, 3) do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
-    }
+    end
     expect(count).to eq(1)
-    users.page(2, 3) { |local_user|
+    users.page(2, 3) do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
-    }
+    end
     expect(count).to eq(1)
   end
 
   it 'destroy' do
-
     # wait until zammad scheduler wrote some entries to activity stream
     # to have some references and not allow users to delete
     sleep 12
@@ -273,5 +272,4 @@ describe ZammadAPI, 'user object basics' do
     #result = user.destroy
     #expect(result).to eq(true)
   end
-
 end

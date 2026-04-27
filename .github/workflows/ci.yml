@@ -7,7 +7,20 @@ on:
     # Run every on Friday to ensure everything works as expected.
     - cron:  '0 6 * * 5'
 jobs:
-  CI:
+  lint:
+    runs-on: ubuntu-latest
+    container:
+      image: zammad/zammad-ci:latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run lint actions
+        shell: bash
+        run: |
+          source /etc/profile.d/rvm.sh # ensure RVM is loaded
+          bundle update --bundler
+          bundle install -j $(nproc)
+          bundle exec rubocop
+  test:
     runs-on: ubuntu-latest
     container:
       image: zammad/zammad-ci:latest

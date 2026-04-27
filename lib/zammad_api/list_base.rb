@@ -14,7 +14,6 @@ module ZammadAPI
     end
 
     def [](position)
-
       local_parameter = @parameter.merge(
         page:     position + 1,
         per_page: 1
@@ -23,7 +22,6 @@ module ZammadAPI
     end
 
     def page(page, per_page, &block)
-
       @parameter[:page]     = page
       @parameter[:per_page] = per_page
       fetch_and_yield_each(&block)
@@ -45,18 +43,14 @@ module ZammadAPI
 
     private
 
-    def fetch_and_yield_each
+    def fetch_and_yield_each(&block)
       result = perform_request(@parameter)
-      result.each { |item|
-        yield item
-      }
+      result.each(&block)
     end
 
     def request(request, url, parameter)
-
       # convert parameters into a GET query
       url += '?' + parameter.map { |key, value|
-
         if !value.is_a? String
           value = value.to_s
         end
@@ -71,11 +65,11 @@ module ZammadAPI
       end
 
       list = []
-      data.each { |local_data|
+      data.each do |local_data|
         item = @resource.new(@transport, local_data)
         item.new_instance = false
         list.push item
-      }
+      end
       list
     end
 

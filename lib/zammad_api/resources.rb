@@ -12,6 +12,6 @@ require 'zammad_api/resources/ticket_state'
 require 'zammad_api/resources/ticket_priority'
 
 module ZammadAPI
-  class Resource
+  class Resource # rubocop:disable Lint/EmptyClass
   end
 end

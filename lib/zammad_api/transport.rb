@@ -3,7 +3,6 @@ require 'openssl'
 
 module ZammadAPI
   class Transport
-
     attr_accessor :url, :user, :password, :on_behalf_of
 
     def initialize(config, logger)
@@ -12,7 +11,7 @@ module ZammadAPI
       @conn = Faraday.new(url: config[:url]) do |faraday|
         #faraday.request  :url_encoded             # form-encode POST params
         #faraday.response :logger                  # log requests to STDOUT
-        faraday.adapter Faraday.default_adapter  # make requests with Net::HTTP
+        faraday.adapter Faraday.default_adapter # make requests with Net::HTTP
       end
       @conn.headers[:user_agent] = 'Zammad API Ruby'
       if config[:http_token] && !config[:http_token].empty?
@@ -26,16 +25,15 @@ module ZammadAPI
 
     %w[get post put delete].each do |method|
       class_eval <<-RUBY, __FILE__, __LINE__ + 1
-        def #{method}(params)
-          run_request(:#{method}, params)
-        end
+        def #{method}(params)               # def get(params)
+          run_request(:#{method}, params)   #   run_request(:get, params)
+        end                                 # end
       RUBY
     end
 
     private
 
     def run_request(verb, param)
-
       @logger.debug "#{verb.to_s.upcase}: #{@url}#{param[:url]}"
 
       with_params = !param[:params].nil?
