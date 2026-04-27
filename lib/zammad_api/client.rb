@@ -6,7 +6,6 @@ require 'zammad_api/dispatcher'
 require 'zammad_api/resources'
 
 module ZammadAPI
-
   class Client
     extend Forwardable
 
@@ -27,7 +26,7 @@ module ZammadAPI
     end
 
     def method_missing(method, *_args)
-      method     = modulize( method.to_s )
+      method     = modulize(method.to_s)
       class_name = "ZammadAPI::Resources::#{method}"
       begin
         class_object = Kernel.const_get(class_name)
@@ -41,7 +40,7 @@ module ZammadAPI
 
     def check_config
       raise 'missing url in config' if !@config[:url]
-      raise 'config url needs to start with http:// or https://' if @config[:url] !~ %r{^(http|https)://}
+      raise 'config url needs to start with http:// or https://' if !%r{^(http|https)://}.match?(@config[:url])
 
       # check for token auth
       return if @config[:http_token] && !@config[:http_token].empty?
@@ -58,9 +57,9 @@ module ZammadAPI
 
     def modulize(string)
       string.gsub(/__(.?)/) { "::#{$1.upcase}" }
-            .gsub(%r{/(.?)}) { "::#{$1.upcase}" }
-            .gsub(/(?:_+|-+)([a-z])/) { $1.upcase }
-            .gsub(/(\A|\s)([a-z])/) { $1 + $2.upcase }
+        .gsub(%r{/(.?)}) { "::#{$1.upcase}" }
+        .gsub(/(?:_+|-+)([a-z])/) { $1.upcase }
+        .gsub(/(\A|\s)([a-z])/) { $1 + $2.upcase }
     end
   end
 end

@@ -1,4 +1,4 @@
-$LOAD_PATH.unshift File.expand_path('../../lib', __FILE__)
+$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
 
 # we don't require 'webmock/rspec' over here
 # since we want to mock only certain requests
@@ -13,7 +13,6 @@ end
 require 'zammad_api'
 
 class Helper
-
   def self.config
     {
       url:      ENV['TEST_URL']      || 'http://localhost:3000/',
@@ -32,8 +31,8 @@ class Helper
 
   # start auto wizard
   def self.auto_wizard
-    conn = Faraday.new(url: config[:url] ) do |faraday|
-      faraday.adapter Faraday.default_adapter  # make requests with Net::HTTP
+    conn = Faraday.new(url: config[:url]) do |faraday|
+      faraday.adapter Faraday.default_adapter # make requests with Net::HTTP
     end
 
     url_auto_wizard = '/api/v1/getting_started/auto_wizard'

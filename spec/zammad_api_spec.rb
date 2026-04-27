@@ -2,11 +2,10 @@ require 'spec_helper'
 
 describe ZammadAPI do
   it 'has a version number' do
-    expect(ZammadAPI::VERSION).not_to be nil
+    expect(ZammadAPI::VERSION).not_to be_nil
   end
 
   context 'failing authentication' do
-
     Helper.auto_wizard
     client = Helper.client(user: 'not_existing', password: 'not_existing')
 

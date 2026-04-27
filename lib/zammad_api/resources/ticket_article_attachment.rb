@@ -1,6 +1,5 @@
 class ZammadAPI::Resources::TicketArticleAttachment < ZammadAPI::Resources::Base
-
-  def initialize(transport, attributes = {})
+  def initialize(transport, attributes = {}) # rubocop:disable Lint/MissingSuper
     @transport  = transport
     @attributes = attributes
     symbolize_keys_deep!(@attributes)
@@ -13,8 +12,8 @@ class ZammadAPI::Resources::TicketArticleAttachment < ZammadAPI::Resources::Base
   def download
     response = @transport.get(url: "/api/v1/ticket_attachment/#{ticket_id}/#{article_id}/#{id}")
     return response.body if response.status == 200
+
     data = JSON.parse(response.body)
     raise "Can't get articles (#{self.class.name}): #{data['error']}"
   end
-
 end

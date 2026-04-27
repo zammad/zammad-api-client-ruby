@@ -1,6 +1,5 @@
 module ZammadAPI
   class Dispatcher
-
     def initialize(transport, resource)
       @transport = transport
       @resource  = resource

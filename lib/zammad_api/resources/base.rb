@@ -23,6 +23,7 @@ module ZammadAPI
 
       def method_missing(method, *args)
         return @attributes[method] if !method.to_s.end_with?('=')
+
         method              = method.to_s[0, method.length - 1].to_sym
         @changes[method]    = [@attributes[method], args[0]]
         @attributes[method] = args[0]
@@ -43,6 +44,7 @@ module ZammadAPI
           data = JSON.parse(response.body)
         end
         return true if response.status == 200
+
         raise "Can't destroy object (#{self.class.name}): #{data['error']}"
       end
 
@@ -78,6 +80,7 @@ module ZammadAPI
         if response.status != 200
           raise "Can't find object (#{self.class.name}): #{data['error']}"
         end
+
         item = new(transport, data)
         item.new_instance = false
         item
@@ -99,6 +102,7 @@ module ZammadAPI
 
       def saved_attributes
         return save_new if @new_instance
+
         save_existing
       end
 
@@ -106,18 +110,20 @@ module ZammadAPI
         response   = @transport.post(url: "#{@url}?expand=true", params: @attributes)
         attributes = JSON.parse(response.body)
         return attributes if response.status == 201
+
         save_error(attributes)
       end
 
       def save_existing
         attributes_to_post = {}
-        @changes.each { |name, values|
+        @changes.each do |name, values|
           attributes_to_post[name] = values[1]
-        }
+        end
         response   = @transport.put(url: "#{@url}/#{@attributes[:id]}?expand=true", params: attributes_to_post)
         attributes = JSON.parse(response.body)
 
         return attributes if response.status == 200
+
         save_error(attributes)
       end
 
