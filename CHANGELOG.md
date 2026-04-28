@@ -1,3 +1,6 @@
+## [1.3.0] - 2026-04-28
+- Maintenance update, added minimum Ruby version 3.0.
+
 ## [1.2.0] - 2023-07-20
 - Updated dependency `faraday` to `v2`.
 
