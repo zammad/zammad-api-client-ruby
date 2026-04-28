@@ -6,9 +6,8 @@ describe ZammadAPI do
   end
 
   context 'failing authentication' do
-    before(:all) do
-      Helper.auto_wizard
-    end
+    # TODO: this will be executed at test parsing time, not execution time. Consider improving this.
+    Helper.auto_wizard
 
     let(:client) { Helper.client(user: 'not_existing', password: 'not_existing') }
 

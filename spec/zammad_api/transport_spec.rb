@@ -2,11 +2,11 @@ require 'spec_helper'
 require 'logger'
 
 describe ZammadAPI::Transport do
-  before(:all) do
+  before(:all) do # rubocop:disable RSpec/BeforeAfterAll
     WebMock.enable!
   end
 
-  after(:all) do
+  after(:all) do # rubocop:disable RSpec/BeforeAfterAll
     WebMock.disable!
   end
 

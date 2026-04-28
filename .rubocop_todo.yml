@@ -27,6 +27,3 @@ RSpec/DescribeMethod:
 
 RSpec/ContextWording:
   Enabled: false
-
-RSpec/BeforeAfterAll:
-  Enabled: false
