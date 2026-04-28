@@ -1,10 +1,13 @@
 require 'cgi'
-require 'json'
+require 'zammad_api/json_helper'
 require 'zammad_api/transport'
 
 module ZammadAPI
   module Resources
     class Base
+      include ZammadAPI::JsonHelper
+      extend ZammadAPI::JsonHelper
+
       attr_accessor :new_instance, :url, :attributes
       attr_reader :changes
 
@@ -41,7 +44,7 @@ module ZammadAPI
       def destroy
         response = @transport.delete(url: "#{@url}/#{@attributes[:id]}")
         if response.body.to_s != '' && response.body.to_s != ' '
-          data = JSON.parse(response.body)
+          data = safe_json_parse(response.body)
         end
         return true if response.status == 200
 
@@ -76,7 +79,7 @@ module ZammadAPI
 
       def self.find(transport, id)
         response = transport.get(url: "#{@url}/#{id}?expand=true")
-        data = JSON.parse(response.body)
+        data = safe_json_parse(response.body)
         if response.status != 200
           raise "Can't find object (#{self.class.name}): #{data['error']}"
         end
@@ -108,7 +111,7 @@ module ZammadAPI
 
       def save_new
         response   = @transport.post(url: "#{@url}?expand=true", params: @attributes)
-        attributes = JSON.parse(response.body)
+        attributes = safe_json_parse(response.body)
         return attributes if response.status == 201
 
         save_error(attributes)
@@ -120,7 +123,7 @@ module ZammadAPI
           attributes_to_post[name] = values[1]
         end
         response   = @transport.put(url: "#{@url}/#{@attributes[:id]}?expand=true", params: attributes_to_post)
-        attributes = JSON.parse(response.body)
+        attributes = safe_json_parse(response.body)
 
         return attributes if response.status == 200
 

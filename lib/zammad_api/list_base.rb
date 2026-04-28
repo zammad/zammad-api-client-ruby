@@ -1,6 +1,9 @@
+require 'zammad_api/json_helper'
+
 module ZammadAPI
   class ListBase
     include Enumerable
+    include ZammadAPI::JsonHelper
 
     def initialize(resource, transport, parameter = {})
       @resource  = resource
@@ -59,7 +62,7 @@ module ZammadAPI
       }.join('&')
 
       response = @transport.get(url: url)
-      data = JSON.parse(response.body)
+      data = safe_json_parse(response.body)
       if response.status != 200
         raise "Can't get .#{request} of object (#{@resource.class.name}): #{data['error']}"
       end
