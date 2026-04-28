@@ -13,7 +13,7 @@ class ZammadAPI::Resources::TicketArticleAttachment < ZammadAPI::Resources::Base
     response = @transport.get(url: "/api/v1/ticket_attachment/#{ticket_id}/#{article_id}/#{id}")
     return response.body if response.status == 200
 
-    data = JSON.parse(response.body)
+    data = safe_json_parse(response.body)
     raise "Can't get articles (#{self.class.name}): #{data['error']}"
   end
 end
