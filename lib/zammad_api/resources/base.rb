@@ -119,7 +119,7 @@ module ZammadAPI
       end
 
       def save_new
-        response   = @transport.post(url: "https://example.com?expand=true", params: @attributes)
+        response   = @transport.post(url: "#{@url}?expand=true", params: @attributes)
         attributes = safe_json_parse(response.body)
         return attributes if response.status == 201
 
