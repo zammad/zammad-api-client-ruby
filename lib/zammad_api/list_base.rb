@@ -76,5 +76,13 @@ module ZammadAPI
     def perform_request(_parameter)
       raise "no perform_request implementation for #{self.class.name} found"
     end
+
+    protected
+
+    def safe_json_parse(string)
+      JSON.parse(string)
+    rescue JSON::ParserError
+      {}
+    end
   end
 end
