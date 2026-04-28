@@ -1,4 +1,16 @@
 source 'https://rubygems.org'
 
-# Specify your gem's dependencies in zammad_api.gemspec
+# runtime dependencies are defined in zammad_api.gemspec
 gemspec
+
+# development dependencies
+group :development, :test do
+  gem 'bundler', '>= 2.2.10'
+  gem 'rake'
+  gem 'rspec'
+  gem 'rubocop'
+  gem 'rubocop-performance'
+  gem 'rubocop-rake'
+  gem 'rubocop-rspec'
+  gem 'webmock'
+end

@@ -12,6 +12,7 @@ Gem::Specification.new do |spec|
   spec.description   = 'Ruby wrapper for the Zammad API v1.0.'
   spec.homepage      = 'https://github.com/zammad/zammad-api-client-ruby'
   spec.licenses = ['AGPL-3.0-only', 'MIT']
+  spec.required_ruby_version = '>= 3.0' # Same as TargetRubyVersion in .rubocop.yml.
 
   spec.metadata['allowed_push_host'] = 'https://rubygems.org'
 
@@ -24,13 +25,4 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   spec.add_dependency 'faraday', '~> 2'
-
-  spec.add_development_dependency 'bundler', '>= 2.2.10'
-  spec.add_development_dependency 'rake'
-  spec.add_development_dependency 'rspec'
-  spec.add_development_dependency 'rubocop'
-  spec.add_development_dependency 'rubocop-performance'
-  spec.add_development_dependency 'rubocop-rake'
-  spec.add_development_dependency 'rubocop-rspec'
-  spec.add_development_dependency 'webmock'
 end

@@ -17,6 +17,8 @@ AllCops:
     - 'bin/spring'
     - 'db/schema.rb'
     - 'examples/**/*'
+  # Match the Ruby version specified in the gemspec.
+  TargetRubyVersion: 3.0
 
 # Zammad StyleGuide
 
