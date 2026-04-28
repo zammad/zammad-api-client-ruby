@@ -1,10 +1,13 @@
 require 'cgi'
-require 'json'
+require 'zammad_api/json_helper'
 require 'zammad_api/transport'
 
 module ZammadAPI
   module Resources
     class Base
+      include ZammadAPI::JsonHelper
+      extend ZammadAPI::JsonHelper
+
       attr_accessor :new_instance, :url, :attributes
       attr_reader :changes
 
@@ -66,12 +69,6 @@ module ZammadAPI
         @url = value
       end
 
-      def self.safe_json_parse(string)
-        JSON.parse(string)
-      rescue JSON::ParserError
-        {}
-      end
-
       def self.all(transport, _)
         ZammadAPI::ListAll.new(self, transport, per_page: 100)
       end
@@ -102,12 +99,6 @@ module ZammadAPI
         item = find(transport, id)
         item.destroy
         true
-      end
-
-      protected
-
-      def safe_json_parse(string)
-        self.class.safe_json_parse(string)
       end
 
       private

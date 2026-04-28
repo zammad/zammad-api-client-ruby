@@ -1,6 +1,9 @@
+require 'zammad_api/json_helper'
+
 module ZammadAPI
   class ListBase
     include Enumerable
+    include ZammadAPI::JsonHelper
 
     def initialize(resource, transport, parameter = {})
       @resource  = resource
@@ -77,12 +80,5 @@ module ZammadAPI
       raise "no perform_request implementation for #{self.class.name} found"
     end
 
-    protected
-
-    def safe_json_parse(string)
-      JSON.parse(string)
-    rescue JSON::ParserError
-      {}
-    end
   end
 end
