@@ -79,6 +79,5 @@ module ZammadAPI
     def perform_request(_parameter)
       raise "no perform_request implementation for #{self.class.name} found"
     end
-
   end
 end
