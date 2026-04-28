@@ -1,13 +1,12 @@
 require 'spec_helper'
 
 describe ZammadAPI, 'user object basics' do
-  client = Helper.client
+  let(:client) { Helper.client }
 
-  random = Helper.random
-  firstname = "firstname#{random}"
-  lastname = "lastname#{random}"
-  email = "some_user#{random}@example.com"
-  user = nil
+  let(:firstname) { "firstname#{Helper.random}" }
+  let(:lastname) { "lastname#{Helper.random}" }
+  let(:email) { "some_user#{Helper.random}@example.com" }
+  let(:user) { nil }
 
   it 'new with invalid attributes' do
     user_invalid = client.user.new
@@ -61,7 +60,7 @@ describe ZammadAPI, 'user object basics' do
     expect(user.created_by).to eq('admin@example.com')
     expect(user.updated_by).to eq('admin@example.com')
 
-    user.firstname = "firstname#{random}-2"
+    user.firstname = "firstname#{Helper.random}-2"
     user.roles = ['Agent']
     user.note = 'some note'
 

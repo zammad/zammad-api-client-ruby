@@ -1,10 +1,10 @@
 require 'spec_helper'
 
 describe ZammadAPI, 'ticket object basics' do
-  client = Helper.client
+  let(:client) { Helper.client }
 
-  title = "some ticket title ##{Helper.random}"
-  ticket = nil
+  let(:title) { "some ticket title ##{Helper.random}" }
+  let(:ticket) { nil }
 
   it 'new with invalid attributes' do
     ticket_invalid = client.ticket.new

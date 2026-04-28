@@ -1,10 +1,10 @@
 require 'spec_helper'
 
 describe ZammadAPI, 'organization object basics' do
-  client = Helper.client
+  let(:client) { Helper.client }
 
-  name = "some_organization#{Helper.random}"
-  organization = nil
+  let(:name) { "some_organization#{Helper.random}" }
+  let(:organization) { nil }
 
   it 'new with invalid attributes' do
     organization_invalid = client.organization.new

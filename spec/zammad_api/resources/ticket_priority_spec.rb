@@ -1,10 +1,10 @@
 require 'spec_helper'
 
 describe ZammadAPI, 'ticket priority object basics' do
-  client = Helper.client
+  let(:client) { Helper.client }
 
-  name = "some_ticket_priority#{Helper.random}"
-  ticket_priority = nil
+  let(:name) { "some_ticket_priority#{Helper.random}" }
+  let(:ticket_priority) { nil }
 
   it 'new with invalid attributes' do
     ticket_priority_invalid = client.ticket_priority.new

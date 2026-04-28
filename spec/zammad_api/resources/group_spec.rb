@@ -1,10 +1,10 @@
 require 'spec_helper'
 
 describe ZammadAPI, 'group object basics' do
-  client = Helper.client
+  let(:client) { Helper.client }
 
-  name = "some_group#{Helper.random}"
-  group = nil
+  let(:name) { "some_group#{Helper.random}" }
+  let(:group) { nil }
 
   it 'new with invalid attributes' do
     group_invalid = client.group.new

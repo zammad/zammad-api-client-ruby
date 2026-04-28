@@ -30,6 +30,3 @@ RSpec/ContextWording:
 
 RSpec/BeforeAfterAll:
   Enabled: false
-
-RSpec/LeakyLocalVariable:
-  Enabled: false

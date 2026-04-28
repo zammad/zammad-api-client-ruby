@@ -6,8 +6,11 @@ describe ZammadAPI do
   end
 
   context 'failing authentication' do
-    Helper.auto_wizard
-    client = Helper.client(user: 'not_existing', password: 'not_existing')
+    before(:all) do
+      Helper.auto_wizard
+    end
+
+    let(:client) { Helper.client(user: 'not_existing', password: 'not_existing') }
 
     it 'user' do
       expect { client.user.find(1) }.to raise_error(RuntimeError)
