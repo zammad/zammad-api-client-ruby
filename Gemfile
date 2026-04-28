@@ -4,11 +4,13 @@ source 'https://rubygems.org'
 gemspec
 
 # development dependencies
-gem 'bundler', '>= 2.2.10'
-gem 'rake'
-gem 'rspec'
-gem 'rubocop'
-gem 'rubocop-performance'
-gem 'rubocop-rake'
-gem 'rubocop-rspec'
-gem 'webmock'
+group :development, :test do
+  gem 'bundler', '>= 2.2.10'
+  gem 'rake'
+  gem 'rspec'
+  gem 'rubocop'
+  gem 'rubocop-performance'
+  gem 'rubocop-rake'
+  gem 'rubocop-rspec'
+  gem 'webmock'
+end
