@@ -1,15 +1,3 @@
-Gemspec/RequiredRubyVersion:
-  Enabled: false
-
-Gemspec/RequireMFA:
-  Enabled: false
-
-Gemspec/AddRuntimeDependency:
-  Enabled: false
-
-Gemspec/DevelopmentDependencies:
-  Enabled: false
-
 Naming/PredicateMethod:
   Enabled: false
 
