@@ -12,7 +12,7 @@ describe ZammadAPI, 'group object basics' do
     expect(group_invalid.class).to eq(ZammadAPI::Resources::Group)
     expect(group_invalid.new_record?).to be(true)
 
-    expect { group_invalid.save }.to raise_error(RuntimeError)
+    expect { group_invalid.save }.to raise_error(ZammadAPI::ClientError)
   end
 
   it 'new with valid attributes' do

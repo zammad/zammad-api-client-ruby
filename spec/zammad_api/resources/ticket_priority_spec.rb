@@ -12,7 +12,7 @@ describe ZammadAPI, 'ticket priority object basics' do
     expect(ticket_priority_invalid.class).to eq(ZammadAPI::Resources::TicketPriority)
     expect(ticket_priority_invalid.new_record?).to be(true)
 
-    expect { ticket_priority_invalid.save }.to raise_error(RuntimeError)
+    expect { ticket_priority_invalid.save }.to raise_error(ZammadAPI::ClientError)
   end
 
   it 'new with valid attributes' do
