@@ -43,12 +43,9 @@ module ZammadAPI
 
       def destroy
         response = @transport.delete(url: "#{@url}/#{@attributes[:id]}")
-        if response.body.to_s != '' && response.body.to_s != ' '
-          data = safe_json_parse(response.body)
-        end
         return true if response.status == 200
 
-        raise "Can't destroy object (#{self.class.name}): #{data['error']}"
+        raise ResponseError.from(response, operation: 'destroy object', resource_class: self.class)
       end
 
       def save
@@ -79,11 +76,11 @@ module ZammadAPI
 
       def self.find(transport, id)
         response = transport.get(url: "#{@url}/#{id}?expand=true")
-        data = safe_json_parse(response.body)
         if response.status != 200
-          raise "Can't find object (#{self.class.name}): #{data['error']}"
+          raise ResponseError.from(response, operation: 'find object', resource_class: self)
         end
 
+        data = safe_json_parse(response.body)
         item = new(transport, data)
         item.new_instance = false
         item
@@ -114,7 +111,7 @@ module ZammadAPI
         attributes = safe_json_parse(response.body)
         return attributes if response.status == 201
 
-        save_error(attributes)
+        save_error(response)
       end
 
       def save_existing
@@ -127,11 +124,11 @@ module ZammadAPI
 
         return attributes if response.status == 200
 
-        save_error(attributes)
+        save_error(response)
       end
 
-      def save_error(attributes)
-        raise "Can't save object (#{self.class.name}): #{attributes['error']}"
+      def save_error(response)
+        raise ResponseError.from(response, operation: 'save object', resource_class: self.class)
       end
 
       def symbolize_keys_deep!(hash)
