@@ -107,9 +107,8 @@ module ZammadAPI
       end
 
       def save_new
-        response   = @transport.post(url: "#{@url}?expand=true", params: @attributes)
-        attributes = safe_json_parse(response.body)
-        return attributes if response.status == 201
+        response = @transport.post(url: "#{@url}?expand=true", params: @attributes)
+        return safe_json_parse(response.body) if response.status == 201
 
         save_error(response)
       end
@@ -119,10 +118,8 @@ module ZammadAPI
         @changes.each do |name, values|
           attributes_to_post[name] = values[1]
         end
-        response   = @transport.put(url: "#{@url}/#{@attributes[:id]}?expand=true", params: attributes_to_post)
-        attributes = safe_json_parse(response.body)
-
-        return attributes if response.status == 200
+        response = @transport.put(url: "#{@url}/#{@attributes[:id]}?expand=true", params: attributes_to_post)
+        return safe_json_parse(response.body) if response.status == 200
 
         save_error(response)
       end
