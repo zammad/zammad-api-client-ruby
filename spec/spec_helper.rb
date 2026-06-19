@@ -39,6 +39,7 @@ class Helper
     response        = conn.get url_auto_wizard
     data            = JSON.parse(response.body)
 
+    puts response.body
     return true if data['auto_wizard_success']
 
     raise "Unable to start auto wizard: #{response.body}"
