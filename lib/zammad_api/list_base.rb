@@ -62,10 +62,11 @@ module ZammadAPI
       }.join('&')
 
       response = @transport.get(url: url)
-      data = safe_json_parse(response.body)
       if response.status != 200
-        raise "Can't get .#{request} of object (#{@resource.class.name}): #{data['error']}"
+        raise ResponseError.from(response, operation: "get .#{request} of object", resource_class: @resource.class)
       end
+
+      data = safe_json_parse(response.body)
 
       list = []
       data.each do |local_data|
@@ -77,7 +78,7 @@ module ZammadAPI
     end
 
     def perform_request(_parameter)
-      raise "no perform_request implementation for #{self.class.name} found"
+      raise Error, "no perform_request implementation for #{self.class.name} found"
     end
   end
 end

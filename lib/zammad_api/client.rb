@@ -31,7 +31,7 @@ module ZammadAPI
       begin
         class_object = Kernel.const_get(class_name)
       rescue
-        raise "Resource for #{method} does not exist"
+        raise ResourceNotFoundError, "Resource for #{method} does not exist"
       end
       ZammadAPI::Dispatcher.new(@transport, class_object)
     end
@@ -39,20 +39,20 @@ module ZammadAPI
     private
 
     def check_config
-      raise 'missing url in config' if !@config[:url]
-      raise 'config url needs to start with http:// or https://' if !%r{^(http|https)://}.match?(@config[:url])
+      raise ConfigurationError, 'missing url in config' if !@config[:url]
+      raise ConfigurationError, 'config url needs to start with http:// or https://' if !%r{^(http|https)://}.match?(@config[:url])
 
       # check for token auth
       return if @config[:http_token] && !@config[:http_token].empty?
       return if @config[:oauth2_token] && !@config[:oauth2_token].empty?
 
       if !@config[:user] || @config[:user].empty?
-        raise 'missing user in config'
+        raise ConfigurationError, 'missing user in config'
       end
 
       return if @config[:password] && !@config[:password].empty?
 
-      raise 'missing password in config'
+      raise ConfigurationError, 'missing password in config'
     end
 
     def modulize(string)

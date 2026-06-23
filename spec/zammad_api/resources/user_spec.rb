@@ -15,7 +15,7 @@ describe ZammadAPI, 'user object basics' do
     expect(user_invalid.class).to eq(ZammadAPI::Resources::User)
     expect(user_invalid.new_record?).to be(true)
 
-    expect { user_invalid.save }.to raise_error(RuntimeError)
+    expect { user_invalid.save }.to raise_error(ZammadAPI::ClientError)
   end
 
   it 'new with valid attributes' do
@@ -268,7 +268,7 @@ describe ZammadAPI, 'user object basics' do
     # to have some references and not allow users to delete
     sleep 12
 
-    expect { user.destroy }.to raise_error(RuntimeError)
+    expect { user.destroy }.to raise_error(ZammadAPI::ClientError)
     #result = user.destroy
     #expect(result).to eq(true)
   end
