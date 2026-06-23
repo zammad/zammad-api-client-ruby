@@ -12,7 +12,7 @@ jobs:
     container:
       image: zammad/zammad-ci:latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Run lint actions
         shell: bash
         run: |
@@ -37,7 +37,7 @@ jobs:
       ZAMMAD_PHP_API_CLIENT_UNIT_TESTS_USERNAME: "admin@example.com"
       ZAMMAD_PHP_API_CLIENT_UNIT_TESTS_PASSWORD: "test"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Zammad
         shell: bash
         run: |
