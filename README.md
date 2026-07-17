@@ -245,7 +245,7 @@ ticket.created_at # '2022-01-01T12:42:01Z'
 
 List all new or open tickets:
 ```ruby
-tickets = client.ticket.search(query: 'state:new OR state:open')
+tickets = client.ticket.search(query: 'state.name:new OR state.name:open')
 
 ticket[0].id # id of record
 ticket[0].number # uniq number of ticket
