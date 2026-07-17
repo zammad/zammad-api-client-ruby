@@ -12,7 +12,7 @@ describe ZammadAPI, 'ticket state object basics' do
     expect(ticket_state_invalid.class).to eq(ZammadAPI::Resources::TicketState)
     expect(ticket_state_invalid.new_record?).to be(true)
 
-    expect { ticket_state_invalid.save }.to raise_error(RuntimeError)
+    expect { ticket_state_invalid.save }.to raise_error(ZammadAPI::ClientError)
   end
 
   it 'new with valid attributes' do

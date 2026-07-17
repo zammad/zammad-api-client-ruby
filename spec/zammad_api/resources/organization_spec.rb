@@ -12,7 +12,7 @@ describe ZammadAPI, 'organization object basics' do
     expect(organization_invalid.class).to eq(ZammadAPI::Resources::Organization)
     expect(organization_invalid.new_record?).to be(true)
 
-    expect { organization_invalid.save }.to raise_error(RuntimeError)
+    expect { organization_invalid.save }.to raise_error(ZammadAPI::ClientError)
   end
 
   it 'new with valid attributes' do

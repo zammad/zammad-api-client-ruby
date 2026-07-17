@@ -17,6 +17,48 @@ describe ZammadAPI::Client do
   let(:config) { Helper.config }
   let(:instance) { described_class.new(config) }
 
+  describe '.new' do
+    it 'raises ConfigurationError when url is missing' do
+      expect { described_class.new(config.merge(url: nil)) }
+        .to raise_error(ZammadAPI::ConfigurationError, 'missing url in config')
+    end
+
+    it 'raises ConfigurationError when url scheme is unsupported' do
+      expect { described_class.new(config.merge(url: 'ftp://example.com')) }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config url needs to start with http:// or https://')
+    end
+
+    it 'raises ConfigurationError when user is missing' do
+      expect { described_class.new(config.merge(user: nil)) }
+        .to raise_error(ZammadAPI::ConfigurationError, 'missing user in config')
+    end
+
+    it 'raises ConfigurationError when password is missing' do
+      expect { described_class.new(config.merge(password: nil)) }
+        .to raise_error(ZammadAPI::ConfigurationError, 'missing password in config')
+    end
+
+    it 'does not require user/password when http_token is supplied' do
+      expect { described_class.new(url: config[:url], http_token: 'token') }.not_to raise_error
+    end
+
+    it 'does not require user/password when oauth2_token is supplied' do
+      expect { described_class.new(url: config[:url], oauth2_token: 'token') }.not_to raise_error
+    end
+  end
+
+  describe '#method_missing' do
+    it 'raises ResourceNotFoundError for unknown resources' do
+      expect { instance.does_not_exist }.to raise_error(ZammadAPI::ResourceNotFoundError, /Resource for DoesNotExist does not exist/)
+    end
+
+    it 'attaches the underlying NameError as #cause' do
+      instance.does_not_exist
+    rescue ZammadAPI::ResourceNotFoundError => e
+      expect(e.cause).to be_a(NameError)
+    end
+  end
+
   describe '#perform_on_behalf_of' do
     it 'performs a given block on behalft of a given user' do
       on_behalf_of_identifier = 'some_login'
