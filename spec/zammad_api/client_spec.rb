@@ -65,7 +65,7 @@ describe ZammadAPI::Client do
 
       stub_request(:get, /#{config[:url]}/)
         .with(headers: {
-                'X-On-Behalf-Of' => on_behalf_of_identifier
+                'From' => on_behalf_of_identifier
               })
         .to_return(status: 200, body: '{}', headers: {})
 
@@ -80,7 +80,7 @@ describe ZammadAPI::Client do
 
       stub_request(:get, /#{config[:url]}/)
         .with(headers: {
-                'X-On-Behalf-Of' => on_behalf_of_identifier
+                'From' => on_behalf_of_identifier
               })
         .to_return(status: 200, body: '{}', headers: {})
 
@@ -101,7 +101,7 @@ describe ZammadAPI::Client do
         return false if !super
         return true if request_signature.headers.empty?
 
-        !request_signature.headers.key?('X-On-Behalf-Of')
+        !request_signature.headers.key?('From')
       end
 
       instance.user.find(1)

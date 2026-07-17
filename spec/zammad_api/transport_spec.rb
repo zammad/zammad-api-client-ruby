@@ -40,21 +40,21 @@ describe ZammadAPI::Transport do
       expect(instance).to respond_to(:on_behalf_of=)
     end
 
-    it 'sets X-On-Behalf-Of header' do
+    it 'sets From header' do
       on_behalf_of_identifier = 'some_login'
 
       instance.on_behalf_of = on_behalf_of_identifier
 
       stub_request(:get, "#{config[:url]}some/path")
         .with(headers: {
-                'X-On-Behalf-Of' => on_behalf_of_identifier
+                'From' => on_behalf_of_identifier
               })
         .to_return(status: 200, body: '', headers: {})
 
       instance.get(url: '/some/path')
     end
 
-    it 'unsets X-On-Behalf-Of header' do
+    it 'unsets From header' do
       on_behalf_of_identifier = 'some_login'
 
       instance.on_behalf_of = on_behalf_of_identifier
@@ -71,7 +71,7 @@ describe ZammadAPI::Transport do
         return false if !super
         return true if request_signature.headers.empty?
 
-        !request_signature.headers.key?('X-On-Behalf-Of')
+        !request_signature.headers.key?('From')
       end
 
       instance.get(url: '/some/path')

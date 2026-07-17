@@ -183,7 +183,9 @@ groups.page(2,3) {|group|
 
 ## Perform actions on behalf of another user
 
-As described in the [Zammad API documentation](https://docs.zammad.org/en/latest/api-intro.html#example-curl-request-on-behalf-of-a-different-user) it is possible to perfom actions on behalf other users. To use this feature you can set the attribute of the client accordingly:
+As described in the [Zammad API documentation](https://docs.zammad.org/en/latest/api/intro.html#actions-on-behalf-of-other-users) it is possible to perfom actions on behalf other users. To use this feature you can set the attribute of the client accordingly:
+
+> **Note:** This feature requires Zammad 5.0 or later, since the client sends the standard HTTP `From` header instead of the deprecated `X-On-Behalf-Of` header (see [zammad/zammad#3113](https://github.com/zammad/zammad/issues/3113)).
 
 ```ruby
 client.on_behalf_of = 'some_login'

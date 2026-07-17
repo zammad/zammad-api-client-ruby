@@ -50,7 +50,7 @@ module ZammadAPI
         end
 
         if !on_behalf_of.nil?
-          req.headers['X-On-Behalf-Of'] = on_behalf_of
+          req.headers['From'] = on_behalf_of
         end
 
         yield(req) if block_given?
