@@ -38,7 +38,7 @@ module ZammadAPI
       end
 
       def changed?
-        @changes.present?
+        !@changes.to_h.empty?
       end
 
       def destroy
