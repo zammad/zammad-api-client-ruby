@@ -6,6 +6,7 @@ gemspec
 # development dependencies
 group :development, :test do
   gem 'bundler', '>= 2.2.10'
+  gem 'overcommit'
   gem 'rake'
   gem 'rspec'
   gem 'rubocop'
