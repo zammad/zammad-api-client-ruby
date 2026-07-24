@@ -32,10 +32,6 @@ jobs:
           POSTGRES_PASSWORD: zammad
       redis:
         image: redis:7
-    env:
-      ZAMMAD_PHP_API_CLIENT_UNIT_TESTS_URL: "http://localhost:3000"
-      ZAMMAD_PHP_API_CLIENT_UNIT_TESTS_USERNAME: "admin@example.com"
-      ZAMMAD_PHP_API_CLIENT_UNIT_TESTS_PASSWORD: "test"
     steps:
       - uses: actions/checkout@v7
       - name: Set up Zammad
