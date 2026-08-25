@@ -1,3 +1,7 @@
+## [1.4.0] - 2026-08-25
+- Follow up - c3af2a9 - Fixes #29 - [JSON::ParserError on gateway timeout when proxy responds with HTML](https://github.com/zammad/zammad-api-client-ruby/issues/29)
+- Dependencies updated
+
 ## [1.3.1] - 2026-04-28
 - Fixes #29 - [JSON::ParserError on gateway timeout when proxy responds with HTML](https://github.com/zammad/zammad-api-client-ruby/issues/29)
 
