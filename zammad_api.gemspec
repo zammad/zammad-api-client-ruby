@@ -5,7 +5,7 @@ require_relative 'lib/zammad_api/version'
 Gem::Specification.new do |spec|
   spec.name     = 'zammad_api'
   spec.version  = ZammadAPI::VERSION
-  spec.authors  = ['Martin Edenhofer', 'Martin Gruner']
+  spec.authors  = ['Martin Edenhofer', 'Martin Gruner', 'Mantas Masalskis']
   spec.email    = ['support@zammad.org']
 
   spec.summary     = 'Zammad API v1.0 client.'
