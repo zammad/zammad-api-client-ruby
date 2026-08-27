@@ -1,26 +1,65 @@
 name: CI
+
 on:
   push:
     branches: [master]
   pull_request:
   schedule:
-    # Run every on Friday to ensure everything works as expected.
-    - cron:  '0 6 * * 5'
+    # Weekly, to catch breakage from new Ruby or Zammad releases.
+    - cron: '0 6 * * 5'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
 jobs:
   lint:
+    name: RuboCop
     runs-on: ubuntu-latest
-    container:
-      image: zammad/zammad-ci:latest
     steps:
       - uses: actions/checkout@v7
-      - name: Run lint actions
-        shell: bash
-        run: |
-          source /etc/profile.d/rvm.sh # ensure RVM is loaded
-          bundle update --bundler
-          bundle install -j $(nproc)
-          bundle exec rubocop
-  test:
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+      - run: bundle exec rubocop --format github
+
+  types:
+    name: Steep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+      - run: bundle exec steep check
+
+  unit:
+    name: Unit specs (Ruby ${{ matrix.ruby }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Keep the lowest entry in sync with required_ruby_version.
+        ruby: ['3.4', '3.5', 'head']
+    continue-on-error: ${{ matrix.ruby == 'head' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - name: Run unit specs
+        run: bundle exec rake spec:unit
+        env:
+          COVERAGE: 'true'
+
+  integration:
+    name: Integration specs
     runs-on: ubuntu-latest
     container:
       image: zammad/zammad-ci:latest
@@ -48,10 +87,10 @@ jobs:
           RAILS_ENV=test bundle exec rake db:create
           cp contrib/auto_wizard_test.json auto_wizard.json
           bundle exec rake zammad:ci:test:start
-      - name: Run Ruby API integration tests
+      - name: Run integration specs
         shell: bash
         run: |
           source /etc/profile.d/rvm.sh # ensure RVM is loaded
           bundle update --bundler
           bundle install -j $(nproc)
-          bundle exec rspec
+          bundle exec rake spec:integration
