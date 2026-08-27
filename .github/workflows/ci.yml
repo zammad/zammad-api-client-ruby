@@ -53,6 +53,11 @@ jobs:
         # Keep the lowest entry in sync with required_ruby_version.
         ruby: ['3.4', '3.5', 'head']
     continue-on-error: ${{ matrix.ruby == 'head' }}
+    env:
+      # steep pulls listen -> rb-inotify -> ffi, which caps at Ruby < 4.1.dev
+      # and so cannot resolve on head. The unit specs do not need it; the
+      # `types` job installs it separately.
+      BUNDLE_WITHOUT: development
     steps:
       - uses: actions/checkout@v7
       - uses: ruby/setup-ruby@v1
@@ -102,7 +107,9 @@ jobs:
       - name: Boot Zammad
         shell: bash
         run: |
-          set -euo pipefail
+          # No `set -u`: /etc/profile.d/rvm.sh reads unset variables and aborts
+          # under nounset.
+          set -eo pipefail
           git clone --depth 1 --branch "$ZAMMAD_REF" https://github.com/zammad/zammad.git
           cd zammad
           source /etc/profile.d/rvm.sh
