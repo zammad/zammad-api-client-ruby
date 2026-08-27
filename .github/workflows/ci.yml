@@ -64,6 +64,9 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
+          # The bundler pinned by Gemfile.lock (2.6.9) crashes on Ruby head,
+          # which removed Pathname::SEPARATOR_PAT.
+          bundler: ${{ matrix.ruby == 'head' && 'latest' || 'Gemfile.lock' }}
       - name: Run unit specs
         run: bundle exec rake spec:unit
         env:

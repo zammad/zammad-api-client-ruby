@@ -43,11 +43,17 @@ class Helper
     parse(response.body)['auto_wizard_success'] == true
   end
 
+  # A configured Zammad requires authentication even for
+  # /api/v1/getting_started, so the setup state cannot be read from there.
+  # Proving that the configured credentials work answers the only question
+  # that matters here.
   def self.verify_setup_done!
-    started = parse(connection.get('api/v1/getting_started').body)
-    return true if started['setup_done']
-
-    raise SetupError, "Zammad at #{config[:url]} is not set up and the auto wizard did not run: #{started.inspect}"
+    ZammadAPI::Client.new(**config).group.all.page(1, per_page: 1).to_a
+    true
+  rescue ZammadAPI::Error => e
+    raise SetupError,
+          "Zammad at #{config[:url]} is not usable: the auto wizard did not run and " \
+          "authenticating as #{config[:user]} failed (#{e.class}: #{e.message})"
   end
 
   def self.connection

@@ -87,13 +87,14 @@ section 'Instance setup'
 # The auto wizard creates the admin account. An instance that is already
 # configured reports failure here, which is fine as long as it is set up.
 check!('auto wizard or already configured') do
-  connection = Faraday.new(url: URL)
-  wizard     = parse_json(connection.get('api/v1/getting_started/auto_wizard').body)
+  wizard = parse_json(Faraday.new(url: URL).get('api/v1/getting_started/auto_wizard').body)
   next 'auto wizard ran' if wizard['auto_wizard_success']
 
-  started = parse_json(connection.get('api/v1/getting_started').body)
-  raise "instance is not set up: #{started.inspect}" if !started['setup_done']
-
+  # A configured Zammad requires authentication even for
+  # /api/v1/getting_started, so the setup state cannot be read from there.
+  # An authenticated request answers the only question that matters.
+  ZammadAPI::Client.new(url: URL, user: LOGIN, password: PASSWORD, retries: 0)
+    .group.all.page(1, per_page: 1).to_a
   'already set up'
 end
 
