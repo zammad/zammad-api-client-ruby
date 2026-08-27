@@ -34,6 +34,13 @@ RSpec.configure do |config|
   config.define_derived_metadata(file_path: %r{/spec/unit/}) { it[:unit] = true }
   config.define_derived_metadata(file_path: %r{/spec/integration/}) { it[:integration] = true }
 
+  # The instance has to have an admin account before anything can
+  # authenticate. Doing this from a hook rather than from one spec file keeps
+  # the suite independent of file order.
+  config.before(:each, :integration) do
+    Helper.ensure_configured!
+  end
+
   # Integration specs need the real network, so WebMock steps aside for them.
   config.around(:each, :integration) do |example|
     WebMock.allow_net_connect!

@@ -4,6 +4,8 @@ require 'securerandom'
 
 # Helpers for integration specs, which need a reachable Zammad instance.
 class Helper
+  class SetupError < StandardError; end
+
   def self.config
     {
       url:      ENV['TEST_URL']      || 'http://localhost:3000/',
@@ -13,21 +15,54 @@ class Helper
   end
 
   def self.client(**overrides)
-    ZammadAPI::Client.new(**config, **overrides)
+    settings = config
+    ZammadAPI::Client.new(
+      url:      overrides.fetch(:url, settings[:url]),
+      user:     overrides.fetch(:user, settings[:user]),
+      password: overrides.fetch(:password, settings[:password]),
+      **overrides.except(:url, :user, :password)
+    )
   end
 
-  # Runs Zammad's auto wizard so that the instance has a known base state.
-  def self.auto_wizard
-    connection = Faraday.new(url: config[:url])
-    response   = connection.get('api/v1/getting_started/auto_wizard')
-    data       = JSON.parse(response.body)
+  # Makes sure the instance has an admin account, running Zammad's auto wizard
+  # once per suite.
+  #
+  # Memoized and idempotent, so it does not matter which spec file happens to
+  # run first, and re-running the suite against an already configured instance
+  # is not an error.
+  def self.ensure_configured!
+    @ensure_configured ||= begin
+      auto_wizard? || verify_setup_done!
+      true
+    end
+  end
 
-    return true if data['auto_wizard_success']
+  # @return [Boolean] whether the auto wizard ran now
+  def self.auto_wizard?
+    response = connection.get('api/v1/getting_started/auto_wizard')
+    parse(response.body)['auto_wizard_success'] == true
+  end
 
-    raise "Unable to start auto wizard: #{response.body}"
+  def self.verify_setup_done!
+    started = parse(connection.get('api/v1/getting_started').body)
+    return true if started['setup_done']
+
+    raise SetupError, "Zammad at #{config[:url]} is not set up and the auto wizard did not run: #{started.inspect}"
+  end
+
+  def self.connection
+    Faraday.new(url: config[:url])
+  end
+
+  def self.parse(body)
+    JSON.parse(body)
+  rescue JSON::ParserError
+    {}
   end
 
   def self.random
     SecureRandom.random_number(99_999_999).to_s
   end
+
+  private_class_method :verify_setup_done!, :connection, :parse
 end

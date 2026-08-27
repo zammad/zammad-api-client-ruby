@@ -322,24 +322,40 @@ bin/setup            # or: bundle install
 bundle exec rake     # unit specs, RuboCop and Steep
 ```
 
-| Task                            | What it does                                    |
-| ------------------------------- | ----------------------------------------------- |
-| `rake spec:unit`                | Unit specs; stubbed, no Zammad needed           |
-| `rake spec:integration`         | Integration specs against a live Zammad         |
-| `rake rubocop`                  | Style checks                                    |
-| `rake steep`                    | Type-check `lib/` against `sig/`                |
-
-The integration specs need a reachable Zammad instance and will modify its data. Point
-them somewhere disposable:
-
-```sh
-TEST_URL=http://localhost:3000/ \
-TEST_USER=admin@example.com \
-TEST_PASSWORD=test \
-  bundle exec rake spec:integration
-```
+| Task                     | What it does                                          |
+| ------------------------ | ----------------------------------------------------- |
+| `rake spec:unit`         | Unit specs; stubbed, no Zammad needed                 |
+| `rake spec:integration`  | Integration specs against a live Zammad               |
+| `rake check_connection`  | Drives a live Zammad end to end and prints a transcript |
+| `rake rubocop`           | Style checks                                          |
+| `rake steep`             | Type-check `lib/` against `sig/`                      |
 
 Set `COVERAGE=true` to produce a coverage report in `coverage/`.
+
+### Testing against a live Zammad
+
+The integration specs and `check_connection` need a reachable Zammad instance and **will
+create and delete records**, so point them at something disposable:
+
+```sh
+export TEST_URL=http://localhost:3000/
+export TEST_USER=admin@example.com
+export TEST_PASSWORD=test
+
+bundle exec rake check_connection   # one linear pass, readable transcript
+bundle exec rake spec:integration   # the full spec suite
+```
+
+`check_connection` walks the documented workflows in order — create, find, update, reload,
+pattern match, paginate, search, ticket with articles, attachment download, acting on
+behalf of a user, and each error class — printing `ok` or `FAIL` per step and cleaning up
+after itself. It stops early if a precondition fails, so a broken instance produces one
+clear line rather than a cascade.
+
+CI runs both against a Zammad booted from source: the `integration` job clones Zammad,
+starts it, waits for it to answer, runs `check_connection` as a fast preflight, then runs
+the integration specs. Trigger it by hand from the Actions tab (`workflow_dispatch`) to
+test against a specific Zammad ref.
 
 ## Migrating from 1.x
 

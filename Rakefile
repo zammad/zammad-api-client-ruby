@@ -19,6 +19,11 @@ end
 desc 'Run all specs'
 task spec: ['spec:unit', 'spec:integration']
 
+desc 'Drive a live Zammad instance end to end with this gem (see TEST_URL)'
+task :check_connection do
+  sh 'ruby script/check_connection.rb'
+end
+
 RuboCop::RakeTask.new
 
 desc 'Type-check lib/ against the signatures in sig/'

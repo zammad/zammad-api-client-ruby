@@ -1,10 +1,6 @@
 # frozen_string_literal: true
 
 RSpec.describe ZammadAPI, 'authentication' do
-  before(:all) do
-    Helper.auto_wizard
-  end
-
   it 'has a version number' do
     expect(ZammadAPI::VERSION).not_to be_nil
   end

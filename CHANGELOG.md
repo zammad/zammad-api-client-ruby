@@ -74,6 +74,13 @@ A breaking release that modernises the whole gem. See
   server live in `spec/integration`.
 - CI runs RuboCop, Steep and the unit specs on Ruby 3.4, 3.5 and head, and publishes
   releases through RubyGems trusted publishing.
+- The integration job now waits for Zammad to answer before running specs, promotes
+  Zammad's generated CI environment into the job so it survives across steps, pins the
+  Zammad ref (overridable via `workflow_dispatch`), carries a timeout, and uploads Zammad's
+  logs on failure. It also runs `script/check_connection.rb` as a preflight, so a broken
+  gem-to-Zammad link fails in seconds with a readable transcript instead of 53 spec errors.
+- The integration suite no longer depends on spec file order to run Zammad's auto wizard,
+  and tolerates an instance that is already set up.
 
 ## [1.4.0] - 2026-08-25
 - Follow up - c3af2a9 - Fixes #29 - [JSON::ParserError on gateway timeout when proxy responds with HTML](https://github.com/zammad/zammad-api-client-ruby/issues/29)
