@@ -1,50 +1,46 @@
-$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
+# frozen_string_literal: true
 
-# we don't require 'webmock/rspec' over here
-# since we want to mock only certain requests
-# but the API should be available in general
-require 'webmock'
-
-RSpec.configure do |config|
-  config.include WebMock::API
-  config.include WebMock::Matchers
+if ENV['COVERAGE']
+  require 'simplecov'
+  SimpleCov.start do
+    enable_coverage :branch
+    add_filter '/spec/'
+    minimum_coverage line: 90, branch: 75
+  end
 end
 
+$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
+
+# Unit specs run entirely against stubs; integration specs opt back out below.
+require 'webmock/rspec'
 require 'zammad_api'
 
-class Helper
-  def self.config
-    {
-      url:      ENV['TEST_URL']      || 'http://localhost:3000/',
-      user:     ENV['TEST_USER']     || 'admin@example.com',
-      password: ENV['TEST_PASSWORD'] || 'test'
-    }
-  end
+Dir[File.expand_path('support/**/*.rb', __dir__)].each { require it }
 
-  def self.client(params = {})
-    ZammadAPI::Client.new(
-      url:      params[:url]      || config[:url],
-      user:     params[:user]     || config[:user],
-      password: params[:password] || config[:password],
-    )
-  end
+RSpec.configure do |config|
+  config.include ClientHelper
 
-  # start auto wizard
-  def self.auto_wizard
-    conn = Faraday.new(url: config[:url]) do |faraday|
-      faraday.adapter Faraday.default_adapter # make requests with Net::HTTP
-    end
+  config.expect_with(:rspec) { it.syntax = :expect }
+  config.mock_with(:rspec) { it.verify_partial_doubles = true }
 
-    url_auto_wizard = '/api/v1/getting_started/auto_wizard'
-    response        = conn.get url_auto_wizard
-    data            = JSON.parse(response.body)
+  config.disable_monkey_patching!
+  config.warnings = false
+  config.filter_run_when_matching :focus
+  config.example_status_persistence_file_path = 'tmp/rspec_status.txt'
+  config.shared_context_metadata_behavior = :apply_to_host_groups
 
-    return true if data['auto_wizard_success']
+  # Specs are grouped by what they need: unit specs run against WebMock stubs
+  # and never touch the network, integration specs need a live Zammad.
+  config.define_derived_metadata(file_path: %r{/spec/unit/}) { it[:unit] = true }
+  config.define_derived_metadata(file_path: %r{/spec/integration/}) { it[:integration] = true }
 
-    raise "Unable to start auto wizard: #{response.body}"
-  end
-
-  def self.random
-    rand(99_999_999).to_s
+  # Integration specs need the real network, so WebMock steps aside for them.
+  config.around(:each, :integration) do |example|
+    WebMock.allow_net_connect!
+    WebMock.disable!
+    example.run
+  ensure
+    WebMock.enable!
+    WebMock.disable_net_connect!
   end
 end

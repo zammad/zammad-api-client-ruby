@@ -1,6 +1,6 @@
-require 'spec_helper'
+# frozen_string_literal: true
 
-describe ZammadAPI, 'ticket state object basics' do
+RSpec.describe ZammadAPI, 'ticket state object basics' do
   client = Helper.client
 
   name = "some_ticket_state#{Helper.random}"
@@ -160,17 +160,17 @@ describe ZammadAPI, 'ticket state object basics' do
 
     count = 0
     ticket_states = client.ticket_state.all
-    ticket_states.page(1, 3) do |local_ticket_state|
+    ticket_states.page(1, per_page: 3).each do |local_ticket_state|
       expect(local_ticket_state.class).to eq(ZammadAPI::Resources::TicketState)
       count += 1
     end
     expect(count).to eq(3)
-    ticket_states.page(2, 3) do |local_ticket_state|
+    ticket_states.page(2, per_page: 3).each do |local_ticket_state|
       expect(local_ticket_state.class).to eq(ZammadAPI::Resources::TicketState)
       count += 1
     end
     expect(count).to eq(6)
-    ticket_states.page(3, 3) do |local_ticket_state|
+    ticket_states.page(3, per_page: 3).each do |local_ticket_state|
       expect(local_ticket_state.class).to eq(ZammadAPI::Resources::TicketState)
       count += 1
     end

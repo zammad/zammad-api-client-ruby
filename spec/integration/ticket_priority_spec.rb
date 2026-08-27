@@ -1,6 +1,6 @@
-require 'spec_helper'
+# frozen_string_literal: true
 
-describe ZammadAPI, 'ticket priority object basics' do
+RSpec.describe ZammadAPI, 'ticket priority object basics' do
   client = Helper.client
 
   name = "some_ticket_priority#{Helper.random}"
@@ -110,17 +110,17 @@ describe ZammadAPI, 'ticket priority object basics' do
 
     count = 0
     ticket_priorities = client.ticket_priority.all
-    ticket_priorities.page(1, 2) do |local_ticket_priority|
+    ticket_priorities.page(1, per_page: 2).each do |local_ticket_priority|
       expect(local_ticket_priority.class).to eq(ZammadAPI::Resources::TicketPriority)
       count += 1
     end
     expect(count).to eq(2)
-    ticket_priorities.page(2, 2) do |local_ticket_priority|
+    ticket_priorities.page(2, per_page: 2).each do |local_ticket_priority|
       expect(local_ticket_priority.class).to eq(ZammadAPI::Resources::TicketPriority)
       count += 1
     end
     expect(count).to eq(4)
-    ticket_priorities.page(3, 2) do |local_ticket_priority|
+    ticket_priorities.page(3, per_page: 2).each do |local_ticket_priority|
       expect(local_ticket_priority.class).to eq(ZammadAPI::Resources::TicketPriority)
       count += 1
     end

@@ -1,6 +1,6 @@
-require 'spec_helper'
+# frozen_string_literal: true
 
-describe ZammadAPI, 'user object basics' do
+RSpec.describe ZammadAPI, 'user object basics' do
   client = Helper.client
 
   random = Helper.random
@@ -169,18 +169,18 @@ describe ZammadAPI, 'user object basics' do
 
     count = 0
     users = client.user.all
-    users.page(1, 4) do |local_user|
+    users.page(1, per_page: 4).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end
     expect(count).to eq(4)
-    users.page(2, 5) do |local_user|
+    users.page(2, per_page: 5).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end
     expect(count).to eq(9)
     count = 0
-    users.page(1, 200) do |local_user|
+    users.page(1, per_page: 200).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end
@@ -251,12 +251,12 @@ describe ZammadAPI, 'user object basics' do
 
     count = 0
     users = client.user.search(query: firstname)
-    users.page(1, 3) do |local_user|
+    users.page(1, per_page: 3).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end
     expect(count).to eq(1)
-    users.page(2, 3) do |local_user|
+    users.page(2, per_page: 3).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end

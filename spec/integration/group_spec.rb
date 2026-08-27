@@ -1,6 +1,6 @@
-require 'spec_helper'
+# frozen_string_literal: true
 
-describe ZammadAPI, 'group object basics' do
+RSpec.describe ZammadAPI, 'group object basics' do
   client = Helper.client
 
   name = "some_group#{Helper.random}"
@@ -134,12 +134,12 @@ describe ZammadAPI, 'group object basics' do
 
     count = 0
     groups = client.group.all
-    groups.page(1, 3) do |local_group|
+    groups.page(1, per_page: 3).each do |local_group|
       expect(local_group.class).to eq(ZammadAPI::Resources::Group)
       count += 1
     end
     expect(count).to eq(3)
-    groups.page(2, 3) do |local_group|
+    groups.page(2, per_page: 3).each do |local_group|
       expect(local_group.class).to eq(ZammadAPI::Resources::Group)
       count += 1
     end

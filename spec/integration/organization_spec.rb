@@ -1,6 +1,6 @@
-require 'spec_helper'
+# frozen_string_literal: true
 
-describe ZammadAPI, 'organization object basics' do
+RSpec.describe ZammadAPI, 'organization object basics' do
   client = Helper.client
 
   name = "some_organization#{Helper.random}"
@@ -128,12 +128,12 @@ describe ZammadAPI, 'organization object basics' do
 
     count = 0
     organizations = client.organization.all
-    organizations.page(1, 3) do |local_organization|
+    organizations.page(1, per_page: 3).each do |local_organization|
       expect(local_organization.class).to eq(ZammadAPI::Resources::Organization)
       count += 1
     end
     expect(count).to eq(2)
-    organizations.page(2, 3) do |local_organization|
+    organizations.page(2, per_page: 3).each do |local_organization|
       expect(local_organization.class).to eq(ZammadAPI::Resources::Organization)
       count += 1
     end
@@ -195,12 +195,12 @@ describe ZammadAPI, 'organization object basics' do
 
     count = 0
     organizations = client.organization.search(query: 'zammad')
-    organizations.page(1, 3) do |local_organization|
+    organizations.page(1, per_page: 3).each do |local_organization|
       expect(local_organization.class).to eq(ZammadAPI::Resources::Organization)
       count += 1
     end
     expect(count).to eq(1)
-    organizations.page(2, 3) do |local_organization|
+    organizations.page(2, per_page: 3).each do |local_organization|
       expect(local_organization.class).to eq(ZammadAPI::Resources::Organization)
       count += 1
     end
