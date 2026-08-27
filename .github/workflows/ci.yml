@@ -51,12 +51,18 @@ jobs:
       fail-fast: false
       matrix:
         # Keep the lowest entry in sync with required_ruby_version.
-        ruby: ['3.4', '3.5', 'head']
-    continue-on-error: ${{ matrix.ruby == 'head' }}
+        #
+        # 'head' is deliberately absent: it currently cannot install at all,
+        # for two reasons that both sit outside this gem. With Gemfile.lock
+        # present, bundler honours `BUNDLED WITH 2.6.9`, self-downgrades from
+        # head's 4.1.0.dev and dies with NameError on the removed
+        # Pathname::SEPARATOR_PAT. Without the lockfile, a fresh resolution
+        # pulls steep -> listen -> rb-inotify -> ffi, which requires
+        # Ruby < 4.1.dev. Restore 'head' once either is fixed upstream.
+        ruby: ['3.4', '3.5']
     env:
-      # steep pulls listen -> rb-inotify -> ffi, which caps at Ruby < 4.1.dev
-      # and so cannot resolve on head. The unit specs do not need it; the
-      # `types` job installs it separately.
+      # The unit specs do not need the type-checking toolchain, and skipping it
+      # keeps this job fast. The `types` job installs it separately.
       BUNDLE_WITHOUT: development
     steps:
       - uses: actions/checkout@v7
@@ -64,9 +70,6 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
-          # The bundler pinned by Gemfile.lock (2.6.9) crashes on Ruby head,
-          # which removed Pathname::SEPARATOR_PAT.
-          bundler: ${{ matrix.ruby == 'head' && 'latest' || 'Gemfile.lock' }}
       - name: Run unit specs
         run: bundle exec rake spec:unit
         env:
