@@ -72,7 +72,7 @@ A breaking release that modernises the whole gem. See
 - Resource dispatch is explicit rather than `method_missing` plus `const_get`.
 - Unit specs (`rake spec:unit`) run without a Zammad instance; the specs that need a live
   server live in `spec/integration`.
-- CI runs RuboCop, Steep and the unit specs on Ruby 3.4, 3.5 and head, and publishes
+- CI runs RuboCop, Steep and the unit specs on every supported stable Ruby, and publishes
   releases through RubyGems trusted publishing.
 - The integration job now waits for Zammad to answer before running specs, promotes
   Zammad's generated CI environment into the job so it survives across steps, pins the

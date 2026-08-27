@@ -50,16 +50,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Keep the lowest entry in sync with required_ruby_version.
+        # Stable releases only, and nothing below required_ruby_version, which
+        # currently leaves just the 3.4 line. Add '3.5' when 3.5.0 is released:
+        # today the newest 3.5 build is 3.5.0-preview1 from April 2025, which
+        # predates 3.4.9 and is not something to gate merges on.
         #
-        # 'head' is deliberately absent: it currently cannot install at all,
-        # for two reasons that both sit outside this gem. With Gemfile.lock
-        # present, bundler honours `BUNDLED WITH 2.6.9`, self-downgrades from
-        # head's 4.1.0.dev and dies with NameError on the removed
-        # Pathname::SEPARATOR_PAT. Without the lockfile, a fresh resolution
-        # pulls steep -> listen -> rb-inotify -> ffi, which requires
-        # Ruby < 4.1.dev. Restore 'head' once either is fixed upstream.
-        ruby: ['3.4', '3.5']
+        # 'head' is also absent, because it cannot install at all for two
+        # reasons outside this gem. With Gemfile.lock present, bundler honours
+        # `BUNDLED WITH 2.6.9`, self-downgrades from head's 4.1.0.dev and dies
+        # with NameError on the removed Pathname::SEPARATOR_PAT. Without the
+        # lockfile, a fresh resolution pulls steep -> listen -> rb-inotify ->
+        # ffi, which requires Ruby < 4.1.dev.
+        ruby: ['3.4']
     env:
       # The unit specs do not need the type-checking toolchain, and skipping it
       # keeps this job fast. The `types` job installs it separately.
