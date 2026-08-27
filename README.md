@@ -315,6 +315,11 @@ look like credentials (`password`, `token`, `secret`, ...) are redacted.
 RBS signatures ship in `sig/` and are checked in CI with [Steep](https://github.com/soutaro/steep).
 Add the gem to your own RBS collection to type-check calls into this client.
 
+## Examples
+
+Runnable scripts covering pagination, pattern matching, acting on behalf of a user,
+attachments, error handling and threaded use live in [`examples/`](examples/README.md).
+
 ## Development
 
 ```sh

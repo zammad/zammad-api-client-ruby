@@ -6,7 +6,6 @@ plugins:
 AllCops:
   NewCops: enable
   Exclude:
-    - 'examples/**/*'
     - 'pkg/**/*'
     - 'vendor/**/*'
   # Keep in sync with required_ruby_version in the gemspec and the CI matrix.
