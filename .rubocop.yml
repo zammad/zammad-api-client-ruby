@@ -18,7 +18,7 @@ AllCops:
     - 'db/schema.rb'
     - 'examples/**/*'
   # Match the Ruby version specified in the gemspec.
-  TargetRubyVersion: 3.0
+  TargetRubyVersion: 3.4
 
 # Zammad StyleGuide
 
@@ -86,6 +86,13 @@ Layout/MultilineMethodCallIndentation:
 
 Style/RescueStandardError:
   EnforcedStyle: implicit
+
+Style/ArgumentsForwarding:
+  # Named parameters keep public signatures self-documenting for YARD/RBS.
+  UseAnonymousForwarding: false
+
+Naming/BlockForwarding:
+  EnforcedStyle: explicit
 
 Style/Documentation:
   Enabled: false
