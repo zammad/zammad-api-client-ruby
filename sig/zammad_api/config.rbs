@@ -1,0 +1,58 @@
+module ZammadAPI
+  # Built with Data.define; the generated readers are declared explicitly.
+  class Config < ::Data
+    DEFAULT_TIMEOUT: Integer
+    DEFAULT_OPEN_TIMEOUT: Integer
+    DEFAULT_RETRIES: Integer
+    DEFAULT_RETRY_INTERVAL: Float
+    REDACTED_ATTRIBUTES: Array[Symbol]
+    REDACTION: String
+    URL_PATTERN: Regexp
+
+    def self.new: (**untyped) -> instance
+
+    attr_reader url: String
+    attr_reader user: String?
+    attr_reader password: String?
+    attr_reader http_token: String?
+    attr_reader oauth2_token: String?
+    attr_reader user_agent: String
+    attr_reader timeout: Numeric
+    attr_reader open_timeout: Numeric
+    attr_reader retries: Integer
+    attr_reader retry_interval: Numeric
+    attr_reader ssl_verify: bool
+    attr_reader proxy: String?
+    attr_reader logger: Logger
+
+    def initialize: (
+      url: untyped,
+      ?user: String?,
+      ?password: String?,
+      ?http_token: String?,
+      ?oauth2_token: String?,
+      ?user_agent: String,
+      ?timeout: untyped,
+      ?open_timeout: untyped,
+      ?retries: untyped,
+      ?retry_interval: untyped,
+      ?ssl_verify: bool,
+      ?proxy: String?,
+      ?logger: Logger?
+    ) -> void
+
+    def authentication_scheme: () -> Symbol
+    def inspect: () -> String
+    def to_s: () -> String
+    def to_h: () -> Hash[Symbol, untyped]
+
+    private
+
+    def render: (Symbol, untyped) -> String
+    def normalize_url: (untyped) -> String
+    def validate_credentials!: () -> void
+    def validate_numbers!: () -> void
+    def presence: (untyped) -> untyped
+    def normalized_string: (untyped) -> String
+  end
+end

@@ -1,0 +1,40 @@
+module ZammadAPI
+  module Resources
+    class Group < Base
+    end
+
+    class Organization < Base
+    end
+
+    class TicketPriority < Base
+    end
+
+    class TicketState < Base
+    end
+
+    class User < Base
+    end
+
+    class Ticket < Base
+      def articles: () -> Array[TicketArticle]
+      def article: (?Hash[untyped, untyped] attributes) -> TicketArticle
+    end
+
+    class TicketArticle < Base
+      # Narrowed from Base so callers get the concrete article type.
+      def self.from_response: (Transport, Hash[untyped, untyped] attributes) -> TicketArticle
+
+      def attachments: () -> Array[TicketArticleAttachment]
+    end
+
+    class TicketArticleAttachment
+      include AttributeAccess
+
+      @transport: Transport
+
+      def initialize: (Transport, ?Hash[untyped, untyped]? attributes) -> void
+      def download: () -> String
+      def inspect: () -> String
+    end
+  end
+end

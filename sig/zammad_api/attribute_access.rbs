@@ -1,0 +1,22 @@
+module ZammadAPI
+  module AttributeAccess
+    NON_ATTRIBUTE_SUFFIXES: Array[String]
+
+    @attributes: Hash[Symbol, untyped]
+
+    attr_reader attributes: Hash[Symbol, untyped]
+
+    def []: (Symbol | String key) -> untyped
+    def fetch: (Symbol | String key, *untyped default) ?{ (Symbol) -> untyped } -> untyped
+    def key?: (Symbol | String key) -> bool
+    def to_h: () -> Hash[Symbol, untyped]
+    def id: () -> Integer?
+    def method_missing: (Symbol, *untyped) -> untyped
+    def respond_to_missing?: (Symbol, ?bool) -> bool
+
+    private
+
+    def write_attribute: (Symbol, untyped) -> untyped
+    def deep_symbolize: (untyped) -> untyped
+  end
+end

@@ -21,5 +21,10 @@ task spec: ['spec:unit', 'spec:integration']
 
 RuboCop::RakeTask.new
 
+desc 'Type-check lib/ against the signatures in sig/'
+task :steep do
+  sh 'bundle exec steep check'
+end
+
 desc 'Run everything that does not need a Zammad instance'
-task default: ['spec:unit', :rubocop]
+task default: ['spec:unit', :rubocop, :steep]

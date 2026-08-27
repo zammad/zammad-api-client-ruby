@@ -1,0 +1,66 @@
+module ZammadAPI
+  class Error < StandardError
+  end
+
+  class ConfigurationError < Error
+  end
+
+  class UnknownResourceError < Error
+  end
+
+  class TransportError < Error
+  end
+
+  class ConnectionError < TransportError
+  end
+
+  class TimeoutError < TransportError
+  end
+
+  class ParseError < Error
+  end
+
+  class ResponseError < Error
+    STATUS_ERRORS: Hash[Integer, singleton(ResponseError)]
+
+    attr_reader response: Response?
+    attr_reader operation: String
+    attr_reader resource_class: Class?
+
+    def self.build: (Response? response, operation: String, ?resource_class: Class?) -> ResponseError
+    def self.error_class_for: (Response?) -> singleton(ResponseError)
+
+    def initialize: (operation: String, ?response: Response?, ?resource_class: Class?) -> void
+    def status: () -> Integer?
+    def body: () -> untyped
+    def headers: () -> Hash[String, String]
+    def server_message: () -> String?
+
+    private
+
+    def build_message: () -> String
+    def detail: () -> String
+  end
+
+  class ClientError < ResponseError
+  end
+
+  class ServerError < ResponseError
+  end
+
+  class AuthenticationError < ClientError
+  end
+
+  class AuthorizationError < ClientError
+  end
+
+  class NotFoundError < ClientError
+  end
+
+  class ValidationError < ClientError
+  end
+
+  class RateLimitError < ClientError
+    def retry_after: () -> Integer?
+  end
+end
