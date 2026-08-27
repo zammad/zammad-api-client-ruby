@@ -17,13 +17,8 @@ module ZammadAPI
           resource_class: self.class,
           query:          { expand: true }
         )
-        body = response.body
-
-        if !body.is_a?(Array)
-          raise ParseError, "Can't get articles (#{self.class.name}): expected a JSON array, got #{body.class}"
-        end
-
-        body.map { TicketArticle.from_response(transport, it) }
+        articles = response.decoded(:array, operation: 'get articles', resource_class: self.class)
+        articles.map { TicketArticle.from_response(transport, it) }
       end
 
       # Adds an article to this ticket.

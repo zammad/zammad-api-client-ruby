@@ -166,6 +166,78 @@ RSpec.describe ZammadAPI::Client do
     end
   end
 
+  describe '#with' do
+    it 'returns a new client' do
+      client = unit_client
+      expect(client.with(timeout: 5)).not_to be(client)
+    end
+
+    it 'applies the changed option' do
+      expect(unit_client.with(timeout: 5).config.timeout).to eq(5)
+    end
+
+    it 'leaves the original client untouched' do
+      client = unit_client
+      client.with(timeout: 5)
+      expect(client.config.timeout).to eq(ZammadAPI::Config::DEFAULT_TIMEOUT)
+    end
+
+    it 'keeps the options that were not changed' do
+      expect(unit_client.with(timeout: 5).config.http_token).to eq('test-token')
+    end
+
+    it 're-validates the resulting configuration' do
+      expect { unit_client.with(timeout: -1) }
+        .to raise_error(ZammadAPI::ConfigurationError, /positive number/)
+    end
+
+    it 'carries an on_behalf_of scope over to the derived client' do
+      stub = stub_request(:get, url)
+        .with(query: hash_including({}), headers: { 'From' => 'agent@example.com' })
+        .to_return(json_response({ id: 1 }))
+
+      unit_client.on_behalf_of('agent@example.com').with(timeout: 5).user.find(1)
+      expect(stub).to have_been_requested
+    end
+
+    it 'still works for requests' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response({ id: 1 }))
+      expect(unit_client.with(timeout: 5).user.find(1).id).to eq(1)
+    end
+  end
+
+  describe 'concurrent use' do
+    it 'does not leak an on_behalf_of scope between threads' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response({ id: 1 }))
+
+      client = unit_client
+      logins = %w[a@example.com b@example.com c@example.com]
+
+      threads = logins.map do |login|
+        Thread.new { 5.times { client.on_behalf_of(login).user.find(1) } }
+      end
+      threads << Thread.new { 5.times { client.user.find(1) } }
+      threads.each(&:join)
+
+      logins.each do |login|
+        expect(a_request(:get, url).with(query: hash_including({}), headers: { 'From' => login }))
+          .to have_been_made.times(5)
+      end
+    end
+
+    it 'leaves the shared client unscoped throughout' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response({ id: 1 }))
+
+      client = unit_client
+      threads = %w[a@example.com b@example.com].map do |login|
+        Thread.new { 5.times { client.on_behalf_of(login).user.find(1) } }
+      end
+      threads.each(&:join)
+
+      expect(client.config).to be_frozen
+    end
+  end
+
   describe '#inspect' do
     it 'shows the url and auth scheme' do
       expect(unit_client.inspect)

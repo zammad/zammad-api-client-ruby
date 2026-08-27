@@ -9,6 +9,8 @@ Ruby client for the Zammad API v1.0.
 - Ships **RBS signatures** in `sig/`, so typed projects get completion and checking out of the box.
 - Requests carry **timeouts** and **retry with backoff** for transient failures by default.
 - Collections are **lazily paginated** `Enumerable`s.
+- Records support **pattern matching**, and clients are **immutable** and safe to share
+  between threads.
 
 > **Upgrading from 1.x?** See [Migrating from 1.x](#migrating-from-1x). Version 2.0 is a
 > breaking release.
@@ -113,6 +115,32 @@ group.to_h       # every attribute as a Hash
 Zammad records can carry administrator-defined custom attributes, so an unknown reader
 returns `nil` rather than raising. Use `fetch` when a missing attribute should be an error.
 
+### Pattern matching
+
+Records implement `deconstruct_keys`, so they work with `case/in`:
+
+```ruby
+case client.ticket.find(1)
+in {state: 'closed'}
+  nil
+in {state: String => state, priority: '3 high'}
+  escalate(state)
+in {group: {name: 'Support'}}
+  notify_support
+end
+```
+
+`Config` and `Response` are `Data` objects, so their members match too:
+
+```ruby
+case client.config
+in {http_token: String}
+  :token_auth
+in {user: String, password: String}
+  warn 'prefer an access token over basic auth'
+end
+```
+
 ### Update
 
 ```ruby
@@ -178,6 +206,19 @@ collection[0]                       # the first record
 
 Collections are immutable: `page` and `where` return a new collection and leave the
 original untouched.
+
+## Deriving clients
+
+A client is immutable. `with` returns a new one with some options changed, re-validating
+them and carrying over any `on_behalf_of` scope:
+
+```ruby
+bulk = client.with(timeout: 300, retries: 5)
+bulk.ticket.all.each { |ticket| archive(ticket) }
+```
+
+Because nothing is mutated after construction, one client — and any client derived from it —
+is safe to use from several threads at once.
 
 ## Acting on behalf of another user
 

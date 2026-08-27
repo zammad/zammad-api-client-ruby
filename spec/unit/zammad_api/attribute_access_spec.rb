@@ -112,6 +112,46 @@ RSpec.describe ZammadAPI::AttributeAccess do
     end
   end
 
+  describe 'pattern matching' do
+    it 'matches on attribute values' do
+      result = case record
+               in { name: 'Support' } then :matched
+               else :not_matched
+               end
+      expect(result).to eq(:matched)
+    end
+
+    it 'binds matched values' do
+      case record
+      in { name: String => name }
+        expect(name).to eq('Support')
+      end
+    end
+
+    it 'matches nested structures' do
+      case record
+      in { preferences: { notes: [{ body: String => body }, *] } }
+        expect(body).to eq('hello')
+      end
+    end
+
+    it 'does not match an absent attribute' do
+      result = case record
+               in { nope: _ } then :matched
+               else :not_matched
+               end
+      expect(result).to eq(:not_matched)
+    end
+
+    it 'returns every attribute for a nil key list' do
+      expect(record.deconstruct_keys(nil)).to eq(record.attributes)
+    end
+
+    it 'returns only the requested keys' do
+      expect(record.deconstruct_keys([:name])).to eq(name: 'Support')
+    end
+  end
+
   it 'rejects writes by default' do
     expect { record.name = 'other' }.to raise_error(NoMethodError, /read-only/)
   end

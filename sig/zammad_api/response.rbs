@@ -7,7 +7,10 @@ module ZammadAPI
     attr_reader raw_body: String
 
     def self.new: (status: Integer, headers: Hash[String, String], body: untyped, raw_body: String) -> instance
+    SUCCESS_STATUSES: Range[Integer]
+
     def success?: () -> bool
     def json?: () -> bool
+    def decoded: (Symbol shape, operation: String, ?resource_class: Class?) -> untyped
   end
 end

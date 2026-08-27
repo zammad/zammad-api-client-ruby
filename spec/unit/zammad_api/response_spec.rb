@@ -30,6 +30,36 @@ RSpec.describe ZammadAPI::Response do
     end
   end
 
+  describe '#decoded' do
+    it 'returns an object body when one is expected' do
+      expect(build(body: { a: 1 }).decoded(:object, operation: 'find object')).to eq(a: 1)
+    end
+
+    it 'returns an array body when one is expected' do
+      expect(build(body: [{ a: 1 }]).decoded(:array, operation: 'get list')).to eq([{ a: 1 }])
+    end
+
+    it 'raises when an object was expected but a list arrived' do
+      expect { build(body: []).decoded(:object, operation: 'find object') }
+        .to raise_error(ZammadAPI::ParseError, "Can't find object: expected a JSON object, got Array")
+    end
+
+    it 'raises when a list was expected but an object arrived' do
+      expect { build(body: {}).decoded(:array, operation: 'get list') }
+        .to raise_error(ZammadAPI::ParseError, "Can't get list: expected a JSON array, got Hash")
+    end
+
+    it 'raises when the body was never JSON' do
+      expect { build(body: '<html>', raw_body: '<html>').decoded(:object, operation: 'find object') }
+        .to raise_error(ZammadAPI::ParseError, /got String/)
+    end
+
+    it 'names the resource class in the message' do
+      expect { build(body: []).decoded(:object, operation: 'find object', resource_class: ZammadAPI::Resources::User) }
+        .to raise_error(/\(ZammadAPI::Resources::User\)/)
+    end
+  end
+
   it 'is immutable' do
     expect(build).to be_frozen
   end

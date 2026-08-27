@@ -4,7 +4,18 @@ module ZammadAPI
   # Base class for every error raised by this gem.
   #
   # Rescuing +ZammadAPI::Error+ catches all of them.
-  class Error < StandardError; end
+  class Error < StandardError
+    # Formats the "<operation> (<ResourceClass>)" fragment shared by error
+    # messages, so every error reads the same way.
+    #
+    # @api private
+    # @param operation [String]
+    # @param resource_class [Class, nil]
+    # @return [String]
+    def self.subject_for(operation, resource_class)
+      resource_class ? "#{operation} (#{resource_class.name})" : operation
+    end
+  end
 
   # Raised when {Config} cannot be built from the supplied options.
   class ConfigurationError < Error; end
@@ -23,8 +34,17 @@ module ZammadAPI
   # Raised when a request exceeded {Config#open_timeout} or {Config#timeout}.
   class TimeoutError < TransportError; end
 
-  # Raised when a response was expected to contain JSON but did not.
-  class ParseError < Error; end
+  # Raised when a response did not have the shape the caller expected.
+  class ParseError < Error
+    # @param operation [String]
+    # @param expected [Symbol] +:object+ or +:array+
+    # @param actual [Class] the class that was decoded instead
+    # @param resource_class [Class, nil]
+    # @return [ParseError]
+    def self.build(operation:, expected:, actual:, resource_class: nil)
+      new("Can't #{subject_for(operation, resource_class)}: expected a JSON #{expected}, got #{actual}")
+    end
+  end
 
   # Base class for errors carrying an HTTP response.
   #
@@ -98,8 +118,7 @@ module ZammadAPI
     private
 
     def build_message
-      subject = resource_class ? "#{operation} (#{resource_class.name})" : operation
-      "Can't #{subject}: #{detail}"
+      "Can't #{Error.subject_for(operation, resource_class)}: #{detail}"
     end
 
     def detail

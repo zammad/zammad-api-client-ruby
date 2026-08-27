@@ -76,7 +76,7 @@ RSpec.describe ZammadAPI::Collection do
       stub_request(:get, url).with(query: hash_including({})).to_return(json_response({ id: 1 }))
 
       expect { collection.to_a }
-        .to raise_error(ZammadAPI::ParseError, %r{expected a JSON array from api/v1/groups, got Hash})
+        .to raise_error(ZammadAPI::ParseError, /expected a JSON array, got Hash/)
     end
   end
 

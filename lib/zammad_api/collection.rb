@@ -129,12 +129,7 @@ module ZammadAPI
         resource_class: @resource_class,
         query:          @query.merge(page: page, per_page: per_page)
       )
-      records = response.body
-
-      if !records.is_a?(Array)
-        raise ParseError, "Can't #{@operation}: expected a JSON array from #{@path}, got #{records.class}"
-      end
-
+      records = response.decoded(:array, operation: @operation, resource_class: @resource_class)
       records.map { @resource_class.from_response(@transport, it) }
     end
   end

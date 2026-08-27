@@ -42,6 +42,7 @@ module ZammadAPI
     ) -> void
 
     def authentication_scheme: () -> Symbol
+    def with: (**untyped) -> Config
     def inspect: () -> String
     def to_s: () -> String
     def to_h: () -> Hash[Symbol, untyped]

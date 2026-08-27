@@ -83,8 +83,29 @@ module ZammadAPI
     end
 
     # @return [Array<Symbol>] every resource name this client supports
-    def resource_names
-      RESOURCES.keys
+    def resource_names = RESOURCES.keys
+
+    # Returns a new client with some configuration options changed.
+    #
+    # The options are re-validated, and any {#on_behalf_of} scope is carried
+    # over. The original client keeps its own connection and settings.
+    #
+    # @example A longer timeout for one bulk job
+    #   bulk = client.with(timeout: 300, retries: 5)
+    #   bulk.ticket.all.each { |ticket| archive(ticket) }
+    #
+    # @param options [Hash] any option accepted by {Config}
+    # @return [Client]
+    # @raise [ConfigurationError] when the resulting options are invalid
+    def with(**options)
+      derived_config = config.with(**options)
+      derived        = dup
+      derived.instance_variable_set(:@config, derived_config)
+      derived.instance_variable_set(
+        :@transport,
+        Transport.new(derived_config).with_on_behalf_of(@transport.on_behalf_of)
+      )
+      derived
     end
 
     # Performs requests on behalf of another user.
@@ -112,9 +133,7 @@ module ZammadAPI
       yield scoped
     end
 
-    def inspect
-      "#<#{self.class.name} url=#{config.url.inspect} auth=#{config.authentication_scheme}>"
-    end
+    def inspect = "#<#{self.class.name} url=#{config.url.inspect} auth=#{config.authentication_scheme}>"
 
     def method_missing(name, *args)
       return super if CONVERSION_METHODS.include?(name) || name.to_s.end_with?('=', '!', '?')
@@ -122,14 +141,10 @@ module ZammadAPI
       raise UnknownResourceError, unknown_resource_message(name)
     end
 
-    def respond_to_missing?(_name, _include_private = false)
-      false
-    end
+    def respond_to_missing?(_name, _include_private = false) = false
 
     private
 
-    def unknown_resource_message(name)
-      "Unknown resource #{name}, available resources are: #{RESOURCES.keys.join(', ')}"
-    end
+    def unknown_resource_message(name) = "Unknown resource #{name}, available resources are: #{RESOURCES.keys.join(', ')}"
   end
 end

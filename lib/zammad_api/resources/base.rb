@@ -62,19 +62,13 @@ module ZammadAPI
       end
 
       # @return [Boolean] whether this record has not been stored yet
-      def new_record?
-        @new_record
-      end
+      def new_record? = @new_record
 
       # @return [Boolean] whether this record exists in Zammad
-      def persisted?
-        !@new_record
-      end
+      def persisted? = !@new_record
 
       # @return [Boolean] whether there are unsaved changes
-      def changed?
-        !changes.empty?
-      end
+      def changed? = !changes.empty?
 
       # Creates or updates the record.
       #
@@ -85,13 +79,8 @@ module ZammadAPI
       # @raise [ResponseError] when Zammad rejected the request
       def save
         response = new_record? ? create_record : update_record
-        body     = response.body
 
-        if !body.is_a?(Hash)
-          raise ParseError, "Can't save object (#{self.class.name}): expected a JSON object, got #{body.class}"
-        end
-
-        @attributes = body
+        @attributes = response.decoded(:object, operation: 'save object', resource_class: self.class)
         @changes    = {}
         @new_record = false
         true
@@ -122,9 +111,7 @@ module ZammadAPI
         true
       end
 
-      def inspect
-        "#<#{self.class.name} id=#{id.inspect} new_record=#{new_record?} attributes=#{attributes.inspect}>"
-      end
+      def inspect = "#<#{self.class.name} id=#{id.inspect} new_record=#{new_record?} attributes=#{attributes.inspect}>"
 
       private
 

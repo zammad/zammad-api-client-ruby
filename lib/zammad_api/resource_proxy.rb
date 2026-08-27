@@ -55,13 +55,10 @@ module ZammadAPI
         resource_class: resource_class,
         query:          { expand: true }
       )
-      body = response.body
-
-      if !body.is_a?(Hash)
-        raise ParseError, "Can't find object (#{resource_class.name}): expected a JSON object, got #{body.class}"
-      end
-
-      resource_class.from_response(@transport, body)
+      resource_class.from_response(
+        @transport,
+        response.decoded(:object, operation: 'find object', resource_class: resource_class)
+      )
     end
 
     # Deletes a record by id, without fetching it first.
@@ -98,9 +95,7 @@ module ZammadAPI
       )
     end
 
-    def inspect
-      "#<#{self.class.name} #{resource_class.name}>"
-    end
+    def inspect = "#<#{self.class.name} #{resource_class.name}>"
 
     private
 
@@ -115,8 +110,6 @@ module ZammadAPI
       )
     end
 
-    def path
-      resource_class.resource_path
-    end
+    def path = resource_class.resource_path
   end
 end

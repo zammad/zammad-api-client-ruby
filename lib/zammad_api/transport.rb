@@ -201,8 +201,6 @@ module ZammadAPI
       end
     end
 
-    def logger
-      config.logger
-    end
+    def logger = config.logger
   end
 end

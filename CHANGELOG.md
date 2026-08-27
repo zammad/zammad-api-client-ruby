@@ -40,6 +40,14 @@ A breaking release that modernises the whole gem. See
 - `ssl_verify`, `proxy`, `user_agent`, `retries` and `retry_interval` client options.
 - RBS signatures in `sig/`, verified by Steep in CI.
 - `respond_to?` now answers correctly for attribute readers and resource methods.
+- Records implement `deconstruct_keys`, so they can be used with `case/in` pattern
+  matching, including against nested attributes. `Config` and `Response` are `Data`
+  objects and match as well.
+- `Client#with(**options)` derives a new client with changed options. The options are
+  re-validated and any `on_behalf_of` scope is carried over.
+- `Response#decoded(:object | :array)` validates the shape of a response body in one
+  place, so an unexpected payload raises `ParseError` with a consistent message instead of
+  failing further downstream.
 
 ### Fixed
 

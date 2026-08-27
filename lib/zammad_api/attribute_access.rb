@@ -17,9 +17,7 @@ module ZammadAPI
 
     # @param key [Symbol, String]
     # @return [Object, nil]
-    def [](key)
-      attributes[key.to_sym]
-    end
+    def [](key) = attributes[key.to_sym]
 
     # @param key [Symbol, String]
     # @param default [Object] returned instead of raising
@@ -38,19 +36,27 @@ module ZammadAPI
     end
 
     # @return [Boolean]
-    def key?(key)
-      attributes.key?(key.to_sym)
-    end
+    def key?(key) = attributes.key?(key.to_sym)
 
     # @return [Hash{Symbol => Object}] a copy of all attributes
-    def to_h
-      attributes.dup
-    end
+    def to_h = attributes.dup
 
     # @return [Integer, nil]
-    def id
-      attributes[:id]
-    end
+    def id = attributes[:id]
+
+    # Enables Ruby pattern matching against a record's attributes.
+    #
+    # @example
+    #   case client.ticket.find(1)
+    #   in {state: 'closed'}
+    #     nil
+    #   in {state: String => state, priority: '3 high'}
+    #     escalate(state)
+    #   end
+    #
+    # @param keys [Array<Symbol>, nil] the keys the pattern asks for
+    # @return [Hash{Symbol => Object}]
+    def deconstruct_keys(keys) = keys.nil? ? attributes : attributes.slice(*keys)
 
     def method_missing(name, *args)
       identifier = name.to_s
