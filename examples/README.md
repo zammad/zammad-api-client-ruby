@@ -17,6 +17,7 @@ ruby examples/ticket_report.rb tickets.csv
 | ------ | ------------ | --------------------- |
 | [`example_http_token.rb`](example_http_token.rb) | Creates a ticket, reads it back, adds an article | The basics end to end |
 | [`pagination.rb`](pagination.rb) | Walks a collection every available way and prints the HTTP cost of each | `each`, `each_page`, `page`, `where`, `[]`, `lazy`, `first(n)`, and collection immutability |
+| [`manual_batches.rb`](manual_batches.rb) | Drives pagination by hand: pull-based, record-sized, resumable and throttled | `each_page` as an Enumerator (`next`), `each.each_slice(n)`, an explicit `page(n)` loop with a persisted cursor |
 | [`ticket_report.rb`](ticket_report.rb) | Exports every ticket to CSV | Automatic pagination, `each_page` batching, `client.with` for a long-running job, `fetch` for required attributes |
 | [`triage_tickets.rb`](triage_tickets.rb) | Escalates urgent tickets, nudges stale ones | `search`, `lazy` early exit, `case/in` pattern matching on records, staged `changes` so only diffs are sent, `article` |
 | [`onboard_customer.rb`](onboard_customer.rb) | Creates an organization, a user, and a welcome ticket raised as that user | `create`, `on_behalf_of` as a scoped client and as a block |
