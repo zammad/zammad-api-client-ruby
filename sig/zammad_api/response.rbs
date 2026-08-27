@@ -1,0 +1,16 @@
+module ZammadAPI
+  # Built with Data.define; the generated readers are declared explicitly.
+  class Response < ::Data
+    attr_reader status: Integer
+    attr_reader headers: Hash[String, String]
+    attr_reader body: untyped
+    attr_reader raw_body: String
+
+    def self.new: (status: Integer, headers: Hash[String, String], body: untyped, raw_body: String) -> instance
+    SUCCESS_STATUSES: Range[Integer]
+
+    def success?: () -> bool
+    def json?: () -> bool
+    def decoded: (Symbol shape, operation: String, ?resource_class: Class?) -> untyped
+  end
+end

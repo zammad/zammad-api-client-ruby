@@ -1,140 +1,154 @@
-require 'cgi'
-require 'zammad_api/json_helper'
-require 'zammad_api/transport'
+# frozen_string_literal: true
+
+require_relative '../attribute_access'
+require_relative '../errors'
 
 module ZammadAPI
   module Resources
+    # Shared behaviour for every Zammad record.
+    #
+    # Attributes are read and written through +method_missing+, because Zammad
+    # records can carry administrator-defined custom attributes:
+    #
+    #   group      = client.group.find(1)
+    #   group.name             # read
+    #   group.name = 'Support' # stage a change
+    #   group.changed?         # => true
+    #   group.save             # persist
     class Base
-      include ZammadAPI::JsonHelper
-      extend ZammadAPI::JsonHelper
+      include AttributeAccess
 
-      attr_accessor :new_instance, :url, :attributes
+      # @return [Hash{Symbol => Array(Object, Object)}] staged changes as
+      #   +attribute => [old_value, new_value]+
       attr_reader :changes
 
+      # @api private
+      attr_reader :transport
+
+      class << self
+        # Declares the API path of this resource, relative to the instance URL.
+        #
+        # @param value [String]
+        # @return [void]
+        def path(value)
+          @path = value
+        end
+
+        # @return [String] the API path of this resource
+        def resource_path
+          @path || raise(Error, "#{name} does not declare an API path")
+        end
+
+        # Builds a record that is already stored in Zammad.
+        #
+        # @api private
+        # @param transport [Transport]
+        # @param attributes [Hash]
+        # @return [Base]
+        def from_response(transport, attributes)
+          record = new(transport, attributes)
+          record.send(:mark_persisted!)
+          record
+        end
+      end
+
+      # @param transport [Transport]
+      # @param attributes [Hash, nil]
       def initialize(transport, attributes = {})
-        @new_instance = true
-        @transport    = transport
-        @changes      = {}
-        @url          = self.class.get_url
-
-        if attributes.nil?
-          attributes = {}
-        end
-        @attributes = attributes
-        symbolize_keys_deep!(@attributes)
+        @transport  = transport
+        @attributes = deep_symbolize(attributes || {})
+        @changes    = {}
+        @new_record = true
       end
 
-      def method_missing(method, *args)
-        return @attributes[method] if !method.to_s.end_with?('=')
+      # @return [Boolean] whether this record has not been stored yet
+      def new_record? = @new_record
 
-        method              = method.to_s[0, method.length - 1].to_sym
-        @changes[method]    = [@attributes[method], args[0]]
-        @attributes[method] = args[0]
-        nil
-      end
+      # @return [Boolean] whether this record exists in Zammad
+      def persisted? = !@new_record
 
-      def new_record?
-        @new_instance
-      end
+      # @return [Boolean] whether there are unsaved changes
+      def changed? = !changes.empty?
 
-      def changed?
-        !@changes.to_h.empty?
-      end
-
-      def destroy
-        response = @transport.delete(url: "#{@url}/#{@attributes[:id]}")
-        return true if response.status == 200
-
-        raise ResponseError.from(response, operation: 'destroy object', resource_class: self.class)
-      end
-
+      # Creates or updates the record.
+      #
+      # New records are sent in full; existing records send only the attributes
+      # that changed.
+      #
+      # @return [true]
+      # @raise [ResponseError] when Zammad rejected the request
       def save
-        attributes = saved_attributes
-        symbolize_keys_deep!(attributes)
-        attributes.delete(:article)
-        @attributes   = attributes
-        @new_instance = false
-        @changes      = {}
+        response = new_record? ? create_record : update_record
+
+        @attributes = response.decoded(:object, operation: 'save object', resource_class: self.class)
+        @changes    = {}
+        @new_record = false
         true
       end
 
-      def self.get_url
-        @url
+      # Re-reads the record from Zammad, discarding unsaved changes.
+      #
+      # @return [self]
+      def reload
+        response = transport.get(
+          member_path,
+          operation:      'reload object',
+          resource_class: self.class,
+          query:          { expand: true }
+        )
+        @attributes = response.body
+        @changes    = {}
+        @new_record = false
+        self
       end
 
-      def self.url(value)
-        @url = value
-      end
-
-      def self.all(transport, _)
-        ZammadAPI::ListAll.new(self, transport, per_page: 100)
-      end
-
-      def self.search(transport, parameter)
-        ZammadAPI::ListSearch.new(self, transport, parameter)
-      end
-
-      def self.find(transport, id)
-        response = transport.get(url: "#{@url}/#{id}?expand=true")
-        if response.status != 200
-          raise ResponseError.from(response, operation: 'find object', resource_class: self)
-        end
-
-        data = safe_json_parse(response.body)
-        item = new(transport, data)
-        item.new_instance = false
-        item
-      end
-
-      def self.create(transport, data)
-        item = new(transport, data)
-        item.save
-        item
-      end
-
-      def self.destroy(transport, id)
-        item = find(transport, id)
-        item.destroy
+      # Deletes the record.
+      #
+      # @return [true]
+      # @raise [ResponseError] when Zammad rejected the request
+      def destroy
+        transport.delete(member_path, operation: 'destroy object', resource_class: self.class)
         true
       end
+
+      def inspect = "#<#{self.class.name} id=#{id.inspect} new_record=#{new_record?} attributes=#{attributes.inspect}>"
 
       private
 
-      def saved_attributes
-        return save_new if @new_instance
-
-        save_existing
+      def mark_persisted!
+        @new_record = false
       end
 
-      def save_new
-        response = @transport.post(url: "#{@url}?expand=true", params: @attributes)
-        return safe_json_parse(response.body) if response.status == 201
-
-        save_error(response)
+      def write_attribute(key, value)
+        @changes[key] = [@attributes[key], value]
+        @attributes[key] = value
+        value
       end
 
-      def save_existing
-        attributes_to_post = {}
-        @changes.each do |name, values|
-          attributes_to_post[name] = values[1]
-        end
-        response = @transport.put(url: "#{@url}/#{@attributes[:id]}?expand=true", params: attributes_to_post)
-        return safe_json_parse(response.body) if response.status == 200
-
-        save_error(response)
+      def create_record
+        transport.post(
+          self.class.resource_path,
+          operation:      'save object',
+          resource_class: self.class,
+          query:          { expand: true },
+          body:           attributes
+        )
       end
 
-      def save_error(response)
-        raise ResponseError.from(response, operation: 'save object', resource_class: self.class)
+      def update_record
+        transport.put(
+          member_path,
+          operation:      'save object',
+          resource_class: self.class,
+          query:          { expand: true },
+          body:           changes.transform_values { it[1] }
+        )
       end
 
-      def symbolize_keys_deep!(hash)
-        hash.keys.each do |key|
-          key_symbol       = key.respond_to?(:to_sym) ? key.to_sym : key
-          hash[key_symbol] = hash.delete key # Preserve order even when key == key_symbol
+      def member_path
+        raise Error, "#{self.class.name} has no id, save it first" if id.nil?
 
-          symbolize_keys_deep! hash[key_symbol] if hash[key_symbol].is_a? Hash
-        end
+        "#{self.class.resource_path}/#{id}"
       end
     end
   end

@@ -1,0 +1,40 @@
+module ZammadAPI
+  class Collection
+    include Enumerable[untyped]
+
+    DEFAULT_PER_PAGE: Integer
+
+    attr_reader per_page: Integer
+    attr_reader current_page: Integer?
+
+    @transport: Transport
+    @resource_class: untyped
+    @path: String
+    @operation: String
+    @query: Hash[Symbol, untyped]
+
+    def initialize: (
+      transport: Transport,
+      resource_class: untyped,
+      path: String,
+      operation: String,
+      ?query: Hash[Symbol, untyped],
+      ?per_page: Integer,
+      ?page: Integer?
+    ) -> void
+
+    def each: () { (untyped) -> void } -> Collection
+            | () -> Enumerator[untyped, Collection]
+    def each_page: () { (Array[untyped]) -> void } -> Collection
+                 | () -> Enumerator[Array[untyped], Collection]
+    def page: (Integer number, ?per_page: Integer?) -> Collection
+    def where: (**untyped) -> Collection
+    def []: (Integer index) -> untyped
+    def inspect: () -> String
+
+    private
+
+    def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped]) -> Collection
+    def fetch: (Integer, Integer) -> Array[untyped]
+  end
+end

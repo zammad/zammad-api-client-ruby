@@ -1,117 +1,87 @@
-# Default enabled cops
-# https://github.com/bbatsov/rubocop/blob/master/config/enabled.yml
-
 plugins:
   - rubocop-performance
   - rubocop-rake
   - rubocop-rspec
 
-inherit_from:
-  - .rubocop_todo.yml
-
 AllCops:
   NewCops: enable
   Exclude:
-    - 'bin/rails'
-    - 'bin/rake'
-    - 'bin/spring'
-    - 'db/schema.rb'
-    - 'examples/**/*'
-  # Match the Ruby version specified in the gemspec.
-  TargetRubyVersion: 3.0
+    - 'pkg/**/*'
+    - 'vendor/**/*'
+  # Keep in sync with required_ruby_version in the gemspec and the CI matrix.
+  TargetRubyVersion: 3.4
 
-# Zammad StyleGuide
-
-Style/FrozenStringLiteralComment:
-  Enabled: false
+# --- Zammad style guide -----------------------------------------------------
 
 Style/NegatedIf:
-  Description: >-
-                 Favor unless over if for negative conditions
-                 (or control flow or).
-  StyleGuide: 'https://github.com/bbatsov/ruby-style-guide#unless-for-negatives'
+  Description: 'Zammad prefers an explicit `if !x` over `unless x`.'
   Enabled: false
 
 Style/IfUnlessModifier:
-  Description: >-
-                 Favor modifier if/unless usage when you have a
-                 single-line body.
-  StyleGuide: 'https://github.com/bbatsov/ruby-style-guide#if-as-a-modifier'
+  Description: 'Zammad allows multi-line bodies for a single condition.'
   Enabled: false
 
 Style/TrailingCommaInArrayLiteral:
-  Description: 'Checks for trailing comma in array literals.'
-  StyleGuide: '#no-trailing-array-commas'
   Enabled: false
 
 Style/TrailingCommaInHashLiteral:
-  Description: 'Checks for trailing comma in hash literals.'
   Enabled: false
 
 Style/TrailingCommaInArguments:
-  Description: 'Checks for trailing comma in argument lists.'
-  StyleGuide: 'https://github.com/bbatsov/ruby-style-guide#no-trailing-array-commas'
   Enabled: false
 
 Layout/LeadingCommentSpace:
-  Description: 'Comments should start with a space.'
-  StyleGuide: 'https://github.com/bbatsov/ruby-style-guide#hash-space'
   Enabled: false
 
 Layout/HashAlignment:
-  Description: >-
-                 Align the elements of a hash literal if they span more than
-                 one line.
   Enabled: true
   EnforcedHashRocketStyle: table
   EnforcedColonStyle: table
   EnforcedLastArgumentHashStyle: always_inspect
 
 Style/ClassAndModuleChildren:
-  Description: 'Checks style of children classes and modules.'
   Enabled: false
 
 Naming/MethodParameterName:
-  Description: >-
-                Checks for method parameter names that contain capital letters,
-                end in numbers, or do not meet a minimal length.
-  Enabled: true
-  AllowedNames: [id]
+  AllowedNames: [id, to]
 
 Layout/MultilineMethodCallIndentation:
-  Description: >-
-                 Checks the indentation of the method name part in method calls
-                 that span more than one line.
   EnforcedStyle: indented
 
 Style/RescueStandardError:
   EnforcedStyle: implicit
 
+Style/ArgumentsForwarding:
+  # Named parameters keep public signatures self-documenting for YARD/RBS.
+  UseAnonymousForwarding: false
+
+Naming/BlockForwarding:
+  EnforcedStyle: explicit
+
+Naming/PredicateMethod:
+  # Established names from the resource API; they return true on success.
+  AllowedMethods:
+    - save
+    - destroy
+
 Style/Documentation:
+  Description: 'Public API documentation is enforced by review, not by this cop.'
   Enabled: false
 
 Style/PerlBackrefs:
-  Description: 'Avoid Perl-style regex back references.'
-  StyleGuide: 'https://github.com/bbatsov/ruby-style-guide#no-perl-regexp-last-matchers'
   Enabled: false
 
 Style/BlockComments:
-  # Keep block comments (=begin ... =end) to allow for easy copy-pasting of examples.
-  Description: 'Do not use block comments.'
+  Description: 'Block comments make examples easy to copy and paste.'
   Enabled: false
 
 Layout/LineLength:
-  Description: 'Limit lines to 80 characters.'
-  StyleGuide: 'https://github.com/bbatsov/ruby-style-guide#80-character-limits'
   Enabled: false
 
 Metrics/ClassLength:
-  Description: 'Avoid classes longer than 100 lines of code.'
   Enabled: false
 
 Metrics/MethodLength:
-  Description: 'Avoid methods longer than 10 lines of code.'
-  StyleGuide: 'https://github.com/bbatsov/ruby-style-guide#short-methods'
   Enabled: false
 
 Metrics/AbcSize:
@@ -123,21 +93,57 @@ Metrics/CyclomaticComplexity:
 Metrics/PerceivedComplexity:
   Max: 12
 
+Metrics/ParameterLists:
+  # Config mirrors every supported option as a keyword argument.
+  Max: 14
+  MaxOptionalParameters: 13
+
+# Broken: "String".downcase == "strinG".downcase is not the same as
+# "String".casecmp("strinG"), only as "String".casecmp("strinG") == 0.
+Performance/Casecmp:
+  Enabled: false
+
+# --- Specs ------------------------------------------------------------------
+
 RSpec/ExampleLength:
-  inherit_mode:
-    merge:
-      - Exclude
-  CountAsOne:
-    - 'array'
-    - 'hash'
-    - 'heredoc'
-  Max: 25
+  CountAsOne: ['array', 'hash', 'heredoc']
+  Max: 12
+  # Integration specs are end-to-end scenarios against a live Zammad.
+  Exclude:
+    - 'spec/integration/**/*'
+
+RSpec/MultipleExpectations:
+  Description: 'A few request assertions per example are clearer than splitting them.'
+  Max: 3
+  Exclude:
+    - 'spec/integration/**/*'
+
+RSpec/DescribeMethod:
+  Exclude:
+    - 'spec/integration/**/*'
 
 RSpec/NestedGroups:
-  Max: 6
+  Max: 4
 
-# Broken!!!! Generates broken code since "String".downcase == "strinG".downcase is not equals "String".casecmp("strinG") but "String".casecmp("strinG") == 0 !!!
-Performance/Casecmp:
-  Description: 'Use `casecmp` rather than `downcase ==`.'
-  Reference: 'https://github.com/JuanitoFatas/fast-ruby#stringcasecmp-vs-stringdowncase---code'
-  Enabled: false
+RSpec/SpecFilePathFormat:
+  # Integration specs are grouped by the Zammad object they exercise, not by
+  # the class under test.
+  Exclude:
+    - 'spec/integration/**/*'
+
+RSpec/DescribeClass:
+  Exclude:
+    - 'spec/integration/**/*'
+
+RSpec/BeforeAfterAll:
+  Exclude:
+    - 'spec/integration/**/*'
+
+RSpec/LeakyLocalVariable:
+  # The integration specs deliberately share a record across ordered examples.
+  Exclude:
+    - 'spec/integration/**/*'
+
+RSpec/NoExpectationExample:
+  Exclude:
+    - 'spec/integration/**/*'

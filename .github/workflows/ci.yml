@@ -1,27 +1,90 @@
 name: CI
+
 on:
   push:
     branches: [master]
   pull_request:
   schedule:
-    # Run every on Friday to ensure everything works as expected.
-    - cron:  '0 6 * * 5'
+    # Weekly, to catch breakage from new Ruby or Zammad releases.
+    - cron: '0 6 * * 5'
+  workflow_dispatch:
+    inputs:
+      zammad_ref:
+        description: 'Zammad git ref to run the integration specs against'
+        default: 'develop'
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
 jobs:
   lint:
+    name: RuboCop
     runs-on: ubuntu-latest
-    container:
-      image: zammad/zammad-ci:latest
     steps:
       - uses: actions/checkout@v7
-      - name: Run lint actions
-        shell: bash
-        run: |
-          source /etc/profile.d/rvm.sh # ensure RVM is loaded
-          bundle update --bundler
-          bundle install -j $(nproc)
-          bundle exec rubocop
-  test:
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+      - run: bundle exec rubocop --format github
+
+  types:
+    name: Steep
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+      - run: bundle exec steep check
+
+  unit:
+    name: Unit specs (Ruby ${{ matrix.ruby }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Stable releases only, from required_ruby_version up to the current
+        # stable line. There is no 3.5: that line was abandoned after
+        # 3.5.0-preview1 and became 4.0.
+        #
+        # 'head' is absent because it cannot install at all, for two reasons
+        # outside this gem. With Gemfile.lock present, bundler honours
+        # `BUNDLED WITH 2.6.9`, self-downgrades from head's 4.1.0.dev and dies
+        # with NameError on the removed Pathname::SEPARATOR_PAT. Without the
+        # lockfile, a fresh resolution pulls steep -> listen -> rb-inotify ->
+        # ffi, which requires Ruby < 4.1.dev.
+        ruby: ['3.4', '4.0']
+    env:
+      # The unit specs do not need the type-checking toolchain, and skipping it
+      # keeps this job fast. The `types` job installs it separately.
+      BUNDLE_WITHOUT: development
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - name: Run unit specs
+        run: bundle exec rake spec:unit
+        env:
+          COVERAGE: 'true'
+
+  integration:
+    name: Integration specs (live Zammad)
+    runs-on: ubuntu-latest
+    # Booting Zammad costs far more runner time than the unit suite, so there
+    # is no point paying for it when the unit specs are already failing.
+    needs: unit
+    # A full Zammad boot takes many minutes; without a cap a hung boot would
+    # occupy a runner until the six hour default expires.
+    timeout-minutes: 45
     container:
       image: zammad/zammad-ci:latest
     services:
@@ -32,26 +95,89 @@ jobs:
           POSTGRES_PASSWORD: zammad
       redis:
         image: redis:7
+    env:
+      ZAMMAD_REF: ${{ inputs.zammad_ref || 'develop' }}
+      TEST_USER: admin@example.com
+      TEST_PASSWORD: test
     steps:
       - uses: actions/checkout@v7
-      - name: Set up Zammad
+
+      - name: Report the toolchain
         shell: bash
         run: |
-          git clone --depth 1 https://github.com/zammad/zammad.git
+          source /etc/profile.d/rvm.sh
+          # The gem requires Ruby >= 3.4; fail here with a clear message rather
+          # than inside a confusing bundler resolution error.
+          ruby -v
+          ruby -e 'abort "zammad-ci image ships Ruby #{RUBY_VERSION}, this gem needs >= 3.4" if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("3.4")'
+
+      - name: Boot Zammad
+        shell: bash
+        run: |
+          # No `set -u`: /etc/profile.d/rvm.sh reads unset variables and aborts
+          # under nounset.
+          set -eo pipefail
+          git clone --depth 1 --branch "$ZAMMAD_REF" https://github.com/zammad/zammad.git
           cd zammad
-          source /etc/profile.d/rvm.sh # ensure RVM is loaded
+          source /etc/profile.d/rvm.sh
           bundle config set --local frozen 'true'
           bundle config set --local path 'vendor'
-          bundle install -j $(nproc)
+          bundle install -j "$(nproc)"
           bundle exec ruby .gitlab/configure_environment.rb
+          # Each workflow step runs in its own shell, so Zammad's generated
+          # environment has to be promoted to the job environment to survive.
+          sed -E 's/^export +//' .gitlab/environment.env \
+            | grep -E '^[A-Za-z_][A-Za-z0-9_]*=' >> "$GITHUB_ENV"
           source .gitlab/environment.env
           RAILS_ENV=test bundle exec rake db:create
           cp contrib/auto_wizard_test.json auto_wizard.json
           bundle exec rake zammad:ci:test:start
-      - name: Run Ruby API integration tests
+          echo "TEST_URL=http://localhost:${RAILS_PORT:-3000}/" >> "$GITHUB_ENV"
+
+      - name: Wait for Zammad to answer
         shell: bash
         run: |
-          source /etc/profile.d/rvm.sh # ensure RVM is loaded
-          bundle update --bundler
-          bundle install -j $(nproc)
-          bundle exec rspec
+          probe="${TEST_URL%/}/api/v1/getting_started"
+          for attempt in $(seq 1 60); do
+            if curl -sSf --max-time 5 "$probe" >/dev/null 2>&1; then
+              echo "Zammad answered at $TEST_URL after ${attempt} attempt(s)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Zammad never answered at $probe"
+          exit 1
+
+      - name: Install the gem's dependencies
+        shell: bash
+        run: |
+          source /etc/profile.d/rvm.sh
+          bundle install -j "$(nproc)"
+
+      - name: Drive Zammad with this gem
+        shell: bash
+        run: |
+          source /etc/profile.d/rvm.sh
+          bundle exec ruby script/check_connection.rb
+
+      - name: Run the integration specs
+        shell: bash
+        run: |
+          source /etc/profile.d/rvm.sh
+          bundle exec rake spec:integration
+
+      - name: Collect Zammad logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          echo '--- zammad/log ---'
+          tail -n 200 zammad/log/*.log 2>/dev/null || echo 'no logs found'
+
+      - name: Upload Zammad logs
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: zammad-logs
+          path: zammad/log/
+          if-no-files-found: ignore
+          retention-days: 7

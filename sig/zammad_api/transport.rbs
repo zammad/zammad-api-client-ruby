@@ -1,0 +1,38 @@
+module ZammadAPI
+  class Transport
+    RETRIABLE_METHODS: Array[Symbol]
+    RETRIABLE_STATUSES: Array[Integer]
+    RETRIABLE_EXCEPTIONS: Array[untyped]
+    SENSITIVE_KEYS: Array[Symbol]
+    REDACTED: String
+
+    attr_reader config: Config
+    attr_reader on_behalf_of: (String | Integer)?
+
+    @connection: Faraday::Connection
+
+    def initialize: (Config) -> void
+    def with_on_behalf_of: ((String | Integer)? identifier) -> Transport
+
+    def get: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
+    def post: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
+    def put: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
+    def delete: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
+
+    def request: (Symbol method, String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
+
+    private
+
+    def perform: (Symbol, String, Hash[Symbol, untyped]?, untyped) -> Faraday::Response
+    def build_connection: () -> Faraday::Connection
+    def apply_authentication: (Faraday::Builder) -> void
+    def retry_options: () -> Hash[Symbol, untyped]
+    def stringify_query: (Hash[Symbol, untyped]) -> Hash[String, untyped]
+    def decode: (Faraday::Response) -> Response
+    def decode_body: (String?, String) -> untyped
+    def log_request: (Symbol, String, Hash[Symbol, untyped]?, untyped) -> void
+    def log_response: (Symbol, String, Response, Float) -> void
+    def redact: (untyped) -> untyped
+    def logger: () -> Logger
+  end
+end

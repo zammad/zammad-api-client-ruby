@@ -1,0 +1,33 @@
+module ZammadAPI
+  module Resources
+    class Base
+      include AttributeAccess
+
+      attr_reader changes: Hash[Symbol, Array[untyped]]
+      attr_reader transport: Transport
+
+      @new_record: bool
+
+      def self.path: (String) -> void
+      def self.resource_path: () -> String
+      def self.from_response: (Transport, Hash[untyped, untyped] attributes) -> Base
+
+      def initialize: (Transport, ?Hash[untyped, untyped]? attributes) -> void
+      def new_record?: () -> bool
+      def persisted?: () -> bool
+      def changed?: () -> bool
+      def save: () -> true
+      def reload: () -> self
+      def destroy: () -> true
+      def inspect: () -> String
+
+      private
+
+      def mark_persisted!: () -> void
+      def write_attribute: (Symbol, untyped) -> untyped
+      def create_record: () -> Response
+      def update_record: () -> Response
+      def member_path: () -> String
+    end
+  end
+end

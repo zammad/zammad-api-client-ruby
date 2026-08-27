@@ -1,390 +1,394 @@
-# Zammad API Client (Ruby) [![Gem Version](https://badge.fury.io/rb/zammad_api.svg)](https://badge.fury.io/rb/zammad_api)
+# Zammad API Client (Ruby)
 
-## API version support
-This client supports Zammad API version 1.0.
+[![Gem Version](https://badge.fury.io/rb/zammad_api.svg)](https://badge.fury.io/rb/zammad_api)
+[![CI](https://github.com/zammad/zammad-api-client-ruby/actions/workflows/ci.yml/badge.svg)](https://github.com/zammad/zammad-api-client-ruby/actions/workflows/ci.yml)
+
+Ruby client for the Zammad API v1.0.
+
+- Requires **Ruby 3.4** or later.
+- Ships **RBS signatures** in `sig/`, so typed projects get completion and checking out of the box.
+- Requests carry **timeouts** and **retry with backoff** for transient failures by default.
+- Collections are **lazily paginated** `Enumerable`s.
+- Records support **pattern matching**, and clients are **immutable** and safe to share
+  between threads.
+
+> **Upgrading from 1.x?** See [Migrating from 1.x](#migrating-from-1x). Version 2.0 is a
+> breaking release.
 
 ## Installation
 
-Add this line to your application's Gemfile:
-
 ```ruby
-gem 'zammad_api'
+gem 'zammad_api', '~> 2.0'
 ```
 
-And then execute:
+Or:
 
-    $ bundle
+```sh
+gem install zammad_api
+```
 
-Or install it yourself as:
+## Creating a client
 
-    $ gem install zammad_api
-
-## Available objects
-
-* user
-* organization
-* group
-* ticket
-* ticket_article
-* ticket_state
-* ticket_priority
-
-## Usage
-
-### Create instance
-
-#### Username/email and password
+### Access token
 
 ```ruby
 client = ZammadAPI::Client.new(
-  url:      'http://localhost:3000/',
-  user:     'user',
+  url:        'https://zammad.example.com/',
+  http_token: 'your-access-token'
+)
+```
+
+### OAuth2
+
+```ruby
+client = ZammadAPI::Client.new(
+  url:          'https://zammad.example.com/',
+  oauth2_token: 'your-oauth2-token'
+)
+```
+
+### Username and password
+
+```ruby
+client = ZammadAPI::Client.new(
+  url:      'https://zammad.example.com/',
+  user:     'user@example.com',
   password: 'some_pass'
 )
 ```
 
-#### Access token
+### Options
+
+| Option           | Default            | Description                                                        |
+| ---------------- | ------------------ | ------------------------------------------------------------------ |
+| `url`            | *required*         | Base URL. A sub-path such as `https://example.com/zammad/` works.  |
+| `http_token`     | `nil`              | Zammad access token.                                               |
+| `oauth2_token`   | `nil`              | OAuth2 bearer token.                                               |
+| `user`           | `nil`              | Login for basic authentication.                                    |
+| `password`       | `nil`              | Password for basic authentication.                                 |
+| `timeout`        | `60`               | Seconds to wait for a response.                                    |
+| `open_timeout`   | `10`               | Seconds to wait for the connection.                                |
+| `retries`        | `2`                | Retry attempts for idempotent requests. `0` disables retrying.      |
+| `retry_interval` | `0.5`              | Seconds before the first retry; doubles on each attempt.           |
+| `ssl_verify`     | `true`             | Set to `false` only against a server with a self-signed certificate. |
+| `proxy`          | `nil`              | Proxy URL.                                                         |
+| `user_agent`     | `zammad_api-ruby/<version>` | Value of the `User-Agent` header.                         |
+| `logger`         | discards output    | Any `Logger`; the client logs requests and responses at `debug`.    |
+
+Credentials are never written to the log, and `client.config.inspect` redacts them, so a
+configuration object is safe to include in an error report.
+
+## Available resources
+
+`group`, `organization`, `ticket`, `ticket_article`, `ticket_priority`, `ticket_state`, `user`
+
+`client.resource_names` returns the current list.
+
+## Working with records
+
+### Create
 
 ```ruby
-client = ZammadAPI::Client.new(
-  url:        'http://localhost:3000/',
-  http_token: '12345678901234567890',
-)
-```
-
-#### OAuth2
-
-```ruby
-client = ZammadAPI::Client.new(
-  url:          'http://localhost:3000/',
-  oauth2_token: '12345678901234567890',
-)
-```
-
-## Resource management
-
-Individual resources can be created, modified, saved, and destroyed.
-
-### Create object
-
-With new and save:
-```ruby
-group = client.group.new(
-  name: 'Support',
-  note: 'Some note',
-);
+group = client.group.new(name: 'Support', note: 'Some note')
 group.save
 
-group.id # id of record
-group.name # 'Support'
+group.id   # => 42
+group.name # => "Support"
 ```
 
-With create:
-```ruby
-group = client.group.create(
-  name: 'Support',
-  note: 'Some note',
-);
+Or in one call:
 
-group.id # id of record
-group.name # 'Support'
+```ruby
+group = client.group.create(name: 'Support', note: 'Some note')
 ```
 
-### Fetch object
+### Fetch
 
 ```ruby
-group = client.group.find(123)
-puts group.inspect
+group = client.group.find(42)
+group.name       # => "Support"
+group[:name]     # same, without method_missing
+group.fetch(:name) # raises KeyError if the attribute is absent
+group.to_h       # every attribute as a Hash
 ```
-### Update object
+
+Zammad records can carry administrator-defined custom attributes, so an unknown reader
+returns `nil` rather than raising. Use `fetch` when a missing attribute should be an error.
+
+### Pattern matching
+
+Records implement `deconstruct_keys`, so they work with `case/in`:
 
 ```ruby
-group = client.group.find(123)
+case client.ticket.find(1)
+in {state: 'closed'}
+  nil
+in {state: String => state, priority: '3 high'}
+  escalate(state)
+in {group: {name: 'Support'}}
+  notify_support
+end
+```
+
+`Config` and `Response` are `Data` objects, so their members match too:
+
+```ruby
+case client.config
+in {http_token: String}
+  :token_auth
+in {user: String, password: String}
+  warn 'prefer an access token over basic auth'
+end
+```
+
+### Update
+
+```ruby
+group = client.group.find(42)
 group.name = 'Support 2'
-group.save
+
+group.changed? # => true
+group.changes  # => {name: ["Support", "Support 2"]}
+
+group.save     # sends only the changed attributes
 ```
 
-### Destroy object
+### Reload and destroy
 
 ```ruby
-group = client.group.find(123)
-group.destroy
+group.reload  # re-reads from Zammad, discarding unsaved changes
+group.destroy # => true
+
+client.group.destroy(42) # delete by id, without fetching first
 ```
 
-## Collection management
+## Collections
 
-A list of individual resources.
-
-### All
+`all` and `search` return a lazily paginated `ZammadAPI::Collection`. No request is made
+until you iterate, and pages are fetched as needed.
 
 ```ruby
-groups = client.group.all
+# Walks every page automatically.
+client.ticket.all.each do |ticket|
+  puts ticket.title
+end
 
-group1 = groups[0]
-group1.note = 'Some note'
-group1.save
+# Stops after the first page, because Enumerable stops consuming.
+first_five = client.ticket.all.first(5)
 
-groups.each {|group|
-  p "group: #{group.name}"
-}
+# Lazy chains work as expected.
+client.ticket.all.lazy.select { |t| t.state == 'open' }.first(10)
+
+# Page at a time, e.g. for bulk import.
+client.ticket.all.each_page do |tickets|
+  import(tickets)
+end
 ```
 
 ### Search
-```ruby
-groups = client.group.search(query: 'some name')
-
-group1 = groups[0]
-group1.note = 'Some note'
-group1.save
-
-groups.each {|group|
-  p "group: #{group.name}"
-}
-```
-
-### All with pagination (beta)
 
 ```ruby
-groups = client.group.all
-
-groups.page(1,3) {|group|
-  p "group: #{group.name}"
-
-  group.note = 'Some new note, inclued in page 1 with 3 per page'
-  group.save
-}
-
-groups.page(2,3) {|group|
-  p "group: #{group.name}"
-
-  group.note = 'Some new note, inclued in page 2 with 3 per page'
-  group.save
-}
-```
-
-### Search with pagination (beta)
-```ruby
-groups = client.group.search(query: 'some name')
-
-groups.page(1,3) {|group|
-  p "group: #{group.name}"
-
-  group.note = 'Some new note, inclued in page 1 with 3 per page'
-  group.save
-}
-
-groups.page(2,3) {|group|
-  p "group: #{group.name}"
-
-  group.note = 'Some new note, inclued in page 2 with 3 per page'
-  group.save
-}
-```
-
-## Perform actions on behalf of another user
-
-As described in the [Zammad API documentation](https://docs.zammad.org/en/latest/api/intro.html#actions-on-behalf-of-other-users) it is possible to perfom actions on behalf other users. To use this feature you can set the attribute of the client accordingly:
-
-> **Note:** This feature requires Zammad 5.0 or later, since the client sends the standard HTTP `From` header instead of the deprecated `X-On-Behalf-Of` header (see [zammad/zammad#3113](https://github.com/zammad/zammad/issues/3113)).
-
-```ruby
-client.on_behalf_of = 'some_login'
-```
-
-All following actions with the client will be performed on behalf of the user with the `login` "some_login".
-
-To reset this back to regular requests just set `nil`:
-
-```ruby
-client.on_behalf_of = nil
-```
-
-It's possible to perform only a block of actions on behalf of another user via:
-
-```ruby
-client.perform_on_behalf_of('some_login') do
-  # ticket is created on behalf of the user with
-  # the login "some_login"
-  client.ticket.create(
-    ...
-  )
+client.organization.search(query: 'zammad').each do |organization|
+  puts organization.name
 end
-
-# further actions are performed regularly.
 ```
+
+### Explicit pages and filters
+
+```ruby
+collection = client.group.all(per_page: 50)
+
+collection.page(2)                  # a new collection limited to page 2
+collection.page(2, per_page: 10)    # with a different page size
+collection.where(active: true)      # a new collection with extra query params
+collection[0]                       # the first record
+```
+
+Collections are immutable: `page` and `where` return a new collection and leave the
+original untouched.
+
+## Deriving clients
+
+A client is immutable. `with` returns a new one with some options changed, re-validating
+them and carrying over any `on_behalf_of` scope:
+
+```ruby
+bulk = client.with(timeout: 300, retries: 5)
+bulk.ticket.all.each { |ticket| archive(ticket) }
+```
+
+Because nothing is mutated after construction, one client — and any client derived from it —
+is safe to use from several threads at once.
+
+## Acting on behalf of another user
+
+As described in the [Zammad API documentation](https://docs.zammad.org/en/latest/api/intro.html#actions-on-behalf-of-other-users),
+actions can be performed on behalf of another user. `on_behalf_of` returns a **new**
+client, so the original is unaffected and both are safe to use concurrently.
+
+```ruby
+support = client.on_behalf_of('agent@example.com')
+support.ticket.create(title: 'Help', group: 'Users', customer_id: 1)
+```
+
+Or scoped to a block:
+
+```ruby
+client.on_behalf_of('agent@example.com') do |scoped|
+  scoped.ticket.find(1)
+end
+```
+
+The identifier can be a login, an email address or a user id. This sends the standard
+HTTP `From` header and requires Zammad 5.0 or later.
+
+## Error handling
+
+Every error descends from `ZammadAPI::Error`.
+
+```
+ZammadAPI::Error
+├── ZammadAPI::ConfigurationError    invalid client options
+├── ZammadAPI::UnknownResourceError  no such resource, e.g. client.unicorn
+├── ZammadAPI::ParseError            unexpected response shape
+├── ZammadAPI::TransportError
+│   ├── ZammadAPI::ConnectionError   unreachable host or TLS failure
+│   └── ZammadAPI::TimeoutError      exceeded timeout or open_timeout
+└── ZammadAPI::ResponseError         carries the HTTP response
+    ├── ZammadAPI::ClientError       4xx
+    │   ├── ZammadAPI::AuthenticationError  401
+    │   ├── ZammadAPI::AuthorizationError   403
+    │   ├── ZammadAPI::NotFoundError        404
+    │   ├── ZammadAPI::ValidationError      422
+    │   └── ZammadAPI::RateLimitError       429
+    └── ZammadAPI::ServerError       5xx
+```
+
+```ruby
+begin
+  client.ticket.find(1)
+rescue ZammadAPI::NotFoundError
+  nil
+rescue ZammadAPI::RateLimitError => e
+  sleep(e.retry_after || 5)
+  retry
+rescue ZammadAPI::ResponseError => e
+  warn "#{e.status}: #{e.server_message}"
+  warn e.body.inspect
+end
+```
+
+`ResponseError` exposes `status`, `body`, `headers`, `server_message`, `operation` and
+`resource_class`. A proxy that returns an HTML error page instead of JSON produces a
+`ServerError` describing the status, not a JSON parse failure.
+
+### Timeouts and retries
+
+Idempotent requests (`GET`, `PUT`, `DELETE`) are retried on connection failures, timeouts
+and the transient statuses 429, 500, 502, 503 and 504, with exponential backoff. `POST` is
+never retried, so a failed create cannot silently produce duplicate records.
+
+```ruby
+client = ZammadAPI::Client.new(
+  url:        'https://zammad.example.com/',
+  http_token: 'token',
+  timeout:    10,
+  retries:    5
+)
+```
+
+## Logging
+
+```ruby
+client = ZammadAPI::Client.new(
+  url:        'https://zammad.example.com/',
+  http_token: 'token',
+  logger:     Logger.new($stdout)
+)
+```
+
+Requests, response statuses and durations are logged at `debug` level. Payload keys that
+look like credentials (`password`, `token`, `secret`, ...) are redacted.
+
+## Type signatures
+
+RBS signatures ship in `sig/` and are checked in CI with [Steep](https://github.com/soutaro/steep).
+Add the gem to your own RBS collection to type-check calls into this client.
 
 ## Examples
 
-Create a ticket:
-```ruby
-ticket = client.ticket.create(
-  title: 'a new ticket #1',
-  state: 'new',
-  group: 'Users',
-  priority: '2 normal',
-  customer: 'some_customer@example.com',
-  article: {
-    content_type: 'text/plain', # or text/html, if not given test/plain is used
-    body: 'some body',
-    # attachments can be optional, data needs to be base64 encoded
-    attachments: [
-      'filename' => 'some_file.txt',
-      'data' => 'dGVzdCAxMjM=',
-      'mime-type' => 'text/plain',
-    ],
-  },
-)
+Runnable scripts covering pagination, pattern matching, acting on behalf of a user,
+attachments, error handling and threaded use live in [`examples/`](examples/README.md).
 
-ticket.id # id of record
-ticket.number # uniq number of ticket
-ticket.title # 'a new ticket #1'
-ticket.group # 'Support'
-ticket.created_at # '2022-01-01T12:42:01Z'
-# ...
+## Development
+
+```sh
+bin/setup            # or: bundle install
+bundle exec rake     # unit specs, RuboCop and Steep
 ```
 
-List all new or open tickets:
-```ruby
-tickets = client.ticket.search(query: 'state.name:new OR state.name:open')
+| Task                     | What it does                                          |
+| ------------------------ | ----------------------------------------------------- |
+| `rake spec:unit`         | Unit specs; stubbed, no Zammad needed                 |
+| `rake spec:integration`  | Integration specs against a live Zammad               |
+| `rake check_connection`  | Drives a live Zammad end to end and prints a transcript |
+| `rake rubocop`           | Style checks                                          |
+| `rake steep`             | Type-check `lib/` against `sig/`                      |
 
-ticket[0].id # id of record
-ticket[0].number # uniq number of ticket
-ticket[0].title # 'title of ticket'
-ticket[0].group # 'Support'
-ticket[0].created_at # '2022-01-01T12:42:01Z'
+Set `COVERAGE=true` to produce a coverage report in `coverage/`.
 
-tickets.each {|ticket|
-  p "ticket: #{ticket.number} - #{ticket.title}"
-}
+### Testing against a live Zammad
+
+The integration specs and `check_connection` need a reachable Zammad instance and **will
+create and delete records**, so point them at something disposable:
+
+```sh
+export TEST_URL=http://localhost:3000/
+export TEST_USER=admin@example.com
+export TEST_PASSWORD=test
+
+bundle exec rake check_connection   # one linear pass, readable transcript
+bundle exec rake spec:integration   # the full spec suite
 ```
 
-Get all articles of a ticket:
-```ruby
-ticket = client.ticket.find(123)
-articles = ticket.articles
+`check_connection` walks the documented workflows in order — create, find, update, reload,
+pattern match, paginate, search, ticket with articles, attachment download, acting on
+behalf of a user, and each error class — printing `ok` or `FAIL` per step and cleaning up
+after itself. It stops early if a precondition fails, so a broken instance produces one
+clear line rather than a cascade.
 
-articles[0].id # id of record
-articles[0].from # creator of article
-articles[0].to # recipients of article
-articles[0].subject # article subject
-articles[0].body # text of message
-articles[0].content_type # text/plain or text/html of .body
-articles[0].type # 'note'
-articles[0].sender # 'Customer'
-articles[0].created_at # '2022-01-01T12:42:01Z'
+CI runs both against a Zammad booted from source: the `integration` job clones Zammad,
+starts it, waits for it to answer, runs `check_connection` as a fast preflight, then runs
+the integration specs. Trigger it by hand from the Actions tab (`workflow_dispatch`) to
+test against a specific Zammad ref.
 
-p "ticket: #{ticket.number} - #{ticket.title}"
-articles.each {|article|
-  p "article: #{article.from} - #{article.subject}"
-}
-```
+## Migrating from 1.x
 
-Create an article for a ticket:
-```ruby
-ticket = client.ticket.find(123)
+Version 2.0 fixes long-standing behaviour that could not change without breaking
+compatibility. Most calling code needs no edits; the table lists everything that does.
 
-article = ticket.article(
-  type: 'note',
-  subject: 'some subject 2',
-  body: 'some body 2',
-  # attachments can be optional, data needs to be base64 encoded
-  attachments: [
-    'filename' => 'some_file.txt',
-    'data' => 'dGVzdCAxMjM=',
-    'mime-type' => 'text/plain',
-  ],
-)
+| 1.x                                   | 2.0                                              | Why                                                                 |
+| ------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------- |
+| `collection.each` stopped after one page | `each` walks every page                        | Iterating a collection silently truncated at 100 records            |
+| `collection.page(1, 3) { \|r\| ... }`  | `collection.page(1, per_page: 3).each { ... }`   | `page` now returns a collection instead of mutating and yielding    |
+| `collection.page_next` / `page_prev`   | `collection.page(n)` or `each_page`              | Removed; they mutated shared state                                  |
+| `client.on_behalf_of = 'login'`        | `client.on_behalf_of('login')` → new client      | The setter mutated the client and leaked across threads             |
+| `client.perform_on_behalf_of('x') { }` | `client.on_behalf_of('x') { \|scoped\| ... }`    | The old block form left the header set if the block raised          |
+| `ZammadAPI::ResourceNotFoundError`     | `ZammadAPI::UnknownResourceError`                | Renamed so it is not confused with a 404, now `NotFoundError`       |
+| `ZammadAPI::Error < RuntimeError`      | `ZammadAPI::Error < StandardError`               | `RuntimeError` is for `raise "string"`                              |
+| `error.response` was a Faraday object  | `ZammadAPI::Response` with `status`/`body`/`headers` | Faraday is no longer part of the public surface                 |
+| `error.body` was a raw JSON string     | decoded Hash, or the raw body for non-JSON       | Saves every caller from parsing it again                            |
+| `record.new_instance`                  | `record.new_record?` / `record.persisted?`       | Internal flag is no longer public                                   |
+| `resource.url` (instance)              | `Resource.resource_path` (class)                 | Clashed with an attribute named `url`                                |
+| `ZammadAPI::ListBase` / `ListAll` / `ListSearch` | `ZammadAPI::Collection`                | One class instead of three                                          |
+| `ZammadAPI::Log`, `ZammadAPI::JsonHelper` | removed                                       | Pass any `Logger` as `logger:`; decoding moved into the transport   |
+| Ruby >= 3.0                            | Ruby >= 3.4                                      | 3.0 through 3.3 are end-of-life or nearly so                        |
 
-article.id # id of record
-article.from # creator of article
-article.to # recipients of article
-article.subject # article subject
-article.body # text of message
-article.content_type # text/plain or text/html of .body
-article.type # 'note'
-article.sender # 'Customer'
-article.created_at # '2022-01-01T12:42:01Z'
-article.attachments.each { |attachment|
-  attachment.filename # 'some_file.txt'
-  attachment.size # 1234
-  attachment.preferences # { :"Mime-Type"=>"image/jpeg" }
-  attachment.download # content of attachment / extra REST call will be executed
-}
+Unchanged: `client.<resource>.find/all/search/create/new`, `record.save`, `record.destroy`,
+`record.changes`, `record.attributes`, attribute readers and writers, `ticket.articles`,
+`ticket.article`, and `attachment.download`.
 
-p "article: #{article.from} - #{article.subject}"
-```
+## License
 
-Create an article with html and inline images for a ticket:
-```ruby
-ticket = client.ticket.find(123)
-
-article = ticket.article(
-  type: 'note',
-  subject: 'some subject 2',
-  body: 'some <b>body</b> with an image <img src="data:image/jpeg;base64,/9j/4QAYRXhpZgAASUkqAAgAAAAAAAAAAAAAAP/sABFEdWNreQABAAQAAAAJAAD/4QMtaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wLwA8P3hwYWNrZXQgYmVnaW49Iu+7vyIgaWQ9Ilc1TTBNcENlaGlIenJlU3pOVGN6a2M5ZCI/PiA8eDp4bXBtZXRhIHhtbG5zOng9ImFkb2JlOm5zOm1ldGEvIiB4OnhtcHRrPSJBZG9iZSBYTVAgQ29yZSA1LjMtYzAxMSA2Ni4xNDU2NjEsIDIwMTIvMDIvMDYtMTQ6NTY6MjcgICAgICAgICI+IDxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+IDxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiIHhtbG5zOnhtcD0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wLyIgeG1sbnM6eG1wTU09Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9tbS8iIHhtbG5zOnN0UmVmPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvc1R5cGUvUmVzb3VyY2VSZWYjIiB4bXA6Q3JlYXRvclRvb2w9IkFkb2JlIFBob3Rvc2hvcCBDUzYgKE1hY2ludG9zaCkiIHhtcE1NOkluc3RhbmNlSUQ9InhtcC5paWQ6QzJCOTE2NzlGQUEwMTFFNjg0M0NGQjU0OUU4MTFEOEIiIHhtcE1NOkRvY3VtZW50SUQ9InhtcC5kaWQ6QzJCOTE2N0FGQUEwMTFFNjg0M0NGQjU0OUU4MTFEOEIiPiA8eG1wTU06RGVyaXZlZEZyb20gc3RSZWY6aW5zdGFuY2VJRD0ieG1wLmlpZDpDMkI5MTY3N0ZBQTAxMUU2ODQzQ0ZCNTQ5RTgxMUQ4QiIgc3RSZWY6ZG9jdW1lbnRJRD0ieG1wLmRpZDpDMkI5MTY3OEZBQTAxMUU2ODQzQ0ZCNTQ5RTgxMUQ4QiIvPiA8L3JkZjpEZXNjcmlwdGlvbj4gPC9yZGY6UkRGPiA8L3g6eG1wbWV0YT4gPD94cGFja2V0IGVuZD0iciI/Pv/uAA5BZG9iZQBkwAAAAAH/2wCEABQRERoTGioZGSo1KCEoNTEpKCgpMUE4ODg4OEFEREREREREREREREREREREREREREREREREREREREREREREREQBFhoaIh0iKRoaKTkpIik5RDktLTlEREREOERERERERERERERERERERERERERERERERERERERERERERERERERERP/AABEIABAADAMBIgACEQEDEQH/xABbAAEBAAAAAAAAAAAAAAAAAAAEBQEBAQAAAAAAAAAAAAAAAAAABAUQAAEEAgMAAAAAAAAAAAAAAAABAhIDESIxBAURAAICAwAAAAAAAAAAAAAAAAESABNRoQP/2gAMAwEAAhEDEQA/AJDq1rfF3Imeg/1+lFy2oR564DKWWWbweV+Buf/Z" alt="Red dot" />',
-  content_type: 'text/html', # optional, default is text/plain
-)
-
-article.id # id of record
-article.from # creator of article
-article.to # recipients of article
-article.subject # article subject
-article.body # text of message
-article.content_type # text/plain or text/html of .body
-article.type # 'note'
-article.sender # 'Customer'
-article.created_at # '2022-01-01T12:42:01Z'
-article.attachments.each { |attachment|
-  attachment.filename # '122.146472496@www.znuny.com'
-  attachment.size # 1167
-  attachment.preferences # { :'Mime-Type'=>'image/jpeg', :'Content-ID'=>'122.146472496@www.znuny.com', :'Content-Disposition'=>'inline'} }
-  attachment.download # content of attachment / extra REST call will be executed
-}
-
-p "article: #{article.from} - #{article.subject}"
-```
-
-## Testing
-
-### Setup an (empty Zammad) test env
-
-```
-git clone git@github.com:zammad/zammad.git
-cd zammad
-export RAILS_ENV="test"
-export APP_RESTART_CMD="bundle exec rake zammad:ci:app:restart"
-script/bootstrap.sh && echo '' > log/test.log
-cp contrib/auto_wizard_test.json auto_wizard.json
-bundle exec rake zammad:ci:test:start
-```
-
-### Execute client tests
-
-Run tests via `rake spec`. (Remember to export the vars above if you are running this in another shell.)
-
-## Publishing
-
-1. Update version in [version.rb](lib/zammad_api/version.rb).
-2. Add release to [CHANGELOG.md](CHANGELOG.md)
-3. Commit.
-4. Test build.
-```
-> rake build
-zammad_api 1.0.7 built to pkg/zammad_api-1.0.7.gem.
-```
-5. Release
-```
-> rake release
-zammad_api 1.0.7 built to pkg/zammad_api-1.0.7.gem.
-Tag v1.0.7 has already been created.
-Pushing gem to https://rubygems.org...
-You have enabled multi-factor authentication. Please enter OTP code.
-Code:   ......
-Successfully registered gem: zammad_api (1.0.7)
-Pushed zammad_api 1.0.7 to https://rubygems.org
-
-```
-
-## Contributing
-
-Bug reports and pull requests are welcome on [GitHub](https://github.com/zammad/zammad-api-client-ruby). This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [Contributor Covenant](http://contributor-covenant.org) code of conduct.
+Dual licensed under the [AGPL-3.0-only](LICENSE.AGPL.txt) or [MIT](LICENSE.MIT.txt)
+licenses. See [LICENSE.md](LICENSE.md).

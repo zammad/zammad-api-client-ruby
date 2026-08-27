@@ -1,0 +1,29 @@
+name: Release
+
+# Publishes to RubyGems via trusted publishing (OIDC), so no API key is
+# stored in this repository. Configure the trusted publisher once at
+# https://rubygems.org/gems/zammad_api/trusted_publishers
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    environment: rubygems
+    permissions:
+      contents: write # create the GitHub release and push the tag commit
+      id-token: write # request the OIDC token for trusted publishing
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+      - name: Verify the release candidate
+        run: bundle exec rake spec:unit rubocop steep
+      - uses: rubygems/release-gem@v1

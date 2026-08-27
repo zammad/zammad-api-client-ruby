@@ -1,59 +1,70 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
-$LOAD_PATH << './lib'
-require 'rubygems'
+$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
 require 'zammad_api'
+require 'logger'
 
 client = ZammadAPI::Client.new(
-  url: 'https://you.zammad.com/',
+  url:        'https://you.zammad.com/',
   http_token: 'XXXX',
+  timeout:    30,
+  logger:     Logger.new($stdout, level: Logger::INFO)
 )
 
-# create ticket
-ticket = client.ticket.new(
-  title: 'some new title',
-  state: 'new',
+separator = '-' * 56
+
+# Create a ticket with its first article.
+ticket = client.ticket.create(
+  title:    'some new title',
+  state:    'new',
   priority: '2 normal',
-  owner: '-',
+  owner:    '-',
   customer: 'nicole.braun@zammad.org',
-  group: 'Users',
-  article: {
-    sender: 'Customer',
-    type: 'note',
-    subject: 'some subject',
+  group:    'Users',
+  article:  {
+    sender:       'Customer',
+    type:         'note',
+    subject:      'some subject',
     content_type: 'text/plain',
-    body: "some body\nnext line",
+    body:         "some body\nnext line",
   }
 )
-ticket.save
 
-p '--------------------------------------------------------'
-p "Ticket has been created: #{ticket.number} - #{ticket.title} at #{ticket.created_at}"
-p " Attributes: #{ticket.attributes.inspect}"
+puts separator
+puts "Ticket has been created: #{ticket.number} - #{ticket.title} at #{ticket.created_at}"
 
-# get ticket
-p '--------------------------------------------------------'
+# Fetch it back.
+puts separator
 ticket = client.ticket.find(ticket.id)
-p "Ticket found on server: #{ticket.number} - #{ticket.title} at #{ticket.created_at}"
-p " Attributes: #{ticket.attributes.inspect}"
+puts "Ticket found on server: #{ticket.number} - #{ticket.title}"
 
-# get articles of ticket
-p '--------------------------------------------------------'
-articles = ticket.articles
-p "Total #{articles.length} articles"
+# Add another article.
+puts separator
+article = ticket.article(type: 'note', subject: 'some subject 2', body: 'some body 2')
+puts "Article has been created: #{article.subject} at #{article.created_at}"
+puts "Total #{ticket.articles.length} articles now"
 
-# create article
-p '--------------------------------------------------------'
-article = ticket.article(
-  type: 'note',
-  subject: 'some subject 2',
-  body: 'some body 2',
-)
-p "Article has been created: #{article.subject} at #{article.created_at}"
-p " Attributes: #{article.attributes.inspect}"
+# Iterate every open ticket, one page at a time behind the scenes.
+puts separator
+client.ticket.all.lazy.select { it.state == 'open' }.first(5).each do |open_ticket|
+  puts "Open: #{open_ticket.number} - #{open_ticket.title}"
+end
 
-# get articles of ticket
-p '--------------------------------------------------------'
-articles = ticket.articles
-p "Total #{articles.length} articles now"
-p '--------------------------------------------------------'
+# Download the attachments of the first article, if any.
+puts separator
+ticket.articles.first&.attachments&.each do |attachment|
+  puts "Attachment #{attachment.filename} (#{attachment.size} bytes)"
+  File.binwrite(attachment.filename, attachment.download)
+end
+
+# Errors carry the status and Zammad's own message.
+puts separator
+begin
+  client.ticket.find(0)
+rescue ZammadAPI::NotFoundError => e
+  puts "Expected failure: #{e.status} - #{e.server_message || e.message}"
+rescue ZammadAPI::RateLimitError => e
+  puts "Rate limited, retry after #{e.retry_after}s"
+end
+puts separator

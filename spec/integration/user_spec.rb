@@ -1,0 +1,275 @@
+# frozen_string_literal: true
+
+RSpec.describe ZammadAPI, 'user object basics' do
+  client = Helper.client
+
+  random = Helper.random
+  firstname = "firstname#{random}"
+  lastname = "lastname#{random}"
+  email = "some_user#{random}@example.com"
+  user = nil
+
+  it 'new with invalid attributes' do
+    user_invalid = client.user.new
+
+    expect(user_invalid.class).to eq(ZammadAPI::Resources::User)
+    expect(user_invalid.new_record?).to be(true)
+
+    expect { user_invalid.save }.to raise_error(ZammadAPI::ClientError)
+  end
+
+  it 'new with valid attributes' do
+    user = client.user.new(
+      firstname:   firstname,
+      lastname:    lastname,
+      email:       email,
+      groups:      {
+        Users: ['full']
+      },
+      roles:       ['Customer'],
+      preferences: { key1: 123, key2: 'abc' },
+      note:        '',
+      active:      true,
+    )
+
+    expect(user.class).to eq(ZammadAPI::Resources::User)
+    expect(user.new_record?).to be(true)
+    expect(user.id).to be_nil
+    expect(user.firstname).to eq(firstname)
+    expect(user.lastname).to eq(lastname)
+    expect(user.email).to eq(email)
+    expect(user.preferences).to eq({ key1: 123, key2: 'abc' })
+    expect(user.note).to eq('')
+    expect(user.active).to be(true)
+  end
+
+  it 'save' do
+    result = user.save
+
+    expect(result).to be(true)
+    expect(user.id).not_to be_nil
+    expect(user.firstname).to eq(firstname)
+    expect(user.lastname).to eq(lastname)
+    expect(user.email).to eq(email)
+    expect(user.group_ids).to be_empty
+    expect(user.groups).to be_empty
+    expect(user.role_ids).to eq([3])
+    expect(user.roles).to eq(['Customer'])
+    expect(user.preferences).to eq({ key1: 123, key2: 'abc' })
+    expect(user.note).to eq('')
+    expect(user.active).to be(true)
+    expect(user.created_by).to eq('admin@example.com')
+    expect(user.updated_by).to eq('admin@example.com')
+
+    user.firstname = "firstname#{random}-2"
+    user.roles = ['Agent']
+    user.note = 'some note'
+
+    changes = user.changes
+    expect(changes.key?(:lastname)).to be(false)
+    expect(changes[:firstname][0]).to eq(firstname)
+    expect(changes[:firstname][1]).to eq("#{firstname}-2")
+    expect(changes[:note][0]).to eq('')
+    expect(changes[:note][1]).to eq('some note')
+
+    result = user.save
+    expect(result).to be(true)
+    expect(user.id).to be_a(Integer)
+    expect(user.firstname).to eq("#{firstname}-2")
+    expect(user.lastname).to eq(lastname)
+    expect(user.email).to eq(email)
+    expect(user.group_ids).to eq({ '1': ['full'] })
+    expect(user.groups).to eq({ Users: ['full'] })
+    expect(user.role_ids).to eq([2])
+    expect(user.roles).to eq(['Agent'])
+    expect(user.note).to eq('some note')
+    expect(user.created_by).to eq('admin@example.com')
+    expect(user.updated_by).to eq('admin@example.com')
+  end
+
+  it 'find' do
+    user_lookup = client.user.find(user.id)
+
+    expect(user_lookup.class).to eq(ZammadAPI::Resources::User)
+    expect(user_lookup.id).to eq(user.id)
+    expect(user_lookup.firstname).to eq("#{firstname}-2")
+    expect(user_lookup.lastname).to eq(lastname)
+    expect(user_lookup.email).to eq(email)
+    expect(user_lookup.group_ids).to eq({ '1': ['full'] })
+    expect(user_lookup.groups).to eq({ Users: ['full'] })
+    expect(user_lookup.role_ids).to eq([2])
+    expect(user_lookup.roles).to eq(['Agent'])
+    expect(user_lookup.note).to eq('some note')
+    expect(user_lookup.created_by).to eq('admin@example.com')
+    expect(user_lookup.updated_by).to eq('admin@example.com')
+  end
+
+  it 'all' do
+    users = client.user.all
+
+    user_exists = nil
+    users.each do |local_user|
+      next if local_user.id != user.id
+
+      user_exists = local_user
+    end
+    expect(user_exists.class).to eq(ZammadAPI::Resources::User)
+    expect(user_exists.id).to eq(user.id)
+    expect(user_exists.id).to eq(user.id)
+    expect(user_exists.firstname).to eq("#{firstname}-2")
+    expect(user_exists.lastname).to eq(lastname)
+    expect(user_exists.email).to eq(email)
+    expect(user_exists.group_ids).to eq({ '1': ['full'] })
+    expect(user_exists.groups).to eq({ Users: ['full'] })
+    expect(user_exists.role_ids).to eq([2])
+    expect(user_exists.roles).to eq(['Agent'])
+    expect(user_exists.note).to eq('some note')
+    expect(user_exists.created_by).to eq('admin@example.com')
+    expect(user_exists.updated_by).to eq('admin@example.com')
+    user_exists.save
+
+    user_lookup = client.user.find(user.id)
+    expect(user_lookup.class).to eq(ZammadAPI::Resources::User)
+    expect(user_lookup.id).to eq(user.id)
+    expect(user_lookup.firstname).to eq("#{firstname}-2")
+    expect(user_lookup.lastname).to eq(lastname)
+    expect(user_lookup.email).to eq(email)
+    expect(user_lookup.group_ids).to eq({ '1': ['full'] })
+    expect(user_lookup.groups).to eq({ Users: ['full'] })
+    expect(user_lookup.role_ids).to eq([2])
+    expect(user_lookup.roles).to eq(['Agent'])
+    expect(user_lookup.note).to eq('some note')
+    expect(user_lookup.active).to be(true)
+    expect(user_lookup.created_by).to eq('admin@example.com')
+    expect(user_lookup.updated_by).to eq('admin@example.com')
+  end
+
+  it 'pagination with all' do
+    (1..10).each do |local_count|
+      client.user.create(
+        firstname: "firstname#{local_count}",
+        lastname:  "lastname#{local_count}",
+        email:     "customer_email#{local_count}@example.com",
+        groups:    { Users: ['full'] },
+        roles:     ['Customer'],
+        note:      '',
+        active:    true,
+      )
+    end
+
+    users = client.user.all
+
+    expect(users[0].class).to eq(ZammadAPI::Resources::User)
+    count = 0
+    users.each do |local_user|
+      expect(local_user.class).to eq(ZammadAPI::Resources::User)
+      count += 1
+    end
+    expect(count).to eq(15)
+
+    count = 0
+    users = client.user.all
+    users.page(1, per_page: 4).each do |local_user|
+      expect(local_user.class).to eq(ZammadAPI::Resources::User)
+      count += 1
+    end
+    expect(count).to eq(4)
+    users.page(2, per_page: 5).each do |local_user|
+      expect(local_user.class).to eq(ZammadAPI::Resources::User)
+      count += 1
+    end
+    expect(count).to eq(9)
+    count = 0
+    users.page(1, per_page: 200).each do |local_user|
+      expect(local_user.class).to eq(ZammadAPI::Resources::User)
+      count += 1
+    end
+    expect(count).to eq(15)
+  end
+
+  it 'search' do
+    users = client.user.search(query: firstname)
+
+    user_exists = nil
+    users.each do |local_user|
+      next if local_user.id != user.id
+
+      user_exists = local_user
+    end
+    expect(user_exists.class).to eq(ZammadAPI::Resources::User)
+    expect(user_exists.id).to eq(user.id)
+    expect(user_exists.firstname).to eq("#{firstname}-2")
+    expect(user_exists.group_ids).to eq({ '1': ['full'] })
+    expect(user_exists.groups).to eq({ Users: ['full'] })
+    expect(user_exists.role_ids).to eq([2])
+    expect(user_exists.roles).to eq(['Agent'])
+    expect(user_exists.active).to be(true)
+    expect(user_exists.created_by).to eq('admin@example.com')
+    expect(user_exists.updated_by).to eq('admin@example.com')
+
+    user_exists.active = false
+    user_exists.save
+
+    user_lookup = client.user.find(user.id)
+    expect(user_lookup.class).to eq(ZammadAPI::Resources::User)
+    expect(user_lookup.id).to eq(user.id)
+    expect(user_lookup.firstname).to eq("#{firstname}-2")
+    expect(user_lookup.group_ids).to be_empty
+    expect(user_lookup.groups).to be_empty
+    expect(user_lookup.role_ids).to eq([2])
+    expect(user_lookup.roles).to eq(['Agent'])
+    expect(user_lookup.active).to be(false)
+    expect(user_lookup.created_by).to eq('admin@example.com')
+    expect(user_lookup.updated_by).to eq('admin@example.com')
+  end
+
+  it 'pagination with search' do
+    users = client.user.search(query: firstname)
+
+    expect(users[0].class).to eq(ZammadAPI::Resources::User)
+
+    count = 0
+    user_exists = nil
+    users.each do |local_user|
+      expect(local_user.class).to eq(ZammadAPI::Resources::User)
+      count += 1
+      next if local_user.id != user.id
+
+      user_exists = local_user
+    end
+    expect(count).to eq(1)
+    expect(user_exists.class).to eq(ZammadAPI::Resources::User)
+    expect(user_exists.id).to eq(user.id)
+    expect(user_exists.firstname).to eq("#{firstname}-2")
+    expect(user_exists.group_ids).to be_empty
+    expect(user_exists.groups).to be_empty
+    expect(user_exists.role_ids).to eq([2])
+    expect(user_exists.roles).to eq(['Agent'])
+    expect(user_exists.active).to be(false)
+    expect(user_exists.created_by).to eq('admin@example.com')
+    expect(user_exists.updated_by).to eq('admin@example.com')
+
+    count = 0
+    users = client.user.search(query: firstname)
+    users.page(1, per_page: 3).each do |local_user|
+      expect(local_user.class).to eq(ZammadAPI::Resources::User)
+      count += 1
+    end
+    expect(count).to eq(1)
+    users.page(2, per_page: 3).each do |local_user|
+      expect(local_user.class).to eq(ZammadAPI::Resources::User)
+      count += 1
+    end
+    expect(count).to eq(1)
+  end
+
+  it 'destroy' do
+    # wait until zammad scheduler wrote some entries to activity stream
+    # to have some references and not allow users to delete
+    sleep 12
+
+    expect { user.destroy }.to raise_error(ZammadAPI::ClientError)
+    #result = user.destroy
+    #expect(result).to eq(true)
+  end
+end

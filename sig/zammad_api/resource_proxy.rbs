@@ -1,0 +1,21 @@
+module ZammadAPI
+  class ResourceProxy
+    attr_reader resource_class: untyped
+
+    @transport: Transport
+
+    def initialize: (Transport, untyped resource_class) -> void
+    def new: (?Hash[untyped, untyped] attributes) -> untyped
+    def create: (?Hash[untyped, untyped] attributes) -> untyped
+    def find: (Integer | String id) -> untyped
+    def destroy: (Integer | String id) -> true
+    def all: (?per_page: Integer, **untyped) -> Collection
+    def search: (query: String, ?per_page: Integer, **untyped) -> Collection
+    def inspect: () -> String
+
+    private
+
+    def collection: (String, String, per_page: Integer, query: Hash[Symbol, untyped]) -> Collection
+    def path: () -> String
+  end
+end
