@@ -126,6 +126,11 @@ A breaking release that modernises the whole gem. See
 - `record.to_json` and `record.as_json` render a record's attributes. `to_json` previously
   fell through to `Object#to_json`, which serialized a record as the string
   `"#<ZammadAPI::Resources::Ticket:0x...>"`.
+- `Collection#empty?`, and `#size` / `#length` as names for `#count`. `Enumerable` supplies
+  none of the three, so `client.ticket.all.empty?` used to raise `NoMethodError`. `empty?`
+  costs one request and asks for a single record rather than a whole page, except on a
+  collection limited to one page, where the page size decides which records that page holds.
+  A resource proxy forwards all three.
 
 ### Fixed
 

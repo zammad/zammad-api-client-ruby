@@ -452,6 +452,14 @@ client.ticket.search('state.name:open').count   # one request
 client.ticket.all.count                         # one request per page
 ```
 
+`size` and `length` are `count`, and cost the same. `empty?` asks for a single record
+rather than a page:
+
+```ruby
+client.ticket.where(state: 'merged').empty? # one request, for one record
+client.group.all.size                       # => 12
+```
+
 Nothing is cached, so every traversal of a collection fetches again.
 
 ## Deriving clients
