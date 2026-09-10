@@ -7,6 +7,10 @@ module ZammadAPI
   # set of readable attributes is not known ahead of time and is resolved
   # through +method_missing+. Use {#fetch} when a missing attribute should be
   # an error rather than +nil+.
+  #
+  # This also carries the object protocols a record is expected to answer:
+  # {#==} and {#hash} identify a record by its id, and {#deconstruct_keys}
+  # makes one matchable with +case/in+.
   module AttributeAccess
     # Suffixes that mark a method call as a predicate or bang method rather
     # than an attribute, so that typos like +save!+ still raise NoMethodError.
@@ -64,6 +68,39 @@ module ZammadAPI
     # @param keys [Array<Symbol>, nil] the keys the pattern asks for
     # @return [Hash{Symbol => Object}]
     def deconstruct_keys(keys) = keys.nil? ? attributes : attributes.slice(*keys)
+
+    # Whether +other+ is the same Zammad record: the same class, carrying the
+    # same id.
+    #
+    # A record with no id is equal only to itself, because two unsaved records
+    # are two records waiting to be created however alike their attributes
+    # are. That also means the first save of a record changes its {#hash}, so
+    # one used as a Hash key before being saved has to be rehashed after.
+    #
+    # @example
+    #   client.ticket.find(1) == client.ticket.find(1)             # => true
+    #   [client.ticket.find(1), client.ticket.find(1)].uniq.size   # => 1
+    #
+    # @param other [Object]
+    # @return [Boolean]
+    def ==(other)
+      return true  if equal?(other)
+      return false if !other.instance_of?(self.class)
+
+      !id.nil? && other.id == id
+    end
+    alias eql? ==
+
+    # Consistent with {#==}, so that records can be deduplicated with +uniq+,
+    # collected in a +Set+ and used as Hash keys.
+    #
+    # The class is part of the digest because an id is only unique within one
+    # kind of record: ticket 1 and user 1 are different records.
+    #
+    # @return [Integer]
+    def hash
+      id.nil? ? super : [self.class, id].hash
+    end
 
     def method_missing(name, *args)
       identifier = name.to_s

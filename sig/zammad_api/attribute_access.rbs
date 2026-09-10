@@ -12,6 +12,9 @@ module ZammadAPI
     def to_h: () -> Hash[Symbol, untyped]
     def id: () -> Integer?
     def deconstruct_keys: (Array[Symbol]?) -> Hash[Symbol, untyped]
+    def ==: (untyped other) -> bool
+    def eql?: (untyped other) -> bool
+    def hash: () -> Integer
     def method_missing: (Symbol, *untyped) -> untyped
     def respond_to_missing?: (Symbol, ?bool) -> bool
 

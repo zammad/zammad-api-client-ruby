@@ -188,6 +188,56 @@ RSpec.describe ZammadAPI::AttributeAccess do
     end
   end
 
+  describe 'equality' do
+    it 'is the same record as another of its class carrying the same id' do
+      expect(record).to eq(record_class.new('id' => 1, 'name' => 'Renamed since'))
+    end
+
+    it 'is not the same record as one with a different id' do
+      expect(record).not_to eq(record_class.new('id' => 2, 'name' => 'Support'))
+    end
+
+    it 'is not the same record as one of another class with the same id' do
+      expect(record).not_to eq(Class.new(record_class).new('id' => 1))
+    end
+
+    it 'is not equal to something that is not a record' do
+      expect(record).not_to eq('id' => 1)
+    end
+
+    it 'answers #eql? too, so a record can be a Hash key' do
+      expect({ record => :found }[record_class.new('id' => 1)]).to eq(:found)
+    end
+
+    it 'hashes equal records alike' do
+      expect(record.hash).to eq(record_class.new('id' => 1).hash)
+    end
+
+    it 'deduplicates equal records' do
+      expect([record, record_class.new('id' => 1)].uniq.size).to eq(1)
+    end
+
+    it 'collects equal records into one Set member' do
+      expect(Set[record, record_class.new('id' => 1)].size).to eq(1)
+    end
+
+    context 'without an id' do
+      subject(:unsaved) { record_class.new('name' => 'Support') }
+
+      it 'is still itself, so it can be found again as a Hash key' do
+        expect({ unsaved => :found }[unsaved]).to eq(:found)
+      end
+
+      it 'is not equal to an identical record, which is still a second record' do
+        expect(unsaved).not_to eq(record_class.new('name' => 'Support'))
+      end
+
+      it 'is kept apart from an identical record' do
+        expect([unsaved, record_class.new('name' => 'Support')].uniq.size).to eq(2)
+      end
+    end
+  end
+
   it 'rejects writes by default' do
     expect { record.name = 'other' }.to raise_error(NoMethodError, /read-only/)
   end

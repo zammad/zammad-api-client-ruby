@@ -463,6 +463,34 @@ RSpec.describe ZammadAPI::Resources::Base do
     end
   end
 
+  describe 'equality' do
+    it 'treats two separately fetched records as the same record' do
+      stub_request(:get, "#{url}/1").with(query: hash_including({})).to_return(json_response({ id: 1, name: 'Users' }))
+
+      first_fetch  = client.group.find(1)
+      second_fetch = client.group.find(1)
+
+      expect(first_fetch).not_to equal(second_fetch)
+      expect(first_fetch).to eq(second_fetch)
+    end
+
+    it 'tells records of different resources with the same id apart' do
+      group = ZammadAPI::Resources::Group.from_response(unit_transport, id: 1)
+      user  = ZammadAPI::Resources::User.from_response(unit_transport, id: 1)
+
+      expect(group).not_to eq(user)
+    end
+
+    it 'identifies a record by its id once its first save assigns one' do
+      stub_request(:post, url).with(query: hash_including({})).to_return(json_response({ id: 7, name: 'Support' }))
+      group = client.group.new(name: 'Support')
+
+      expect(group).not_to eq(ZammadAPI::Resources::Group.from_response(unit_transport, id: 7))
+      group.save!
+      expect(group).to eq(ZammadAPI::Resources::Group.from_response(unit_transport, id: 7))
+    end
+  end
+
   describe '#inspect' do
     it 'shows the id, state and attributes' do
       group = ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Users')
