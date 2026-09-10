@@ -12,6 +12,10 @@ Ruby client for the Zammad API v1.0.
   `where` / `page` / `per` / `in_batches` / `find_each` surface.
 - Records support **pattern matching**, and clients are **immutable** and safe to share
   between threads.
+- **Raw requests** reach the endpoints this gem does not model yet, without giving up
+  authentication, retries or the error classes.
+- A **test kit** (`zammad_api/test`) stands in for a Zammad, so your own tests need no
+  HTTP interception.
 
 > **Upgrading from 1.x?** See [Migrating from 1.x](#migrating-from-1x). Version 2.0 is a
 > breaking release.
@@ -626,6 +630,9 @@ compatibility. Most calling code needs no edits; the table lists everything that
 | `client.x.search(query: 'zammad')`     | `client.x.search('zammad')`                      | The search term is the argument, not a keyword                      |
 | `collection.each_page { ... }`         | `collection.in_batches { ... }`                  | Ruby already has a name for this                                    |
 | `collection[3]`                        | `collection.page(4).per(1).first`                | An index that costs a request, and that ignored `page`, was a trap  |
+| `record.save` raised on a rejection    | `save` → `false` with `record.error`; `save!` raises | Branching on a rejected attribute needed a begin/rescue         |
+| `record.attributes[:x] = 1`            | `record.x = 1`, or `record.to_h` for a copy      | Writing through the reader staged no change, so `save` never sent it |
+| `client.user.find(ticket.customer_id)` | `ticket.related.customer`                        | Following a foreign key needed the client threaded through          |
 | `client.on_behalf_of = 'login'`        | `client.on_behalf_of('login')` → new client      | The setter mutated the client and leaked across threads             |
 | `client.perform_on_behalf_of('x') { }` | `client.on_behalf_of('x') { \|scoped\| ... }`    | The old block form left the header set if the block raised          |
 | `ZammadAPI::ResourceNotFoundError`     | `ZammadAPI::UnknownResourceError`                | Renamed so it is not confused with a 404, now `NotFoundError`       |
@@ -638,9 +645,11 @@ compatibility. Most calling code needs no edits; the table lists everything that
 | `ZammadAPI::Log`, `ZammadAPI::JsonHelper` | removed                                       | Pass any `Logger` as `logger:`; decoding moved into the transport   |
 | Ruby >= 3.0                            | Ruby >= 3.4                                      | 3.0 through 3.3 are end-of-life or nearly so                        |
 
-Unchanged: `client.<resource>.find/all/create/new`, `record.save`, `record.destroy`,
-`record.changes`, `record.attributes`, attribute readers and writers, `ticket.articles`,
-`ticket.article`, and `attachment.download`.
+Unchanged: `client.<resource>.find/all/create/new`, `record.destroy`, attribute readers
+and writers, `ticket.articles`, `ticket.article`, and `attachment.download`.
+
+`record.save`, `record.changes` and `record.attributes` still exist and still mean what
+they meant; only the three rows above change how they behave at the edges.
 
 ## License
 
