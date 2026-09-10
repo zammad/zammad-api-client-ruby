@@ -27,6 +27,12 @@ A breaking release that modernises the whole gem. See
   `client.on_behalf_of('login')`, which returns a new client and also accepts a block.
 - `ZammadAPI::ResourceNotFoundError` is now `ZammadAPI::UnknownResourceError`, freeing the
   404 case to be `ZammadAPI::NotFoundError`.
+- `record.save` reports a validation failure as `false` and leaves the error in
+  `record.error`, instead of raising. `record.save!` is the raising form. Every other
+  failure — an expired token, a missing record, an unreachable instance — still raises from
+  both, because no attribute the caller can fix would change the outcome.
+  `client.<resource>.create` uses `save!`, so it keeps raising rather than returning a
+  record that looks created but is not.
 - `ZammadAPI::Error` descends from `StandardError` instead of `RuntimeError`.
 - `ResponseError#response` returns a `ZammadAPI::Response`, not a Faraday object, and
   `#body` is the decoded payload rather than a raw JSON string.

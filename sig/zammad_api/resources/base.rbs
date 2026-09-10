@@ -6,9 +6,11 @@ module ZammadAPI
       MAX_PER_PAGE: Integer
 
       attr_reader changes: Hash[Symbol, Array[untyped]]
+      attr_reader error: ValidationError?
       attr_reader transport: Transport
 
       @new_record: bool
+      @error: ValidationError?
 
       def self.path: (String) -> void
       def self.resource_path: () -> String
@@ -18,7 +20,8 @@ module ZammadAPI
       def new_record?: () -> bool
       def persisted?: () -> bool
       def changed?: () -> bool
-      def save: () -> true
+      def save: () -> bool
+      def save!: () -> true
       def reload: () -> self
       def destroy: () -> true
       def inspect: () -> String

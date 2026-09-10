@@ -32,7 +32,7 @@ module ZammadAPI
       # @raise [ResponseError] when Zammad rejected the request
       def article(attributes = {})
         record = TicketArticle.new(transport, attributes.merge(ticket_id: id))
-        record.save
+        record.save!
         record
       end
     end

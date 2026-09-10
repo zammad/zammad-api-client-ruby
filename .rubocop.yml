@@ -60,9 +60,11 @@ Naming/BlockForwarding:
   EnforcedStyle: explicit
 
 Naming/PredicateMethod:
-  # Established names from the resource API; they return true on success.
+  # Established names from the resource API. `save` reports whether the record
+  # was stored; the rest return true on success.
   AllowedMethods:
     - save
+    - save!
     - destroy
 
 Style/Documentation:

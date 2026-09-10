@@ -184,6 +184,33 @@ group.changes  # => {name: ["Support", "Support 2"]}
 group.save     # sends only the changed attributes
 ```
 
+### Saving and validation failures
+
+`save` returns whether the record was stored, and leaves a rejection in `error`:
+
+```ruby
+group = client.group.new(name: '')
+
+if group.save
+  puts group.id
+else
+  warn group.error.server_message # => "Name is required"
+end
+```
+
+Only a rejection of the attributes (HTTP 422) is reported that way. An expired token, a
+missing record or an unreachable instance still raises, because those are not something
+the calling code can correct by fixing an attribute.
+
+`save!` raises on every failure, including validation, which is what you want in a script:
+
+```ruby
+group.save! # raises ZammadAPI::ValidationError
+```
+
+`client.group.create(...)` uses `save!`, so it raises rather than handing back a record
+that looks created but is not. Use `new` plus `save` when you need to branch instead.
+
 ### Reload and destroy
 
 ```ruby

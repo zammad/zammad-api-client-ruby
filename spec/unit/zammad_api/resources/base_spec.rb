@@ -160,19 +160,99 @@ RSpec.describe ZammadAPI::Resources::Base do
       end
     end
 
-    it 'raises ValidationError when Zammad rejects the record' do
-      stub_request(:post, url).with(query: hash_including({}))
-        .to_return(json_response({ error: 'Name is required' }, status: 422))
-
-      expect { client.group.new.save }.to raise_error(ZammadAPI::ValidationError)
-    end
-
     it 'raises ParseError when the response is not an object' do
       stub_request(:post, url).with(query: hash_including({}))
         .to_return(json_response([], status: 201))
 
       expect { client.group.new(name: 'x').save }
         .to raise_error(ZammadAPI::ParseError, /expected a JSON object, got Array/)
+    end
+
+    context 'when Zammad rejects the attributes' do
+      subject(:group) { client.group.new }
+
+      before do
+        stub_request(:post, url).with(query: hash_including({}))
+          .to_return(json_response({ error: 'Name is required' }, status: 422))
+      end
+
+      it 'returns false instead of raising' do
+        expect(group.save).to be(false)
+      end
+
+      it 'leaves the validation error in #error' do
+        group.save
+        expect(group.error).to be_a(ZammadAPI::ValidationError)
+      end
+
+      it 'carries the message Zammad reported' do
+        group.save
+        expect(group.error.server_message).to eq('Name is required')
+      end
+
+      it 'leaves the record unsaved' do
+        group.save
+        expect(group).to be_new_record
+      end
+
+      it 'keeps the staged changes, so the attributes can be corrected and resent' do
+        group.name = 'Support'
+        group.save
+        expect(group.changes).to eq({ name: [nil, 'Support'] })
+      end
+    end
+
+    context 'when the failure is not a validation error' do
+      it 'still raises for a 403' do
+        stub_request(:post, url).with(query: hash_including({}))
+          .to_return(json_response({ error: 'no' }, status: 403))
+
+        expect { client.group.new(name: 'x').save }.to raise_error(ZammadAPI::AuthorizationError)
+      end
+
+      it 'still raises for a 500' do
+        stub_request(:post, url).with(query: hash_including({}))
+          .to_return(json_response({}, status: 500))
+
+        expect { client.group.new(name: 'x').save }.to raise_error(ZammadAPI::ServerError)
+      end
+    end
+
+    it 'clears a previous error once the record saves' do
+      stub_request(:post, url).with(query: hash_including({}))
+        .to_return(json_response({ error: 'Name is required' }, status: 422), json_response({ id: 7, name: 'Support' }))
+
+      group = client.group.new
+      group.save
+      group.name = 'Support'
+
+      expect(group.save).to be(true)
+      expect(group.error).to be_nil
+    end
+  end
+
+  describe '#save!' do
+    subject(:group) { client.group.new(name: 'Support') }
+
+    it 'returns true' do
+      stub_request(:post, url).with(query: hash_including({})).to_return(json_response({ id: 7 }, status: 201))
+
+      expect(group.save!).to be(true)
+    end
+
+    it 'raises ValidationError when Zammad rejects the record' do
+      stub_request(:post, url).with(query: hash_including({}))
+        .to_return(json_response({ error: 'Name is required' }, status: 422))
+
+      expect { group.save! }.to raise_error(ZammadAPI::ValidationError, /Name is required/)
+    end
+
+    it 'does not record the error, because it was raised' do
+      stub_request(:post, url).with(query: hash_including({}))
+        .to_return(json_response({ error: 'Name is required' }, status: 422))
+
+      expect { group.save! }.to raise_error(ZammadAPI::ValidationError)
+      expect(group.error).to be_nil
     end
   end
 

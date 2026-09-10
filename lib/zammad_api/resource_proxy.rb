@@ -39,12 +39,16 @@ module ZammadAPI
 
     # Builds and immediately saves a record.
     #
+    # This raises when Zammad rejects the attributes, rather than handing back
+    # a record that looks created but is not. Use +new+ and
+    # {Resources::Base#save} to branch on a validation failure instead.
+    #
     # @param attributes [Hash]
     # @return [Resources::Base]
     # @raise [ResponseError] when Zammad rejected the request
     def create(attributes = {})
       record = new(attributes)
-      record.save
+      record.save!
       record
     end
 

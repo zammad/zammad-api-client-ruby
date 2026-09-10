@@ -27,6 +27,12 @@ module ZammadAPI
       #   +attribute => [old_value, new_value]+
       attr_reader :changes
 
+      # The validation failure from the most recent {#save}, so that a +false+
+      # return value can be acted on. Cleared by a successful save.
+      #
+      # @return [ValidationError, nil]
+      attr_reader :error
+
       # @api private
       attr_reader :transport
 
@@ -64,6 +70,7 @@ module ZammadAPI
         @attributes = deep_symbolize(attributes || {})
         @changes    = {}
         @new_record = true
+        @error      = nil
       end
 
       # @return [Boolean] whether this record has not been stored yet
@@ -75,19 +82,46 @@ module ZammadAPI
       # @return [Boolean] whether there are unsaved changes
       def changed? = !changes.empty?
 
-      # Creates or updates the record.
+      # Creates or updates the record, reporting a validation failure as
+      # +false+ rather than by raising.
+      #
+      # Only a rejection of the submitted attributes is caught, and it is left
+      # in {#error}. A missing record, an expired token or an unreachable
+      # instance still raises, because retrying or branching on those is not
+      # the caller's business here.
+      #
+      # @example
+      #   if group.save
+      #     puts group.id
+      #   else
+      #     warn group.error.server_message
+      #   end
+      #
+      # @return [Boolean] whether the record was stored
+      # @raise [ResponseError] for any failure other than a validation error
+      # @see #save!
+      def save
+        save!
+      rescue ValidationError => e
+        @error = e
+        false
+      end
+
+      # Creates or updates the record, raising on any failure.
       #
       # New records are sent in full; existing records send only the attributes
       # that changed.
       #
       # @return [true]
       # @raise [ResponseError] when Zammad rejected the request
-      def save
+      # @see #save
+      def save!
         response = new_record? ? create_record : update_record
 
         @attributes = response.decoded(:object, operation: 'save object', resource_class: self.class)
         @changes    = {}
         @new_record = false
+        @error      = nil
         true
       end
 
@@ -106,6 +140,7 @@ module ZammadAPI
         @attributes = response.decoded(:object, operation: 'reload object', resource_class: self.class)
         @changes    = {}
         @new_record = false
+        @error      = nil
         self
       end
 
