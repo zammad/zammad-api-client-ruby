@@ -238,6 +238,29 @@ RSpec.describe ZammadAPI::AttributeAccess do
     end
   end
 
+  describe 'serialization' do
+    it 'renders the attributes as a JSON object' do
+      expect(JSON.parse(record.to_json))
+        .to eq('id' => 1, 'name' => 'Support', 'preferences' => { 'notes' => [{ 'body' => 'hello' }] })
+    end
+
+    it 'renders as its attributes when nested in a structure being generated' do
+      expect(JSON.parse(JSON.generate(group: record))['group']).to include('name' => 'Support')
+    end
+
+    it 'carries the generator state, so pretty printing reaches the attributes' do
+      expect(JSON.pretty_generate(record)).to include("\n")
+    end
+
+    it 'exposes the attributes to an encoder through #as_json' do
+      expect(record.as_json).to eq(record.to_h)
+    end
+
+    it 'hands #as_json a copy rather than the frozen attributes' do
+      expect(record.as_json).not_to be_frozen
+    end
+  end
+
   it 'rejects writes by default' do
     expect { record.name = 'other' }.to raise_error(NoMethodError, /read-only/)
   end

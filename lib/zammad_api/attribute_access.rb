@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'json'
+
 module ZammadAPI
   # Read access to a Zammad record's attributes.
   #
@@ -9,8 +11,8 @@ module ZammadAPI
   # an error rather than +nil+.
   #
   # This also carries the object protocols a record is expected to answer:
-  # {#==} and {#hash} identify a record by its id, and {#deconstruct_keys}
-  # makes one matchable with +case/in+.
+  # {#==} and {#hash} identify a record by its id, {#deconstruct_keys} makes
+  # one matchable with +case/in+, and {#to_json} serializes its attributes.
   module AttributeAccess
     # Suffixes that mark a method call as a predicate or bang method rather
     # than an attribute, so that typos like +save!+ still raise NoMethodError.
@@ -101,6 +103,25 @@ module ZammadAPI
     def hash
       id.nil? ? super : [self.class, id].hash
     end
+
+    # The attributes, for a JSON encoder.
+    #
+    # Named the way ActiveSupport and its encoders expect, so that a record
+    # nested inside a structure being serialized renders as its attributes.
+    #
+    # @return [Hash{Symbol => Object}]
+    def as_json(*) = to_h
+
+    # Without this, a record would serialize as its +to_s+, because that is
+    # what +Object#to_json+ falls back to.
+    #
+    # @example
+    #   client.group.find(1).to_json # => "{\"id\":1,\"name\":\"Support\"}"
+    #
+    # @param state [JSON::State, nil] passed by +JSON.generate+ when a record
+    #   is nested in a structure it is serializing
+    # @return [String] the attributes as a JSON object
+    def to_json(state = nil) = to_h.to_json(state)
 
     def method_missing(name, *args)
       identifier = name.to_s

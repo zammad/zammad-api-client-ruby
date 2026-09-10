@@ -491,6 +491,14 @@ RSpec.describe ZammadAPI::Resources::Base do
     end
   end
 
+  describe '#to_json' do
+    it 'renders the attributes rather than the object' do
+      group = ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Users')
+
+      expect(group.to_json).to eq('{"id":1,"name":"Users"}')
+    end
+  end
+
   describe '#inspect' do
     it 'shows the id, state and attributes' do
       group = ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Users')
