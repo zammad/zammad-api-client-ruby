@@ -82,6 +82,91 @@ RSpec.describe ZammadAPI::ResourceProxy do
     end
   end
 
+  describe '#find_by' do
+    it 'asks for a single record rather than a whole page' do
+      stub = stub_request(:get, url)
+        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => '1', 'name' => 'Users' })
+        .to_return(json_response([{ id: 1, name: 'Users' }]))
+
+      proxy.find_by(name: 'Users')
+      expect(stub).to have_been_requested
+    end
+
+    it 'returns the matching record' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([{ id: 1, name: 'Users' }]))
+
+      expect(proxy.find_by(name: 'Users').id).to eq(1)
+    end
+
+    it 'returns a persisted record' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([{ id: 1 }]))
+
+      expect(proxy.find_by(name: 'Users')).to be_persisted
+    end
+
+    it 'returns nil when nothing matched' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([]))
+
+      expect(proxy.find_by(name: 'Nope')).to be_nil
+    end
+
+    it 'costs a single request' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([{ id: 1 }]))
+
+      proxy.find_by(name: 'Users')
+      expect(a_request(:get, url).with(query: hash_including({}))).to have_been_made.once
+    end
+  end
+
+  describe '#find_by!' do
+    it 'returns the matching record' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([{ id: 1 }]))
+
+      expect(proxy.find_by!(name: 'Users').id).to eq(1)
+    end
+
+    it 'raises NotFoundError when nothing matched' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([]))
+
+      expect { proxy.find_by!(name: 'Nope') }.to raise_error(ZammadAPI::NotFoundError)
+    end
+
+    it 'names the query and the resource in the message' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([]))
+
+      expect { proxy.find_by!(name: 'Nope', active: true) }
+        .to raise_error("Can't find object by name and active (ZammadAPI::Resources::Group): no record matched")
+    end
+
+    it 'does not put the values it searched for in the message' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([]))
+
+      expect { proxy.find_by!(name: 'secret-ish') }.to raise_error(/^(?!.*secret-ish)/)
+    end
+  end
+
+  describe '#exists?' do
+    it 'is true when the record is there' do
+      stub_request(:get, "#{url}/1").with(query: hash_including({})).to_return(json_response({ id: 1 }))
+
+      expect(proxy.exists?(1)).to be(true)
+    end
+
+    it 'is false for a 404' do
+      stub_request(:get, "#{url}/404").with(query: hash_including({}))
+        .to_return(json_response({ error: 'not found' }, status: 404))
+
+      expect(proxy.exists?(404)).to be(false)
+    end
+
+    it 'does not swallow an authorization failure' do
+      stub_request(:get, "#{url}/1").with(query: hash_including({}))
+        .to_return(json_response({ error: 'no' }, status: 403))
+
+      expect { proxy.exists?(1) }.to raise_error(ZammadAPI::AuthorizationError)
+    end
+  end
+
   describe '#destroy' do
     it 'deletes the record without fetching it first' do
       stub = stub_request(:delete, "#{url}/1").to_return(status: 200, body: '')

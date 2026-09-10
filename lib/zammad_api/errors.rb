@@ -96,10 +96,16 @@ module ZammadAPI
     end
     private_class_method :error_class_for
 
-    def initialize(operation:, response: nil, resource_class: nil)
+    # @param operation [String] what was attempted
+    # @param response [Response, nil]
+    # @param resource_class [Class, nil]
+    # @param detail [String, nil] replaces the part of the message that would
+    #   otherwise describe the response, for a failure that has none
+    def initialize(operation:, response: nil, resource_class: nil, detail: nil)
       @operation      = operation
       @response       = response
       @resource_class = resource_class
+      @detail         = detail
       super(build_message)
     end
 
@@ -134,7 +140,7 @@ module ZammadAPI
     end
 
     def detail
-      server_message || (status ? "HTTP #{status}" : 'no response')
+      @detail || server_message || (status ? "HTTP #{status}" : 'no response')
     end
   end
 

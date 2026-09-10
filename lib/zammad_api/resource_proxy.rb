@@ -70,6 +70,48 @@ module ZammadAPI
       )
     end
 
+    # Fetches the first record matching Zammad query parameters.
+    #
+    # Only one record is requested, not a whole page.
+    #
+    # @example
+    #   client.user.find_by(email: 'someone@example.com')&.id
+    #
+    # @param params [Hash] Zammad query parameters
+    # @return [Resources::Base, nil] nil when nothing matched
+    def find_by(**params) = where(**params).per(1).first
+
+    # Fetches the first record matching Zammad query parameters, raising when
+    # nothing matched.
+    #
+    # @param params [Hash] Zammad query parameters
+    # @return [Resources::Base]
+    # @raise [NotFoundError] when nothing matched
+    # @see #find_by
+    def find_by!(**params)
+      find_by(**params) || raise(
+        NotFoundError.new(
+          operation:      "find object by #{params.keys.join(' and ')}",
+          resource_class: resource_class,
+          detail:         'no record matched'
+        )
+      )
+    end
+
+    # Whether a record with this id exists.
+    #
+    # This costs one request, and reads the record to find out, because Zammad
+    # has no cheaper answer for a single id.
+    #
+    # @param id [Integer, String]
+    # @return [Boolean]
+    def exists?(id)
+      find(id)
+      true
+    rescue NotFoundError
+      false
+    end
+
     # Deletes a record by id, without fetching it first.
     #
     # @param id [Integer, String]

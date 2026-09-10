@@ -164,6 +164,14 @@ group.fetch(:name) # raises KeyError if the attribute is absent
 group.to_h       # every attribute, as a Hash you may modify
 ```
 
+Or by attribute, which asks for a single record rather than a whole page:
+
+```ruby
+client.user.find_by(email: 'someone@example.com') # => the record, or nil
+client.user.find_by!(email: 'nobody@example.com') # raises NotFoundError
+client.group.exists?(42)                          # => true
+```
+
 Zammad records can carry administrator-defined custom attributes, so an unknown reader
 returns `nil` rather than raising. Use `fetch` when a missing attribute should be an error.
 
@@ -325,6 +333,16 @@ per endpoint — 100 for `/api/v1/tickets`, 200 for a search, 1000 for the other
 endpoints — and a larger size is reduced to what the endpoint serves. That keeps a walk
 complete: a page size the server silently shrank would otherwise end the iteration at the
 first page.
+
+### Reading single attributes
+
+```ruby
+client.user.all.pluck(:email)        # => ["a@example.com", ...]
+client.ticket.all.pluck(:id, :title) # => [[1, "Help"], ...]
+```
+
+Zammad cannot be asked for a subset of the fields, so this shapes the result rather than
+shrinking the request.
 
 ### Counting
 

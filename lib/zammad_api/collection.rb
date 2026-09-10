@@ -121,6 +121,26 @@ module ZammadAPI
       with(query: @query.merge(params))
     end
 
+    # Reads one or more attributes from every record.
+    #
+    # Zammad has no way to ask an index endpoint for a subset of the fields, so
+    # this shapes the result rather than shrinking the request.
+    #
+    # @example
+    #   client.user.all.pluck(:email)          # => ["a@example.com", ...]
+    #   client.ticket.all.pluck(:id, :title)   # => [[1, "Help"], ...]
+    #
+    # @param keys [Array<Symbol, String>] attribute names
+    # @return [Array] one value per record for a single key, one array of
+    #   values per record for several
+    # @raise [ArgumentError] when no attribute name was given
+    def pluck(*keys)
+      raise ArgumentError, 'pluck needs at least one attribute name' if keys.empty?
+      return map { it[keys.first] } if keys.one?
+
+      map { |record| keys.map { record[it] } }
+    end
+
     # Number of records in this collection.
     #
     # Zammad answers this in one request for a search; every other endpoint

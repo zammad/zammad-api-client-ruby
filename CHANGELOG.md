@@ -64,6 +64,12 @@ A breaking release that modernises the whole gem. See
   enumeration, plus `client.x.where(...)` as a shorthand for `all.where(...)`.
 - `Collection#count` costs a single request on a search endpoint, which Zammad can count
   without returning the records.
+- `Collection#pluck(*attributes)`, for reading one or more attributes from every record.
+- `client.<resource>.find_by(**params)` and `#find_by!`, which request a single record
+  rather than the page of 100 that `where(...).first` would have fetched, and
+  `client.<resource>.exists?(id)`.
+- `ResponseError` accepts a `detail:` describing a failure that has no HTTP response of its
+  own, so `find_by!` reads as `no record matched` rather than `no response`.
 - The page size is clamped to what an endpoint serves (100 for `/api/v1/tickets`, 200 for
   a search, 1000 for the other index endpoints). Asking for more used to end iteration
   after the first page, because Zammad capped the response and the short page read as the

@@ -36,6 +36,7 @@ module ZammadAPI
     def page: (Integer number) -> Collection
     def per: (Integer size) -> Collection
     def where: (**untyped) -> Collection
+    def pluck: (*(Symbol | String) keys) -> Array[untyped]
     def count: (*untyped) ?{ (untyped) -> boolish } -> Integer
     def inspect: () -> String
 

@@ -33,10 +33,12 @@ module ZammadAPI
     attr_reader operation: String
     attr_reader resource_class: Class?
 
+    @detail: String?
+
     def self.build: (Response? response, operation: String, ?resource_class: Class?) -> ResponseError
     def self.error_class_for: (Response?) -> singleton(ResponseError)
 
-    def initialize: (operation: String, ?response: Response?, ?resource_class: Class?) -> void
+    def initialize: (operation: String, ?response: Response?, ?resource_class: Class?, ?detail: String?) -> void
     def status: () -> Integer?
     def body: () -> untyped
     def headers: () -> Hash[String, String]

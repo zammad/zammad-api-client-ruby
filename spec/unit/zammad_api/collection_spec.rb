@@ -241,6 +241,45 @@ RSpec.describe ZammadAPI::Collection do
     end
   end
 
+  describe '#pluck' do
+    it 'returns one value per record for a single attribute' do
+      stub_page(1, [{ id: 1, name: 'Users' }, { id: 2, name: 'Support' }])
+      stub_page(2, [])
+
+      expect(collection.pluck(:name)).to eq(%w[Users Support])
+    end
+
+    it 'returns one array per record for several attributes' do
+      stub_page(1, [{ id: 1, name: 'Users' }, { id: 2, name: 'Support' }])
+      stub_page(2, [])
+
+      expect(collection.pluck(:id, :name)).to eq([[1, 'Users'], [2, 'Support']])
+    end
+
+    it 'accepts string keys' do
+      stub_page(1, [{ id: 1, name: 'Users' }])
+
+      expect(collection.pluck('name')).to eq(['Users'])
+    end
+
+    it 'yields nil for an attribute a record does not carry' do
+      stub_page(1, [{ id: 1 }])
+
+      expect(collection.pluck(:name)).to eq([nil])
+    end
+
+    it 'walks every page, like each' do
+      stub_page(1, [{ id: 1 }, { id: 2 }])
+      stub_page(2, [{ id: 3 }])
+
+      expect(collection.pluck(:id)).to eq([1, 2, 3])
+    end
+
+    it 'needs at least one attribute name' do
+      expect { collection.pluck }.to raise_error(ArgumentError, 'pluck needs at least one attribute name')
+    end
+  end
+
   describe '#count' do
     let(:search_url) { "#{ClientHelper::BASE_URL}api/v1/users/search" }
 
