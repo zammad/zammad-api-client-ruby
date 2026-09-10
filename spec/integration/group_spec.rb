@@ -123,7 +123,7 @@ RSpec.describe ZammadAPI, 'group object basics' do
   it 'pagination with all' do
     groups = client.group.all
 
-    expect(groups[0].class).to eq(ZammadAPI::Resources::Group)
+    expect(groups.first.class).to eq(ZammadAPI::Resources::Group)
 
     count = 0
     groups.each do |local_group|
@@ -134,12 +134,12 @@ RSpec.describe ZammadAPI, 'group object basics' do
 
     count = 0
     groups = client.group.all
-    groups.page(1, per_page: 3).each do |local_group|
+    groups.page(1).per(3).each do |local_group|
       expect(local_group.class).to eq(ZammadAPI::Resources::Group)
       count += 1
     end
     expect(count).to eq(3)
-    groups.page(2, per_page: 3).each do |local_group|
+    groups.page(2).per(3).each do |local_group|
       expect(local_group.class).to eq(ZammadAPI::Resources::Group)
       count += 1
     end

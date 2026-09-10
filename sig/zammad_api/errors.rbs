@@ -22,6 +22,10 @@ module ZammadAPI
     def self.build: (operation: String, expected: Symbol, actual: Class, ?resource_class: Class?) -> ParseError
   end
 
+  class PaginationError < Error
+    def self.build: (operation: String, page: Integer, ?resource_class: Class?) -> PaginationError
+  end
+
   class ResponseError < Error
     STATUS_ERRORS: Hash[Integer, singleton(ResponseError)]
 

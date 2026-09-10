@@ -43,7 +43,8 @@ Style/ClassAndModuleChildren:
   Enabled: false
 
 Naming/MethodParameterName:
-  AllowedNames: [id, to]
+  # `of` is ActiveRecord's name for a batch size, see Collection#in_batches.
+  AllowedNames: [id, to, of]
 
 Layout/MultilineMethodCallIndentation:
   EnforcedStyle: indented

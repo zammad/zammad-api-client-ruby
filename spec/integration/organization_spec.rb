@@ -117,7 +117,7 @@ RSpec.describe ZammadAPI, 'organization object basics' do
   it 'pagination with all' do
     organizations = client.organization.all
 
-    expect(organizations[0].class).to eq(ZammadAPI::Resources::Organization)
+    expect(organizations.first.class).to eq(ZammadAPI::Resources::Organization)
 
     count = 0
     organizations.each do |local_organization|
@@ -128,12 +128,12 @@ RSpec.describe ZammadAPI, 'organization object basics' do
 
     count = 0
     organizations = client.organization.all
-    organizations.page(1, per_page: 3).each do |local_organization|
+    organizations.page(1).per(3).each do |local_organization|
       expect(local_organization.class).to eq(ZammadAPI::Resources::Organization)
       count += 1
     end
     expect(count).to eq(2)
-    organizations.page(2, per_page: 3).each do |local_organization|
+    organizations.page(2).per(3).each do |local_organization|
       expect(local_organization.class).to eq(ZammadAPI::Resources::Organization)
       count += 1
     end
@@ -141,7 +141,7 @@ RSpec.describe ZammadAPI, 'organization object basics' do
   end
 
   it 'search' do
-    organizations = client.organization.search(query: name)
+    organizations = client.organization.search(name)
 
     organization_exists = nil
     organizations.each do |local_organization|
@@ -171,9 +171,9 @@ RSpec.describe ZammadAPI, 'organization object basics' do
   end
 
   it 'pagination with search' do
-    organizations = client.organization.search(query: "#{name}-2")
+    organizations = client.organization.search("#{name}-2")
 
-    expect(organizations[0].class).to eq(ZammadAPI::Resources::Organization)
+    expect(organizations.first.class).to eq(ZammadAPI::Resources::Organization)
 
     count = 0
     organization_exists = nil
@@ -194,13 +194,13 @@ RSpec.describe ZammadAPI, 'organization object basics' do
     expect(organization_exists.updated_by).to eq('admin@example.com')
 
     count = 0
-    organizations = client.organization.search(query: 'zammad')
-    organizations.page(1, per_page: 3).each do |local_organization|
+    organizations = client.organization.search('zammad')
+    organizations.page(1).per(3).each do |local_organization|
       expect(local_organization.class).to eq(ZammadAPI::Resources::Organization)
       count += 1
     end
     expect(count).to eq(1)
-    organizations.page(2, per_page: 3).each do |local_organization|
+    organizations.page(2).per(3).each do |local_organization|
       expect(local_organization.class).to eq(ZammadAPI::Resources::Organization)
       count += 1
     end

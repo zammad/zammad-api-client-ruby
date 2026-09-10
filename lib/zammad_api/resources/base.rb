@@ -18,6 +18,11 @@ module ZammadAPI
     class Base
       include AttributeAccess
 
+      # Largest page size Zammad's generic index endpoints serve, from
+      # ApplicationController#model_index_render via CanPaginate. Resources
+      # whose endpoint caps lower override this.
+      MAX_PER_PAGE = 1000
+
       # @return [Hash{Symbol => Array(Object, Object)}] staged changes as
       #   +attribute => [old_value, new_value]+
       attr_reader :changes

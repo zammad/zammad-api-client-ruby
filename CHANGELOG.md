@@ -10,9 +10,19 @@ A breaking release that modernises the whole gem. See
 - Minimum Ruby version is now 3.4.
 - `Collection#each` (`client.x.all`, `client.x.search`) now walks every page. Previously it
   fetched a single page, so iterating silently stopped at 100 records.
-- `page(number, per_page)` with a block was replaced by `page(number, per_page:)`, which
-  returns a new collection. `page_next` and `page_prev` were removed; use `page` or the new
-  `each_page`.
+- Collections are built up by chaining instead of by keyword arguments:
+  `all(per_page: 50)` is now `all.per(50)`, `all(active: true)` is `where(active: true)`,
+  and `search(query: 'zammad')` is `search('zammad')`.
+- `page(number, per_page)` with a block was replaced by `page(number)`, which returns a new
+  collection, and `per(size)` for the page size. `page_next` and `page_prev` were removed.
+- `Collection#each_page` was renamed to `#in_batches`, which also takes the page size as
+  `in_batches(of: 500)`.
+- `Collection#[]` was removed. It cost a request per index and ignored the page a
+  collection was limited to; use `first`, or `page(n).per(1).first` for one record at an
+  offset.
+- `Collection#per_page` and `#current_page` are no longer public. `inspect` reports both.
+- `where` rejects `page`, `per_page`, `expand` and `only_total_count` with an
+  `ArgumentError`. They used to be accepted and silently overridden.
 - `client.on_behalf_of = 'login'` and `client.perform_on_behalf_of` were replaced by
   `client.on_behalf_of('login')`, which returns a new client and also accepts a block.
 - `ZammadAPI::ResourceNotFoundError` is now `ZammadAPI::UnknownResourceError`, freeing the
@@ -35,7 +45,16 @@ A breaking release that modernises the whole gem. See
   (403), `NotFoundError` (404), `ValidationError` (422) and `RateLimitError` (429, with
   `#retry_after`). Network failures raise `ConnectionError` or `TimeoutError` instead of
   leaking Faraday exceptions.
-- `Collection#each_page`, `#where` and lazy enumeration.
+- `Collection#where`, `#page`, `#per`, `#in_batches`, `#find_each`, `#count` and lazy
+  enumeration, plus `client.x.where(...)` as a shorthand for `all.where(...)`.
+- `Collection#count` costs a single request on a search endpoint, which Zammad can count
+  without returning the records.
+- The page size is clamped to what an endpoint serves (100 for `/api/v1/tickets`, 200 for
+  a search, 1000 for the other index endpoints). Asking for more used to end iteration
+  after the first page, because Zammad capped the response and the short page read as the
+  end of the list.
+- `ZammadAPI::PaginationError`, raised when an endpoint answers a page with the page
+  before it, instead of paging forever.
 - `Base#reload`, `#persisted?`, `#[]`, `#fetch`, `#to_h` and a readable `#inspect`.
 - `ssl_verify`, `proxy`, `user_agent`, `retries` and `retry_interval` client options.
 - RBS signatures in `sig/`, verified by Steep in CI.

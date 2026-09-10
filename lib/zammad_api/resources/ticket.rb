@@ -8,6 +8,10 @@ module ZammadAPI
     class Ticket < Base
       path 'api/v1/tickets'
 
+      # /api/v1/tickets caps the page size at 100, unlike the generic index
+      # endpoints, see TicketsController#index.
+      MAX_PER_PAGE = 100
+
       # @return [Array<TicketArticle>] every article of this ticket
       # @raise [ResponseError] when Zammad rejected the request
       def articles

@@ -149,7 +149,7 @@ RSpec.describe ZammadAPI, 'ticket state object basics' do
   it 'pagination with all' do
     ticket_states = client.ticket_state.all
 
-    expect(ticket_states[0].class).to eq(ZammadAPI::Resources::TicketState)
+    expect(ticket_states.first.class).to eq(ZammadAPI::Resources::TicketState)
 
     count = 0
     ticket_states.each do |local_ticket_state|
@@ -160,17 +160,17 @@ RSpec.describe ZammadAPI, 'ticket state object basics' do
 
     count = 0
     ticket_states = client.ticket_state.all
-    ticket_states.page(1, per_page: 3).each do |local_ticket_state|
+    ticket_states.page(1).per(3).each do |local_ticket_state|
       expect(local_ticket_state.class).to eq(ZammadAPI::Resources::TicketState)
       count += 1
     end
     expect(count).to eq(3)
-    ticket_states.page(2, per_page: 3).each do |local_ticket_state|
+    ticket_states.page(2).per(3).each do |local_ticket_state|
       expect(local_ticket_state.class).to eq(ZammadAPI::Resources::TicketState)
       count += 1
     end
     expect(count).to eq(6)
-    ticket_states.page(3, per_page: 3).each do |local_ticket_state|
+    ticket_states.page(3).per(3).each do |local_ticket_state|
       expect(local_ticket_state.class).to eq(ZammadAPI::Resources::TicketState)
       count += 1
     end

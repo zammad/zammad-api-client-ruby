@@ -13,8 +13,13 @@ module ZammadAPI
   #   client.group.find(1)
   #   client.group.create(name: 'Support')
   #   client.group.all.each { |group| puts group.name }
-  #   client.group.search(query: 'support').first
+  #   client.group.where(active: true).first(5)
+  #   client.group.search('support').first
   class ResourceProxy
+    # Largest page size Zammad's search endpoints serve, from
+    # ApplicationController#model_search_render.
+    SEARCH_MAX_PER_PAGE = 200
+
     # @return [Class] the resource class this proxy operates on
     attr_reader :resource_class
 
@@ -71,27 +76,34 @@ module ZammadAPI
       true
     end
 
-    # All records of this kind, paginated automatically.
+    # Every record of this kind, as a lazily paginated collection.
     #
-    # @param per_page [Integer] records fetched per request
-    # @param query [Hash] additional query parameters
     # @return [Collection]
-    def all(per_page: Collection::DEFAULT_PER_PAGE, **query)
-      collection(path, 'get .all of object', per_page: per_page, query: query)
+    def all
+      collection(path, 'get .all of object')
     end
 
-    # Records matching a search term, paginated automatically.
+    # Records matching Zammad query parameters, as a lazily paginated
+    # collection. Shorthand for +all.where(...)+.
     #
-    # @param query [String] the Zammad search term
-    # @param per_page [Integer] records fetched per request
-    # @param params [Hash] additional query parameters
+    # @param params [Hash] Zammad query parameters, e.g. +active:+
     # @return [Collection]
-    def search(query:, per_page: Collection::DEFAULT_PER_PAGE, **params)
+    def where(**params) = all.where(**params)
+
+    # Records matching a Zammad search term, as a lazily paginated collection.
+    #
+    # @param term [String] the Zammad search term
+    # @return [Collection]
+    # @raise [ArgumentError] when +term+ is not a non-empty string
+    def search(term)
+      raise ArgumentError, 'search needs a non-empty query string' if !term.is_a?(String) || term.strip.empty?
+
       collection(
         "#{path}/search",
         'get .search of object',
-        per_page: per_page,
-        query:    params.merge(query: query)
+        query:        { query: term },
+        max_per_page: SEARCH_MAX_PER_PAGE,
+        countable:    true
       )
     end
 
@@ -99,13 +111,14 @@ module ZammadAPI
 
     private
 
-    def collection(path, operation, per_page:, query:)
+    def collection(path, operation, query: {}, max_per_page: resource_class::MAX_PER_PAGE, countable: false)
       Collection.new(
         transport:      @transport,
         resource_class: resource_class,
         path:           path,
         operation:      operation,
-        per_page:       per_page,
+        max_per_page:   max_per_page,
+        countable:      countable,
         query:          { expand: true }.merge(query)
       )
     end

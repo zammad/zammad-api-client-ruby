@@ -104,15 +104,26 @@ RSpec.describe ZammadAPI::ResourceProxy do
     end
 
     it 'defaults to the collection page size' do
-      expect(proxy.all.per_page).to eq(ZammadAPI::Collection::DEFAULT_PER_PAGE)
+      stub = stub_request(:get, url)
+        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => ZammadAPI::Collection::DEFAULT_PER_PAGE.to_s })
+        .to_return(json_response([]))
+
+      proxy.all.to_a
+      expect(stub).to have_been_requested
     end
 
-    it 'accepts extra query parameters' do
+    it 'takes no arguments' do
+      expect { proxy.all(active: true) }.to raise_error(ArgumentError)
+    end
+  end
+
+  describe '#where' do
+    it 'returns a collection carrying the query parameters' do
       stub = stub_request(:get, url)
         .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => '100', 'active' => 'true' })
         .to_return(json_response([]))
 
-      proxy.all(active: true).to_a
+      proxy.where(active: true).to_a
       expect(stub).to have_been_requested
     end
   end
@@ -123,21 +134,29 @@ RSpec.describe ZammadAPI::ResourceProxy do
         .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => '100', 'query' => 'support' })
         .to_return(json_response([]))
 
-      proxy.search(query: 'support').to_a
+      proxy.search('support').to_a
       expect(stub).to have_been_requested
     end
 
-    it 'accepts extra query parameters' do
+    it 'takes extra query parameters through where' do
       stub = stub_request(:get, "#{url}/search")
         .with(query: hash_including('query' => 'support', 'limit' => '5'))
         .to_return(json_response([]))
 
-      proxy.search(query: 'support', limit: 5).to_a
+      proxy.search('support').where(limit: 5).to_a
       expect(stub).to have_been_requested
     end
 
-    it 'requires a query' do
+    it 'requires a term' do
       expect { proxy.search }.to raise_error(ArgumentError)
+    end
+
+    it 'rejects an empty term' do
+      expect { proxy.search('  ') }.to raise_error(ArgumentError, /non-empty query string/)
+    end
+
+    it 'rejects a term that is not a string' do
+      expect { proxy.search(42) }.to raise_error(ArgumentError, /non-empty query string/)
     end
   end
 

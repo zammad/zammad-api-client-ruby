@@ -28,7 +28,7 @@ end
 
 # `lazy` stops fetching as soon as we stop consuming, so a large result set
 # does not have to be downloaded in full.
-candidates = client.ticket.search(query: 'state.name:open').lazy.first(200)
+candidates = client.ticket.search('state.name:open').lazy.first(200)
 
 escalated = 0
 nudged    = 0

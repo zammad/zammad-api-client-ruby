@@ -3,7 +3,7 @@
 
 # Exports every ticket to CSV.
 #
-# Demonstrates: automatic pagination, `each_page` for batching, a derived
+# Demonstrates: automatic pagination, `in_batches` for batching, a derived
 # client with a longer timeout for a long-running job, and `fetch` for
 # attributes that must be present.
 #
@@ -41,9 +41,9 @@ end
 CSV.open(destination, 'w') do |csv|
   csv << %w[id number title state priority group customer created_at]
 
-  # `each` walks every page; nothing is loaded until it is iterated, and
-  # `each_page` lets us report progress per batch rather than per record.
-  export_client.ticket.all(per_page: 100).each_page do |tickets|
+  # Nothing is loaded until it is iterated, and `in_batches` lets us report
+  # progress per batch rather than per record.
+  export_client.ticket.all.in_batches(of: 100) do |tickets|
     tickets.each do |ticket|
       csv << [
         ticket.fetch(:id),        # must exist; raises KeyError otherwise

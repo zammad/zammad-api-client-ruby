@@ -21,12 +21,12 @@ company, email, firstname, lastname = ARGV
 abort "usage: #{$PROGRAM_NAME} COMPANY EMAIL FIRSTNAME LASTNAME" if [company, email, firstname, lastname].any?(&:nil?)
 
 # Reuse the organization if it already exists.
-organization = client.organization.search(query: company).find { it.name == company } ||
+organization = client.organization.search(company).find { it.name == company } ||
                client.organization.create(name: company, note: 'Created by onboard_customer.rb')
 
 puts "organization: #{organization.name} (id=#{organization.id})"
 
-user = client.user.search(query: email).find { it.email == email } ||
+user = client.user.search(email).find { it.email == email } ||
        client.user.create(
          firstname:       firstname,
          lastname:        lastname,

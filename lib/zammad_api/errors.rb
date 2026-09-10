@@ -46,6 +46,18 @@ module ZammadAPI
     end
   end
 
+  # Raised when the server answers a page request with the page before it,
+  # which means it is ignoring +page+ and a collection walk would never end.
+  class PaginationError < Error
+    # @param operation [String]
+    # @param page [Integer] the page that repeated its predecessor
+    # @param resource_class [Class, nil]
+    # @return [PaginationError]
+    def self.build(operation:, page:, resource_class: nil)
+      new("Can't #{subject_for(operation, resource_class)}: page #{page} repeated page #{page - 1}, so the endpoint is ignoring the page parameter")
+    end
+  end
+
   # Base class for errors carrying an HTTP response.
   #
   # Use {.build} rather than +new+ to get the most specific subclass for a

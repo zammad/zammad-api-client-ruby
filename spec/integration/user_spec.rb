@@ -159,7 +159,7 @@ RSpec.describe ZammadAPI, 'user object basics' do
 
     users = client.user.all
 
-    expect(users[0].class).to eq(ZammadAPI::Resources::User)
+    expect(users.first.class).to eq(ZammadAPI::Resources::User)
     count = 0
     users.each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
@@ -169,18 +169,18 @@ RSpec.describe ZammadAPI, 'user object basics' do
 
     count = 0
     users = client.user.all
-    users.page(1, per_page: 4).each do |local_user|
+    users.page(1).per(4).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end
     expect(count).to eq(4)
-    users.page(2, per_page: 5).each do |local_user|
+    users.page(2).per(5).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end
     expect(count).to eq(9)
     count = 0
-    users.page(1, per_page: 200).each do |local_user|
+    users.page(1).per(200).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end
@@ -188,7 +188,7 @@ RSpec.describe ZammadAPI, 'user object basics' do
   end
 
   it 'search' do
-    users = client.user.search(query: firstname)
+    users = client.user.search(firstname)
 
     user_exists = nil
     users.each do |local_user|
@@ -224,9 +224,9 @@ RSpec.describe ZammadAPI, 'user object basics' do
   end
 
   it 'pagination with search' do
-    users = client.user.search(query: firstname)
+    users = client.user.search(firstname)
 
-    expect(users[0].class).to eq(ZammadAPI::Resources::User)
+    expect(users.first.class).to eq(ZammadAPI::Resources::User)
 
     count = 0
     user_exists = nil
@@ -250,13 +250,13 @@ RSpec.describe ZammadAPI, 'user object basics' do
     expect(user_exists.updated_by).to eq('admin@example.com')
 
     count = 0
-    users = client.user.search(query: firstname)
-    users.page(1, per_page: 3).each do |local_user|
+    users = client.user.search(firstname)
+    users.page(1).per(3).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end
     expect(count).to eq(1)
-    users.page(2, per_page: 3).each do |local_user|
+    users.page(2).per(3).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end

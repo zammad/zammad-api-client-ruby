@@ -30,13 +30,13 @@ CURSOR_FILE = ENV.fetch('CURSOR_FILE', File.join(Dir.tmpdir, 'zammad_batch_curso
 
 # 1. Pull one page at a time -------------------------------------------------
 #
-# `each_page` without a block returns an Enumerator, so you can ask for the
+# `in_batches` without a block returns an Enumerator, so you can ask for the
 # next page when you are ready for it instead of being called back. Nothing is
 # fetched until `next`, and each `next` costs exactly one request.
 
 puts '1. Pull pages on demand'
 
-pages = client.ticket.all(per_page: PER_PAGE).each_page
+pages = client.ticket.all.in_batches(of: PER_PAGE)
 
 2.times do
   batch = pages.next
@@ -56,7 +56,7 @@ puts "   stopped after two pages; the rest was never fetched\n\n"
 
 puts '2. Batches of 12 records, fetched 5 per request'
 
-client.ticket.all(per_page: PER_PAGE).each.each_slice(12).with_index(1) do |batch, index|
+client.ticket.all.find_each(batch_size: PER_PAGE).each_slice(12).with_index(1) do |batch, index|
   puts "   batch #{index}: #{batch.size} tickets (ids #{batch.first.id}..#{batch.last.id})"
 end
 puts
@@ -64,19 +64,20 @@ puts
 # 3. An explicit, resumable page loop ---------------------------------------
 #
 # When a job must survive being interrupted, own the page number and persist
-# it. A page shorter than per_page means the list is exhausted.
+# it. A page shorter than the page size means the list is exhausted.
 
 puts '3. Resumable page loop'
 
 start_page = File.exist?(CURSOR_FILE) ? Integer(File.read(CURSOR_FILE).strip) : 1
 puts "   resuming at page #{start_page} (cursor: #{CURSOR_FILE})"
 
+tickets    = client.ticket.all.per(PER_PAGE)
 page       = start_page
 processed  = 0
 pages_done = 0
 
 loop do
-  batch = client.ticket.all.page(page, per_page: PER_PAGE).to_a
+  batch = tickets.page(page).to_a
   break if batch.empty?
 
   processed  += batch.size
@@ -112,7 +113,7 @@ page = 1
   # Bounded on purpose: an instance that keeps returning 429 would otherwise
   # make this loop sleep and retry forever with no way out.
   batch = begin
-    client.ticket.all.page(page, per_page: PER_PAGE).to_a
+    tickets.page(page).to_a
   rescue ZammadAPI::RateLimitError => e
     attempt += 1
     raise if attempt > MAX_RATE_LIMIT_RETRIES
@@ -134,8 +135,9 @@ puts <<~NOTE
 
   Which to reach for:
 
-    each / each_page   the loop is yours and runs to completion
-    each_page.next     you want to pull batches as a consumer is ready
-    each.each_slice(n) batch size should not be tied to the API page size
-    page(n, per_page:) the page number must be persisted, retried or skipped
+    each / find_each        the loop is yours and runs to completion
+    in_batches              you want an array of records per request
+    in_batches.next         you want to pull batches as a consumer is ready
+    find_each.each_slice(n) batch size should not be tied to the API page size
+    page(n).per(m)          the page number must be persisted, retried or skipped
 NOTE

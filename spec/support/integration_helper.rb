@@ -48,7 +48,7 @@ class Helper
   # Proving that the configured credentials work answers the only question
   # that matters here.
   def self.verify_setup_done!
-    ZammadAPI::Client.new(**config).group.all.page(1, per_page: 1).to_a
+    ZammadAPI::Client.new(**config).group.all.page(1).per(1).to_a
     true
   rescue ZammadAPI::Error => e
     raise SetupError,

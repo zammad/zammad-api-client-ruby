@@ -80,7 +80,7 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
 
     articles = ticket.articles
     expect(articles.length).to eq(1)
-    expect(articles[0].class).to eq(ZammadAPI::Resources::TicketArticle)
+    expect(articles.first.class).to eq(ZammadAPI::Resources::TicketArticle)
     expect(articles[0].subject).to eq('some subject')
     expect(articles[0].body).to eq('some body')
 
@@ -188,7 +188,7 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
     end
 
     tickets = client.ticket.all
-    expect(tickets[0].class).to eq(ZammadAPI::Resources::Ticket)
+    expect(tickets.first.class).to eq(ZammadAPI::Resources::Ticket)
     count = 0
     tickets.each do |local_ticket|
       expect(local_ticket.class).to eq(ZammadAPI::Resources::Ticket)
@@ -198,17 +198,17 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
 
     count = 0
     tickets = client.ticket.all
-    tickets.page(1, per_page: 5).each do |local_ticket|
+    tickets.page(1).per(5).each do |local_ticket|
       expect(local_ticket.class).to eq(ZammadAPI::Resources::Ticket)
       count += 1
     end
     expect(count).to eq(5)
-    tickets.page(2, per_page: 5).each do |local_ticket|
+    tickets.page(2).per(5).each do |local_ticket|
       expect(local_ticket.class).to eq(ZammadAPI::Resources::Ticket)
       count += 1
     end
     expect(count).to eq(10)
-    tickets.page(3, per_page: 5).each do |local_ticket|
+    tickets.page(3).per(5).each do |local_ticket|
       expect(local_ticket.class).to eq(ZammadAPI::Resources::Ticket)
       count += 1
     end

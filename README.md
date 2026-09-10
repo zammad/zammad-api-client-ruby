@@ -8,7 +8,8 @@ Ruby client for the Zammad API v1.0.
 - Requires **Ruby 3.4** or later.
 - Ships **RBS signatures** in `sig/`, so typed projects get completion and checking out of the box.
 - Requests carry **timeouts** and **retry with backoff** for transient failures by default.
-- Collections are **lazily paginated** `Enumerable`s.
+- Collections are **lazily paginated** `Enumerable`s, with a familiar
+  `where` / `page` / `per` / `in_batches` / `find_each` surface.
 - Records support **pattern matching**, and clients are **immutable** and safe to share
   between threads.
 
@@ -164,8 +165,8 @@ client.group.destroy(42) # delete by id, without fetching first
 
 ## Collections
 
-`all` and `search` return a lazily paginated `ZammadAPI::Collection`. No request is made
-until you iterate, and pages are fetched as needed.
+`all`, `where` and `search` return a lazily paginated `ZammadAPI::Collection`. No request
+is made until you iterate, and pages are fetched as needed.
 
 ```ruby
 # Walks every page automatically.
@@ -179,33 +180,66 @@ first_five = client.ticket.all.first(5)
 # Lazy chains work as expected.
 client.ticket.all.lazy.select { |t| t.state == 'open' }.first(10)
 
-# Page at a time, e.g. for bulk import.
-client.ticket.all.each_page do |tickets|
+# One array of records per request, e.g. for a bulk import.
+client.ticket.all.in_batches(of: 500) do |tickets|
   import(tickets)
 end
+
+# Record by record, with the page size set inline.
+client.ticket.all.find_each(batch_size: 500) do |ticket|
+  archive(ticket)
+end
 ```
+
+### Filters
+
+```ruby
+client.ticket.where(state: 'open').first(10)   # a filtered collection
+client.group.all.where(active: true)           # the same, from an existing collection
+```
+
+`where` takes Zammad query parameters, such as `sort_by` where the endpoint supports it.
+Paging is not one of them: that is what `page` and `per` are for, and passing `page:` or
+`per_page:` to `where` raises `ArgumentError` rather than being silently ignored.
 
 ### Search
 
 ```ruby
-client.organization.search(query: 'zammad').each do |organization|
+client.organization.search('zammad').each do |organization|
   puts organization.name
 end
 ```
 
-### Explicit pages and filters
+### Explicit pages
 
 ```ruby
-collection = client.group.all(per_page: 50)
+tickets = client.ticket.all.per(50)
 
-collection.page(2)                  # a new collection limited to page 2
-collection.page(2, per_page: 10)    # with a different page size
-collection.where(active: true)      # a new collection with extra query params
-collection[0]                       # the first record
+tickets.page(2)           # a new collection limited to page 2
+tickets.page(2).per(10)   # ... with a different page size
 ```
 
-Collections are immutable: `page` and `where` return a new collection and leave the
+Collections are immutable: `where`, `page` and `per` return a new collection and leave the
 original untouched.
+
+### Page size
+
+`per` sets how many records one request fetches, 100 by default. Zammad caps the page size
+per endpoint — 100 for `/api/v1/tickets`, 200 for a search, 1000 for the other index
+endpoints — and a larger size is reduced to what the endpoint serves. That keeps a walk
+complete: a page size the server silently shrank would otherwise end the iteration at the
+first page.
+
+### Counting
+
+`count` walks the pages, except on a search, which Zammad can count in a single request:
+
+```ruby
+client.ticket.search('state.name:open').count   # one request
+client.ticket.all.count                         # one request per page
+```
+
+Nothing is cached, so every traversal of a collection fetches again.
 
 ## Deriving clients
 
@@ -251,6 +285,7 @@ ZammadAPI::Error
 ├── ZammadAPI::ConfigurationError    invalid client options
 ├── ZammadAPI::UnknownResourceError  no such resource, e.g. client.unicorn
 ├── ZammadAPI::ParseError            unexpected response shape
+├── ZammadAPI::PaginationError       endpoint ignored the page parameter
 ├── ZammadAPI::TransportError
 │   ├── ZammadAPI::ConnectionError   unreachable host or TLS failure
 │   └── ZammadAPI::TimeoutError      exceeded timeout or open_timeout
@@ -370,8 +405,13 @@ compatibility. Most calling code needs no edits; the table lists everything that
 | 1.x                                   | 2.0                                              | Why                                                                 |
 | ------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------- |
 | `collection.each` stopped after one page | `each` walks every page                        | Iterating a collection silently truncated at 100 records            |
-| `collection.page(1, 3) { \|r\| ... }`  | `collection.page(1, per_page: 3).each { ... }`   | `page` now returns a collection instead of mutating and yielding    |
-| `collection.page_next` / `page_prev`   | `collection.page(n)` or `each_page`              | Removed; they mutated shared state                                  |
+| `collection.page(1, 3) { \|r\| ... }`  | `collection.page(1).per(3).each { ... }`         | `page` now returns a collection instead of mutating and yielding    |
+| `collection.page_next` / `page_prev`   | `collection.page(n)` or `in_batches`             | Removed; they mutated shared state                                  |
+| `client.x.all(per_page: 50)`           | `client.x.all.per(50)`                           | Page size is chainable instead of an argument at every entry point  |
+| `client.x.all(active: true)`           | `client.x.where(active: true)`                   | Filters no longer share a keyword bag with the paging parameters    |
+| `client.x.search(query: 'zammad')`     | `client.x.search('zammad')`                      | The search term is the argument, not a keyword                      |
+| `collection.each_page { ... }`         | `collection.in_batches { ... }`                  | Ruby already has a name for this                                    |
+| `collection[3]`                        | `collection.page(4).per(1).first`                | An index that costs a request, and that ignored `page`, was a trap  |
 | `client.on_behalf_of = 'login'`        | `client.on_behalf_of('login')` → new client      | The setter mutated the client and leaked across threads             |
 | `client.perform_on_behalf_of('x') { }` | `client.on_behalf_of('x') { \|scoped\| ... }`    | The old block form left the header set if the block raised          |
 | `ZammadAPI::ResourceNotFoundError`     | `ZammadAPI::UnknownResourceError`                | Renamed so it is not confused with a 404, now `NotFoundError`       |
@@ -384,7 +424,7 @@ compatibility. Most calling code needs no edits; the table lists everything that
 | `ZammadAPI::Log`, `ZammadAPI::JsonHelper` | removed                                       | Pass any `Logger` as `logger:`; decoding moved into the transport   |
 | Ruby >= 3.0                            | Ruby >= 3.4                                      | 3.0 through 3.3 are end-of-life or nearly so                        |
 
-Unchanged: `client.<resource>.find/all/search/create/new`, `record.save`, `record.destroy`,
+Unchanged: `client.<resource>.find/all/create/new`, `record.save`, `record.destroy`,
 `record.changes`, `record.attributes`, attribute readers and writers, `ticket.articles`,
 `ticket.article`, and `attachment.download`.
 
