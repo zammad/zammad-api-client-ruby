@@ -314,6 +314,37 @@ would be a poor trade. `belongs_to` targets are memoized, and `reload` or a save
 memo; `has_many` lists are fetched each call, so an article added in between shows up.
 `Ticket.associations` lists what a resource declares.
 
+### Comparing and serializing
+
+A record is the Zammad record it came from, not the object that happens to hold it, so two
+records of the same kind carrying the same id are equal. That makes `uniq`, `Set`, `include?`
+and records-as-Hash-keys behave:
+
+```ruby
+client.ticket.find(1) == client.ticket.find(1)  # => true
+
+[client.ticket.find(1), client.ticket.find(1)].uniq.size # => 1
+Set[client.ticket.find(1), client.ticket.find(1)].size   # => 1
+seen = { client.ticket.find(1) => :handled }
+seen[client.ticket.find(1)]                              # => :handled
+```
+
+A record with no id is equal only to itself, because two unsaved records are two records
+waiting to be created however alike their attributes are. One consequence: a record's first
+save assigns its id and so changes its hash, and a record used as a Hash key before that
+save has to be rehashed after it.
+
+`to_json` renders the attributes, so a record can be cached, queued or logged as it stands,
+and nests inside a structure being generated:
+
+```ruby
+client.group.find(1).to_json          # => "{\"id\":1,\"name\":\"Support\"}"
+JSON.generate(group: client.group.find(1))
+```
+
+`as_json` returns the same attributes as a Hash, for ActiveSupport and any encoder that
+follows its convention.
+
 ### Reload and destroy
 
 ```ruby

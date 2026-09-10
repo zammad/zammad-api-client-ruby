@@ -117,6 +117,15 @@ A breaking release that modernises the whole gem. See
   than on the record because Zammad expands an association into a name under the plain
   attribute, and `ticket.customer` has to keep returning that name rather than turning
   into a request. `Resource.associations` lists what a resource declares.
+- Records compare as the Zammad records they came from: two records of the same kind with
+  the same id are equal, and `#hash` agrees, so `uniq`, `Set`, `include?` and records as
+  Hash keys all work. They previously compared by object identity, so the same ticket
+  fetched twice was two unequal records. A record with no id stays equal only to itself,
+  which means its first save changes its hash and a record used as a Hash key before that
+  save has to be rehashed after it.
+- `record.to_json` and `record.as_json` render a record's attributes. `to_json` previously
+  fell through to `Object#to_json`, which serialized a record as the string
+  `"#<ZammadAPI::Resources::Ticket:0x...>"`.
 
 ### Fixed
 
