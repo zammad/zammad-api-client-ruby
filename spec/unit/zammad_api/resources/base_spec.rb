@@ -89,6 +89,49 @@ RSpec.describe ZammadAPI::Resources::Base do
     end
   end
 
+  describe 'attribute state a record hands out' do
+    subject(:group) { client.group.new(name: 'Support', preferences: { 'note' => 'keep' }) }
+
+    it 'cannot be written through #attributes, which would not stage a change' do
+      expect { group.attributes[:name] = 'Sneaky' }.to raise_error(FrozenError)
+    end
+
+    it 'cannot be written through a nested value' do
+      expect { group.attributes[:preferences][:note] = 'Sneaky' }.to raise_error(FrozenError)
+    end
+
+    it 'cannot be written through #changes, which would decide what save sends' do
+      group.name = 'Renamed'
+      expect { group.changes[:name] = %w[a b] }.to raise_error(FrozenError)
+    end
+
+    it 'still records a change through the writer' do
+      group.name = 'Renamed'
+      expect(group.changes).to eq(name: %w[Support Renamed])
+    end
+
+    it 'does not report a change that was never staged' do
+      group.to_h[:name] = 'Sneaky'
+      expect(group).not_to be_changed
+    end
+
+    it 'keeps a value the caller mutates after assigning it' do
+      note = +'Mutable'
+      group.note = note
+      note << ' changed'
+
+      expect(group.note).to eq('Mutable')
+    end
+
+    it 'freezes attributes adopted from a response' do
+      stub_request(:post, url).with(query: hash_including({}))
+        .to_return(json_response({ id: 7, preferences: { note: 'from the server' } }, status: 201))
+
+      group.save!
+      expect { group.attributes[:preferences][:note] << '!' }.to raise_error(FrozenError)
+    end
+  end
+
   describe '#save' do
     context 'with a new record' do
       subject(:group) { client.group.new(name: 'Support') }

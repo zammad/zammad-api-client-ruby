@@ -8,7 +8,7 @@ RSpec.describe ZammadAPI::AttributeAccess do
       include ZammadAPI::AttributeAccess
 
       def initialize(attributes)
-        @attributes = deep_symbolize(attributes)
+        @attributes = frozen_attributes(attributes)
       end
     end
   end
@@ -66,6 +66,42 @@ RSpec.describe ZammadAPI::AttributeAccess do
 
     it 'returns a copy from #to_h' do
       record.to_h[:name] = 'changed'
+      expect(record.name).to eq('Support')
+    end
+  end
+
+  describe 'immutability' do
+    it 'freezes the attribute hash' do
+      expect { record.attributes[:name] = 'changed' }.to raise_error(FrozenError)
+    end
+
+    it 'freezes a nested hash' do
+      expect { record.attributes[:preferences][:notes] = [] }.to raise_error(FrozenError)
+    end
+
+    it 'freezes a nested array' do
+      expect { record.attributes[:preferences][:notes] << {} }.to raise_error(FrozenError)
+    end
+
+    it 'freezes a hash inside an array' do
+      expect { record.attributes[:preferences][:notes].first[:body] = 'changed' }.to raise_error(FrozenError)
+    end
+
+    it 'freezes a string value' do
+      expect { record.name << '!' }.to raise_error(FrozenError)
+    end
+
+    it 'hands out a deep copy from #to_h' do
+      copy = record.to_h
+      copy[:preferences][:notes].first[:body] = 'changed'
+
+      expect(record.attributes[:preferences][:notes].first[:body]).to eq('hello')
+    end
+
+    it 'hands out mutable strings from #to_h' do
+      copy = record.to_h
+      copy[:name] << '!'
+
       expect(record.name).to eq('Support')
     end
   end

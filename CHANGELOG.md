@@ -33,6 +33,10 @@ A breaking release that modernises the whole gem. See
   both, because no attribute the caller can fix would change the outcome.
   `client.<resource>.create` uses `save!`, so it keeps raising rather than returning a
   record that looks created but is not.
+- `record.attributes` and `record.changes` are deeply frozen, and `record.to_h` returns a
+  deep copy rather than a shallow one. Writing through either reader used to change what a
+  record reported without staging anything, so the next `save` did not send it, and a
+  nested hash from `to_h` was shared with the record.
 - `ZammadAPI::Error` descends from `StandardError` instead of `RuntimeError`.
 - `ResponseError#response` returns a `ZammadAPI::Response`, not a Faraday object, and
   `#body` is the decoded payload rather than a raw JSON string.

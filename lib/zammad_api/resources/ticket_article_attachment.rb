@@ -17,7 +17,7 @@ module ZammadAPI
       # @param attributes [Hash]
       def initialize(transport, attributes = {})
         @transport  = transport
-        @attributes = deep_symbolize(attributes || {})
+        @attributes = frozen_attributes(attributes || {})
       end
 
       # Downloads the attachment.

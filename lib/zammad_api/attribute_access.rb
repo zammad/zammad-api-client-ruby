@@ -12,7 +12,13 @@ module ZammadAPI
     # than an attribute, so that typos like +save!+ still raise NoMethodError.
     NON_ATTRIBUTE_SUFFIXES = %w[! ?].freeze
 
-    # @return [Hash{Symbol => Object}] all known attributes
+    # All known attributes, deeply frozen.
+    #
+    # Writing through this hash would change what the record reports without
+    # staging a change, so the next +save+ would not send it. {#to_h} returns a
+    # copy that is safe to modify; an attribute writer is the way to stage one.
+    #
+    # @return [Hash{Symbol => Object}]
     attr_reader :attributes
 
     # @param key [Symbol, String]
@@ -38,8 +44,9 @@ module ZammadAPI
     # @return [Boolean]
     def key?(key) = attributes.key?(key.to_sym)
 
-    # @return [Hash{Symbol => Object}] a copy of all attributes
-    def to_h = attributes.dup
+    # @return [Hash{Symbol => Object}] a deep copy of all attributes, safe to
+    #   modify
+    def to_h = deep_dup(attributes)
 
     # @return [Integer, nil]
     def id = attributes[:id]
@@ -82,11 +89,29 @@ module ZammadAPI
     end
 
     # Recursively converts string keys to symbols, including inside arrays, so
-    # that user supplied attributes behave the same as decoded responses.
-    def deep_symbolize(value)
+    # that user supplied attributes behave the same as decoded responses, and
+    # freezes the result.
+    #
+    # The freezing is what makes {#attributes} safe to expose: a record that
+    # handed out a writable hash would report changes it never staged and so
+    # never sent. Strings are copied before being frozen, so freezing a value
+    # the caller passed in does not reach back into their own variable.
+    def frozen_attributes(value)
       case value
-      when Hash  then value.to_h { |key, nested| [key.respond_to?(:to_sym) ? key.to_sym : key, deep_symbolize(nested)] }
-      when Array then value.map { deep_symbolize(it) }
+      when Hash   then value.to_h { |key, nested| [key.respond_to?(:to_sym) ? key.to_sym : key, frozen_attributes(nested)] }.freeze
+      when Array  then value.map { frozen_attributes(it) }.freeze
+      when String then value.dup.freeze
+      else value
+      end
+    end
+
+    # The inverse of {#frozen_attributes}, for handing out a copy that callers
+    # may treat as their own.
+    def deep_dup(value)
+      case value
+      when Hash   then value.to_h { |key, nested| [key, deep_dup(nested)] }
+      when Array  then value.map { deep_dup(it) }
+      when String then value.dup
       else value
       end
     end

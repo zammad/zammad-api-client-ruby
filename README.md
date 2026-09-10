@@ -140,11 +140,20 @@ group = client.group.find(42)
 group.name       # => "Support"
 group[:name]     # same, without method_missing
 group.fetch(:name) # raises KeyError if the attribute is absent
-group.to_h       # every attribute as a Hash
+group.to_h       # every attribute, as a Hash you may modify
 ```
 
 Zammad records can carry administrator-defined custom attributes, so an unknown reader
 returns `nil` rather than raising. Use `fetch` when a missing attribute should be an error.
+
+`attributes` and `changes` are deeply frozen, because a record that let you write into
+them would report a change it had never staged and would not send:
+
+```ruby
+group.attributes[:name] = 'Support 2' # FrozenError
+group.name = 'Support 2'              # the way to stage a change
+group.to_h                            # a deep copy, yours to modify
+```
 
 ### Pattern matching
 

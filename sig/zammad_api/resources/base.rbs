@@ -5,12 +5,12 @@ module ZammadAPI
 
       MAX_PER_PAGE: Integer
 
-      attr_reader changes: Hash[Symbol, Array[untyped]]
       attr_reader error: ValidationError?
       attr_reader transport: Transport
 
       @new_record: bool
       @error: ValidationError?
+      @changes: Hash[Symbol, Array[untyped]]
 
       def self.path: (String) -> void
       def self.resource_path: () -> String
@@ -19,6 +19,7 @@ module ZammadAPI
       def initialize: (Transport, ?Hash[untyped, untyped]? attributes) -> void
       def new_record?: () -> bool
       def persisted?: () -> bool
+      def changes: () -> Hash[Symbol, Array[untyped]]
       def changed?: () -> bool
       def save: () -> bool
       def save!: () -> true

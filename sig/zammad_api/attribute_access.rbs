@@ -18,6 +18,7 @@ module ZammadAPI
     private
 
     def write_attribute: (Symbol, untyped) -> untyped
-    def deep_symbolize: (untyped) -> untyped
+    def frozen_attributes: (untyped) -> untyped
+    def deep_dup: (untyped) -> untyped
   end
 end

@@ -23,9 +23,13 @@ module ZammadAPI
       # whose endpoint caps lower override this.
       MAX_PER_PAGE = 1000
 
-      # @return [Hash{Symbol => Array(Object, Object)}] staged changes as
-      #   +attribute => [old_value, new_value]+
-      attr_reader :changes
+      # Staged changes as +attribute => [old_value, new_value]+.
+      #
+      # A copy, and frozen: writing to the change set a record hands out would
+      # decide what the next +save+ sends.
+      #
+      # @return [Hash{Symbol => Array(Object, Object)}]
+      def changes = @changes.dup.freeze
 
       # The validation failure from the most recent {#save}, so that a +false+
       # return value can be acted on. Cleared by a successful save.
@@ -67,7 +71,7 @@ module ZammadAPI
       # @param attributes [Hash, nil]
       def initialize(transport, attributes = {})
         @transport  = transport
-        @attributes = deep_symbolize(attributes || {})
+        @attributes = frozen_attributes(attributes || {})
         @changes    = {}
         @new_record = true
         @error      = nil
@@ -80,7 +84,7 @@ module ZammadAPI
       def persisted? = !@new_record
 
       # @return [Boolean] whether there are unsaved changes
-      def changed? = !changes.empty?
+      def changed? = !@changes.empty?
 
       # Creates or updates the record, reporting a validation failure as
       # +false+ rather than by raising.
@@ -118,7 +122,7 @@ module ZammadAPI
       def save!
         response = new_record? ? create_record : update_record
 
-        @attributes = response.decoded(:object, operation: 'save object', resource_class: self.class)
+        @attributes = frozen_attributes(response.decoded(:object, operation: 'save object', resource_class: self.class))
         @changes    = {}
         @new_record = false
         @error      = nil
@@ -137,7 +141,7 @@ module ZammadAPI
           resource_class: self.class,
           query:          { expand: true }
         )
-        @attributes = response.decoded(:object, operation: 'reload object', resource_class: self.class)
+        @attributes = frozen_attributes(response.decoded(:object, operation: 'reload object', resource_class: self.class))
         @changes    = {}
         @new_record = false
         @error      = nil
@@ -166,16 +170,19 @@ module ZammadAPI
       # still report the original, and writing a value back to the original
       # is not a change at all.
       def write_attribute(key, value)
+        staged   = frozen_attributes(value)
         original = @changes.key?(key) ? @changes[key].first : @attributes[key]
 
-        if original == value
+        if original == staged
           @changes.delete(key)
         else
-          @changes[key] = [original, value]
+          @changes[key] = [original, staged].freeze
         end
 
-        @attributes[key] = value
-        value
+        # Copy on write, because @attributes is frozen for the benefit of
+        # every reader that hands it out.
+        @attributes = @attributes.merge(key => staged).freeze
+        staged
       end
 
       def create_record
@@ -194,7 +201,7 @@ module ZammadAPI
           operation:      'save object',
           resource_class: self.class,
           query:          { expand: true },
-          body:           changes.transform_values { it[1] }
+          body:           @changes.transform_values { it[1] }
         )
       end
 
