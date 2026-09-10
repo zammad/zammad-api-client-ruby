@@ -65,6 +65,8 @@ Naming/PredicateMethod:
   AllowedMethods:
     - save
     - save!
+    - update
+    - update!
     - destroy
 
 Style/Documentation:

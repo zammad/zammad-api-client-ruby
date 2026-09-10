@@ -71,6 +71,9 @@ A breaking release that modernises the whole gem. See
 - `ZammadAPI::PaginationError`, raised when an endpoint answers a page with the page
   before it, instead of paging forever.
 - `Base#reload`, `#persisted?`, `#[]`, `#fetch`, `#to_h` and a readable `#inspect`.
+- `record.update(attributes)`, `record.update!(attributes)` and
+  `record.assign_attributes(attributes)`. Applying a hash of changes previously meant one
+  writer call per attribute before `save`.
 - `ssl_verify`, `proxy`, `user_agent`, `retries` and `retry_interval` client options.
 - `adapter` and `middleware` client options, the seam into the Faraday stack. Swapping in a
   persistent-connection adapter or adding instrumentation previously meant that the HTTP

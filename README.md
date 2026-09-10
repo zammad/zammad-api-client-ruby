@@ -214,6 +214,13 @@ group.changes  # => {name: ["Support", "Support 2"]}
 group.save     # sends only the changed attributes
 ```
 
+Or in one call:
+
+```ruby
+group.update(name: 'Support 2', note: 'Renamed')  # assigns, then saves
+group.assign_attributes(name: 'Support 3')        # assigns without saving
+```
+
 ### Saving and validation failures
 
 `save` returns whether the record was stored, and leaves a rejection in `error`:
@@ -232,10 +239,12 @@ Only a rejection of the attributes (HTTP 422) is reported that way. An expired t
 missing record or an unreachable instance still raises, because those are not something
 the calling code can correct by fixing an attribute.
 
-`save!` raises on every failure, including validation, which is what you want in a script:
+`save!` and `update!` raise on every failure, including validation, which is what you want
+in a script:
 
 ```ruby
-group.save! # raises ZammadAPI::ValidationError
+group.save!               # raises ZammadAPI::ValidationError
+group.update!(name: '')   # the same, in one call
 ```
 
 `client.group.create(...)` uses `save!`, so it raises rather than handing back a record

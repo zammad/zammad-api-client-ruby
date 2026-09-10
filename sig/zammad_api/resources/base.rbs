@@ -21,8 +21,11 @@ module ZammadAPI
       def persisted?: () -> bool
       def changes: () -> Hash[Symbol, Array[untyped]]
       def changed?: () -> bool
+      def assign_attributes: (Hash[untyped, untyped] attributes) -> self
       def save: () -> bool
       def save!: () -> true
+      def update: (Hash[untyped, untyped] attributes) -> bool
+      def update!: (Hash[untyped, untyped] attributes) -> true
       def reload: () -> self
       def destroy: () -> true
       def inspect: () -> String

@@ -86,6 +86,19 @@ module ZammadAPI
       # @return [Boolean] whether there are unsaved changes
       def changed? = !@changes.empty?
 
+      # Stages several attributes as changes, without saving.
+      #
+      # @example
+      #   group.assign_attributes(name: 'Support 2', note: 'Renamed')
+      #   group.changed? # => true
+      #
+      # @param attributes [Hash] attribute names and their new values
+      # @return [self]
+      def assign_attributes(attributes)
+        attributes.each { |key, value| write_attribute(key.to_sym, value) }
+        self
+      end
+
       # Creates or updates the record, reporting a validation failure as
       # +false+ rather than by raising.
       #
@@ -127,6 +140,32 @@ module ZammadAPI
         @new_record = false
         @error      = nil
         true
+      end
+
+      # Stages several attributes and saves in one call.
+      #
+      # @example
+      #   ticket.update(state: 'closed', priority: '1 low')
+      #
+      # @param attributes [Hash] attribute names and their new values
+      # @return [Boolean] whether the record was stored
+      # @raise [ResponseError] for any failure other than a validation error
+      # @see #save
+      def update(attributes)
+        assign_attributes(attributes)
+        save
+      end
+
+      # Stages several attributes and saves in one call, raising on any
+      # failure.
+      #
+      # @param attributes [Hash] attribute names and their new values
+      # @return [true]
+      # @raise [ResponseError] when Zammad rejected the request
+      # @see #save!
+      def update!(attributes)
+        assign_attributes(attributes)
+        save!
       end
 
       # Re-reads the record from Zammad, discarding unsaved changes.

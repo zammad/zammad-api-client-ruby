@@ -299,6 +299,103 @@ RSpec.describe ZammadAPI::Resources::Base do
     end
   end
 
+  describe '#assign_attributes' do
+    subject(:group) { client.group.new(name: 'Support') }
+
+    it 'stages every attribute as a change' do
+      group.assign_attributes(name: 'Renamed', note: 'Why')
+      expect(group.changes).to eq(name: %w[Support Renamed], note: [nil, 'Why'])
+    end
+
+    it 'accepts string keys' do
+      group.assign_attributes('name' => 'Renamed')
+      expect(group.name).to eq('Renamed')
+    end
+
+    it 'does not save' do
+      group.assign_attributes(name: 'Renamed')
+      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+    end
+
+    it 'returns the record, so it can be chained' do
+      expect(group.assign_attributes(name: 'Renamed')).to be(group)
+    end
+
+    it 'drops a change that restores the original value' do
+      group.assign_attributes(name: 'Renamed')
+      group.assign_attributes(name: 'Support')
+      expect(group).not_to be_changed
+    end
+  end
+
+  describe '#update' do
+    subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Users', note: 'old') }
+
+    it 'sends only the assigned attributes' do
+      stub = stub_request(:put, "#{url}/1")
+        .with(query: { 'expand' => 'true' }, body: '{"note":"new"}')
+        .to_return(json_response({ id: 1, name: 'Users', note: 'new' }))
+
+      group.update(note: 'new')
+      expect(stub).to have_been_requested
+    end
+
+    it 'returns true when the record was stored' do
+      stub_request(:put, "#{url}/1").with(query: hash_including({})).to_return(json_response({ id: 1, note: 'new' }))
+
+      expect(group.update(note: 'new')).to be(true)
+    end
+
+    it 'adopts the attributes from the response' do
+      stub_request(:put, "#{url}/1").with(query: hash_including({}))
+        .to_return(json_response({ id: 1, name: 'Renamed by Zammad' }))
+
+      group.update(note: 'new')
+      expect(group.name).to eq('Renamed by Zammad')
+    end
+
+    it 'returns false and records the error when Zammad rejects the attributes' do
+      stub_request(:put, "#{url}/1").with(query: hash_including({}))
+        .to_return(json_response({ error: 'Note is too long' }, status: 422))
+
+      expect(group.update(note: 'new')).to be(false)
+      expect(group.error.server_message).to eq('Note is too long')
+    end
+
+    it 'keeps the staged changes after a rejection, so they can be corrected' do
+      stub_request(:put, "#{url}/1").with(query: hash_including({}))
+        .to_return(json_response({ error: 'Note is too long' }, status: 422))
+
+      group.update(note: 'new')
+      expect(group.changes).to eq(note: %w[old new])
+    end
+
+    it 'creates a record that has not been saved yet' do
+      stub = stub_request(:post, url).with(query: hash_including({}), body: '{"name":"Support"}')
+        .to_return(json_response({ id: 7, name: 'Support' }, status: 201))
+
+      expect(client.group.new.update(name: 'Support')).to be(true)
+      expect(stub).to have_been_requested
+    end
+  end
+
+  describe '#update!' do
+    subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, note: 'old') }
+
+    it 'returns true' do
+      stub_request(:put, "#{url}/1").with(query: hash_including({})).to_return(json_response({ id: 1 }))
+
+      expect(group.update!(note: 'new')).to be(true)
+    end
+
+    it 'raises when Zammad rejects the attributes' do
+      stub_request(:put, "#{url}/1").with(query: hash_including({}))
+        .to_return(json_response({ error: 'Note is too long' }, status: 422))
+
+      expect { group.update!(note: 'new') }.to raise_error(ZammadAPI::ValidationError, /Note is too long/)
+    end
+  end
+
   describe '#reload' do
     subject(:group) { ZammadAPI::Resources::Group.from_response(transport, id: 1, name: 'Users') }
 
