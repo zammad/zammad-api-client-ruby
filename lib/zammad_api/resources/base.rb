@@ -89,6 +89,8 @@ module ZammadAPI
       # Re-reads the record from Zammad, discarding unsaved changes.
       #
       # @return [self]
+      # @raise [ResponseError] when Zammad rejected the request
+      # @raise [ParseError] when the response is not a JSON object
       def reload
         response = transport.get(
           member_path,
@@ -96,7 +98,7 @@ module ZammadAPI
           resource_class: self.class,
           query:          { expand: true }
         )
-        @attributes = response.body
+        @attributes = response.decoded(:object, operation: 'reload object', resource_class: self.class)
         @changes    = {}
         @new_record = false
         self

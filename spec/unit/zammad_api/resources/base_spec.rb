@@ -173,6 +173,30 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect { ZammadAPI::Resources::Group.new(transport).reload }
         .to raise_error(ZammadAPI::Error, /has no id, save it first/)
     end
+
+    it 'raises ParseError when the response is not an object' do
+      stub_request(:get, "#{url}/1").with(query: { 'expand' => 'true' })
+        .to_return(json_response([]))
+
+      expect { group.reload }
+        .to raise_error(ZammadAPI::ParseError, /expected a JSON object, got Array/)
+    end
+
+    it 'raises ParseError when the response is not JSON' do
+      stub_request(:get, "#{url}/1").with(query: { 'expand' => 'true' })
+        .to_return(status: 200, body: '<html>Gateway Timeout</html>', headers: { 'Content-Type' => 'text/html' })
+
+      expect { group.reload }
+        .to raise_error(ZammadAPI::ParseError, /expected a JSON object, got String/)
+    end
+
+    it 'keeps the previous attributes when the response cannot be decoded' do
+      stub_request(:get, "#{url}/1").with(query: { 'expand' => 'true' })
+        .to_return(json_response([]))
+
+      expect { group.reload }.to raise_error(ZammadAPI::ParseError)
+      expect(group.name).to eq('Users')
+    end
   end
 
   describe '#destroy' do
