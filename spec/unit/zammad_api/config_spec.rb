@@ -88,6 +88,39 @@ RSpec.describe ZammadAPI::Config do
     it 'discards log output when no logger is supplied' do
       expect(build.logger).to be_a(Logger)
     end
+
+    it 'leaves the Faraday adapter to Faraday' do
+      expect(build.adapter).to be_nil
+    end
+
+    it 'installs no extra middleware' do
+      expect(build.middleware).to be_nil
+    end
+  end
+
+  describe 'the Faraday seam' do
+    it 'symbolizes an adapter given as a string' do
+      expect(build(adapter: 'test').adapter).to eq(:test)
+    end
+
+    it 'keeps an adapter given as a symbol' do
+      expect(build(adapter: :test).adapter).to eq(:test)
+    end
+
+    it 'keeps the middleware callable' do
+      hook = ->(builder) { builder }
+      expect(build(middleware: hook).middleware).to be(hook)
+    end
+
+    it 'rejects middleware that cannot be called' do
+      expect { build(middleware: 'not callable') }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config middleware needs to respond to call')
+    end
+
+    it 'accepts any callable, not only a proc' do
+      callable = Class.new { def call(builder) = builder }.new
+      expect(build(middleware: callable).middleware).to be(callable)
+    end
   end
 
   describe 'numeric validation' do
@@ -143,6 +176,14 @@ RSpec.describe ZammadAPI::Config do
 
     it 'does not dump the logger internals' do
       expect(rendered).to include('logger=#<Logger>')
+    end
+
+    it 'does not dump the middleware internals' do
+      expect(build(middleware: ->(builder) { builder }).inspect).to include('middleware=#<Proc>')
+    end
+
+    it 'still shows that no middleware is configured' do
+      expect(rendered).to include('middleware=nil')
     end
 
     it 'is used for to_s as well' do

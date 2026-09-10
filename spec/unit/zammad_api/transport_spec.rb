@@ -214,6 +214,57 @@ RSpec.describe ZammadAPI::Transport do
     end
   end
 
+  describe 'the Faraday seam' do
+    it 'calls the middleware with the connection being built' do
+      seen = nil
+      unit_transport(middleware: ->(connection) { seen = connection })
+
+      expect(seen).to be_a(Faraday::Connection)
+    end
+
+    it 'lets the middleware see a request this gem built' do
+      stub_request(:get, url).to_return(json_response([]))
+
+      seen = nil
+      transport = unit_transport(middleware: lambda { |builder|
+        builder.use(Class.new(Faraday::Middleware) do
+          define_method(:on_request) { |env| seen = env.request_headers['User-Agent'] }
+        end)
+      })
+      transport.get('api/v1/groups', operation: 'test')
+
+      expect(seen).to eq("zammad_api-ruby/#{ZammadAPI::VERSION}")
+    end
+
+    it 'lets the middleware see the response' do
+      stub_request(:get, url).to_return(json_response([{ id: 1 }]))
+
+      seen = nil
+      transport = unit_transport(middleware: lambda { |builder|
+        builder.use(Class.new(Faraday::Middleware) do
+          define_method(:on_complete) { |env| seen = env.status }
+        end)
+      })
+      transport.get('api/v1/groups', operation: 'test')
+
+      expect(seen).to eq(200)
+    end
+
+    it 'uses the configured adapter' do
+      transport = unit_transport(adapter: :test)
+      expect(transport.instance_variable_get(:@connection).adapter.name).to include('Adapter::Test')
+    end
+
+    it 'reports an unregistered adapter as a configuration error' do
+      expect { unit_transport(adapter: :nonsense) }
+        .to raise_error(ZammadAPI::ConfigurationError, /is not registered on Faraday::Adapter/)
+    end
+
+    it 'does not leak a Faraday error out of the client constructor' do
+      expect { unit_client(adapter: :nonsense) }.to raise_error(ZammadAPI::ConfigurationError)
+    end
+  end
+
   describe '#with_on_behalf_of' do
     it 'sends the From header' do
       stub = stub_request(:get, url).with(headers: { 'From' => 'agent@example.com' }).to_return(json_response([]))

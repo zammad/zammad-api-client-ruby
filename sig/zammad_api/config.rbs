@@ -24,6 +24,8 @@ module ZammadAPI
     attr_reader retry_interval: Numeric
     attr_reader ssl_verify: bool
     attr_reader proxy: String?
+    attr_reader adapter: Symbol?
+    attr_reader middleware: ^(Faraday::Connection) -> void | nil
     attr_reader logger: Logger
 
     def initialize: (
@@ -39,6 +41,8 @@ module ZammadAPI
       ?retry_interval: untyped,
       ?ssl_verify: bool,
       ?proxy: String?,
+      ?adapter: (Symbol | String)?,
+      ?middleware: (^(Faraday::Connection) -> void)?,
       ?logger: Logger?
     ) -> void
 
@@ -54,6 +58,7 @@ module ZammadAPI
     def normalize_url: (untyped) -> String
     def validate_credentials!: () -> void
     def validate_numbers!: () -> void
+    def validate_middleware!: () -> void
     def presence: (untyped) -> untyped
     def immutable: (untyped) -> untyped
   end

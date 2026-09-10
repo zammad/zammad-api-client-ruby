@@ -75,9 +75,30 @@ client = ZammadAPI::Client.new(
 | `proxy`          | `nil`              | Proxy URL.                                                         |
 | `user_agent`     | `zammad_api-ruby/<version>` | Value of the `User-Agent` header.                         |
 | `logger`         | discards output    | Any `Logger`; the client logs requests and responses at `debug`.    |
+| `adapter`        | Faraday's default  | Name of the Faraday adapter to use.                                |
+| `middleware`     | `nil`              | Callable that receives the Faraday connection while it is built.   |
 
 Credentials are never written to the log, and `client.config.inspect` redacts them, so a
 configuration object is safe to include in an error report.
+
+### Adapter and middleware
+
+The HTTP stack is Faraday's, and these two options are the seam into it — for a
+persistent-connection adapter, instrumentation, or a cache:
+
+```ruby
+client = ZammadAPI::Client.new(
+  url:        'https://zammad.example.com/',
+  http_token: 'token',
+  adapter:    :net_http_persistent,
+  middleware: ->(connection) { connection.use(MyInstrumentation) }
+)
+```
+
+The callable runs last, after this gem's own middleware and before the adapter, so it sees
+requests as the client finished building them and responses before anything else does.
+Faraday stays an implementation detail either way: an unregistered adapter raises
+`ZammadAPI::ConfigurationError`, not a Faraday error.
 
 ## Available resources
 

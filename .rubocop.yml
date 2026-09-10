@@ -98,8 +98,8 @@ Metrics/PerceivedComplexity:
 
 Metrics/ParameterLists:
   # Config mirrors every supported option as a keyword argument.
-  Max: 14
-  MaxOptionalParameters: 13
+  Max: 16
+  MaxOptionalParameters: 15
 
 # Broken: "String".downcase == "strinG".downcase is not the same as
 # "String".casecmp("strinG"), only as "String".casecmp("strinG") == 0.

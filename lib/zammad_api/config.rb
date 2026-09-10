@@ -37,6 +37,12 @@ module ZammadAPI
   #   @return [Boolean] whether TLS certificates are verified
   # @!attribute [r] proxy
   #   @return [String, nil] proxy URL
+  # @!attribute [r] adapter
+  #   @return [Symbol, nil] name of the Faraday adapter, +nil+ for Faraday's
+  #     default
+  # @!attribute [r] middleware
+  #   @return [Proc, nil] called with the Faraday connection while it is
+  #     being built
   # @!attribute [r] logger
   #   @return [Logger] where debug output goes
   Config = Data.define(
@@ -52,6 +58,8 @@ module ZammadAPI
     :retry_interval,
     :ssl_verify,
     :proxy,
+    :adapter,
+    :middleware,
     :logger
   )
 
@@ -93,6 +101,8 @@ module ZammadAPI
       retry_interval: DEFAULT_RETRY_INTERVAL,
       ssl_verify: true,
       proxy: nil,
+      adapter: nil,
+      middleware: nil,
       logger: nil
     )
       # RBS cannot describe the initializer that Data.define generates, so
@@ -111,11 +121,14 @@ module ZammadAPI
         retry_interval: retry_interval,
         ssl_verify:     ssl_verify,
         proxy:          immutable(presence(proxy)),
+        adapter:        adapter&.to_sym,
+        middleware:     middleware,
         logger:         logger || Logger.new(IO::NULL)
       )
       # steep:ignore:end
       validate_credentials!
       validate_numbers!
+      validate_middleware!
     end
 
     # @return [Symbol] +:http_token+, +:oauth2_token+ or +:basic+
@@ -137,9 +150,10 @@ module ZammadAPI
 
     def render(key, value)
       return REDACTION if REDACTED_ATTRIBUTES.include?(key) && value
-      # Loggers have verbose default inspect output that would drown out the
-      # rest of the configuration.
+      # Loggers and procs have verbose default inspect output that would drown
+      # out the rest of the configuration.
       return "#<#{value.class}>" if key == :logger
+      return "#<#{value.class}>" if key == :middleware && value
       return value.sub(USERINFO_PATTERN, REDACTION).inspect if key == :proxy && value
 
       value.inspect
@@ -168,6 +182,12 @@ module ZammadAPI
       end
 
       raise ConfigurationError, 'config retries needs to be a non-negative integer' if !retries.is_a?(Integer) || retries.negative?
+    end
+
+    def validate_middleware!
+      return if middleware.nil? || middleware.respond_to?(:call)
+
+      raise ConfigurationError, 'config middleware needs to respond to call'
     end
 
     def presence(value)

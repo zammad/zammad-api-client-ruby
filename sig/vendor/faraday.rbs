@@ -30,20 +30,21 @@ module Faraday
     def headers: () -> Hash[String, untyped]
   end
 
+  # Faraday.new yields the connection itself, which delegates the stack
+  # building methods below to its RackBuilder.
   class Connection
     def get: (String) ?{ (Request) -> void } -> Response
     def post: (String) ?{ (Request) -> void } -> Response
     def put: (String) ?{ (Request) -> void } -> Response
     def delete: (String) ?{ (Request) -> void } -> Response
     def public_send: (Symbol, *untyped) ?{ (Request) -> void } -> Response
-  end
 
-  class Builder
     def request: (Symbol, *untyped) -> void
     def response: (Symbol, *untyped) -> void
     def adapter: (untyped, *untyped) -> void
+    def use: (untyped, *untyped) -> void
   end
 
-  def self.new: (**untyped) ?{ (Builder) -> void } -> Connection
+  def self.new: (**untyped) ?{ (Connection) -> void } -> Connection
   def self.default_adapter: () -> Symbol
 end

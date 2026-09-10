@@ -72,6 +72,10 @@ A breaking release that modernises the whole gem. See
   before it, instead of paging forever.
 - `Base#reload`, `#persisted?`, `#[]`, `#fetch`, `#to_h` and a readable `#inspect`.
 - `ssl_verify`, `proxy`, `user_agent`, `retries` and `retry_interval` client options.
+- `adapter` and `middleware` client options, the seam into the Faraday stack. Swapping in a
+  persistent-connection adapter or adding instrumentation previously meant that the HTTP
+  stack was closed to callers. A Faraday error while building the connection surfaces as
+  `ConfigurationError`, so Faraday stays an implementation detail.
 - RBS signatures in `sig/`, verified by Steep in CI.
 - `respond_to?` now answers correctly for attribute readers and resource methods.
 - Records implement `deconstruct_keys`, so they can be used with `case/in` pattern

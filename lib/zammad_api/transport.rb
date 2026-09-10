@@ -129,8 +129,15 @@ module ZammadAPI
         apply_authentication(faraday)
         faraday.request :json
         faraday.request :retry, retry_options
-        faraday.adapter Faraday.default_adapter
+        # Last in the stack, so a caller's middleware sees the request as this
+        # gem finished building it and the response before anything else does.
+        config.middleware&.call(faraday)
+        faraday.adapter(config.adapter || Faraday.default_adapter)
       end
+    rescue Faraday::Error => e
+      # An unregistered adapter or a middleware that rejects its options is a
+      # configuration mistake, and Faraday is not part of this gem's surface.
+      raise ConfigurationError, "config could not be used to build a connection: #{e.message}"
     end
 
     def apply_authentication(faraday)
