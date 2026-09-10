@@ -121,8 +121,19 @@ module ZammadAPI
         @new_record = false
       end
 
+      # The baseline is the value this record was loaded with, not the value
+      # the previous assignment happened to leave behind. Writing twice must
+      # still report the original, and writing a value back to the original
+      # is not a change at all.
       def write_attribute(key, value)
-        @changes[key] = [@attributes[key], value]
+        original = @changes.key?(key) ? @changes[key].first : @attributes[key]
+
+        if original == value
+          @changes.delete(key)
+        else
+          @changes[key] = [original, value]
+        end
+
         @attributes[key] = value
         value
       end

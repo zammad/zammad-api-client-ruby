@@ -57,6 +57,36 @@ RSpec.describe ZammadAPI::Resources::Base do
       group.active = true
       expect(group.changes).to eq(active: [nil, true])
     end
+
+    it 'keeps the original value when an attribute is written twice' do
+      group.name = 'First'
+      group.name = 'Second'
+      expect(group.changes).to eq(name: %w[Support Second])
+    end
+
+    it 'drops the change when the value returns to the original' do
+      group.name = 'Other'
+      group.name = 'Support'
+      expect(group.changes).to be_empty
+    end
+
+    it 'is not changed once the value returns to the original' do
+      group.name = 'Other'
+      group.name = 'Support'
+      expect(group).not_to be_changed
+    end
+
+    it 'still reads the reassigned value after the change is dropped' do
+      group.name = 'Other'
+      group.name = 'Support'
+      expect(group.name).to eq('Support')
+    end
+
+    it 'drops the change when a previously unset attribute is set back to nil' do
+      group.active = true
+      group.active = nil
+      expect(group.changes).to be_empty
+    end
   end
 
   describe '#save' do
