@@ -62,6 +62,10 @@ A breaking release that modernises the whole gem. See
   leaking Faraday exceptions.
 - `Collection#where`, `#page`, `#per`, `#in_batches`, `#find_each`, `#count` and lazy
   enumeration, plus `client.x.where(...)` as a shorthand for `all.where(...)`.
+- A resource proxy is `Enumerable` over `all`, so `client.ticket.each`,
+  `client.ticket.first(5)`, `client.ticket.map`, `#find_each`, `#in_batches`, `#page`,
+  `#per`, `#pluck` and `#count` all work without naming `all`. `client.x.find(id)` keeps
+  its own meaning rather than becoming `Enumerable#find`; `detect` is the block form.
 - `Collection#count` costs a single request on a search endpoint, which Zammad can count
   without returning the records.
 - `Collection#pluck(*attributes)`, for reading one or more attributes from every record.

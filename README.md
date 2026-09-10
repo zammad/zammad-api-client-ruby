@@ -324,6 +324,18 @@ client.group.destroy(42) # delete by id, without fetching first
 `all`, `where` and `search` return a lazily paginated `ZammadAPI::Collection`. No request
 is made until you iterate, and pages are fetched as needed.
 
+A resource proxy is itself `Enumerable` over `all`, so `.all` is optional:
+
+```ruby
+client.ticket.each { |ticket| puts ticket.title }
+client.ticket.first(5)
+client.ticket.pluck(:title)
+client.ticket.find_each(batch_size: 500) { |ticket| archive(ticket) }
+```
+
+`find` keeps its own meaning there — `client.ticket.find(1)` is a lookup by id, not
+`Enumerable#find`. Use `detect` for the block form.
+
 ```ruby
 # Walks every page automatically.
 client.ticket.all.each do |ticket|

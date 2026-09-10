@@ -213,6 +213,102 @@ RSpec.describe ZammadAPI::ResourceProxy do
     end
   end
 
+  describe 'enumerating a proxy directly' do
+    def stub_page(page, records, per_page: ZammadAPI::Collection::DEFAULT_PER_PAGE)
+      stub_request(:get, url)
+        .with(query: { 'expand' => 'true', 'page' => page.to_s, 'per_page' => per_page.to_s })
+        .to_return(json_response(records))
+    end
+
+    it 'is Enumerable' do
+      expect(proxy).to be_a(Enumerable)
+    end
+
+    it 'yields every record from #each' do
+      stub_page(1, [{ id: 1, name: 'Users' }, { id: 2, name: 'Support' }])
+
+      expect(proxy.map(&:name)).to eq(%w[Users Support])
+    end
+
+    it 'walks pages, like the collection does' do
+      stub_page(1, Array.new(ZammadAPI::Collection::DEFAULT_PER_PAGE) { { id: it + 1 } })
+      stub_page(2, [{ id: 101 }])
+
+      expect(proxy.count).to eq(101)
+    end
+
+    it 'stops early for #first, without walking everything' do
+      stub_page(1, [{ id: 1 }, { id: 2 }])
+
+      expect(proxy.first.id).to eq(1)
+      expect(a_request(:get, url).with(query: hash_including({ 'page' => '2' }))).not_to have_been_made
+    end
+
+    it 'returns an Enumerator from #each without a block' do
+      expect(proxy.each).to be_a(Enumerator)
+    end
+
+    it 'supports a lazy chain' do
+      stub_page(1, [{ id: 1, active: true }, { id: 2, active: false }])
+
+      expect(proxy.lazy.select(&:active).first(1).map(&:id)).to eq([1])
+    end
+
+    it 'forwards #per to the collection' do
+      stub = stub_page(1, [], per_page: 5)
+
+      proxy.per(5).to_a
+      expect(stub).to have_been_requested
+    end
+
+    it 'forwards #page to the collection' do
+      stub = stub_request(:get, url)
+        .with(query: hash_including({ 'page' => '3' }))
+        .to_return(json_response([]))
+
+      proxy.page(3).to_a
+      expect(stub).to have_been_requested
+    end
+
+    it 'forwards #find_each' do
+      stub_page(1, [{ id: 1 }], per_page: 5)
+
+      ids = []
+      proxy.find_each(batch_size: 5) { ids << it.id }
+      expect(ids).to eq([1])
+    end
+
+    it 'forwards #in_batches' do
+      stub_page(1, [{ id: 1 }], per_page: 5)
+
+      sizes = []
+      proxy.in_batches(of: 5) { sizes << it.size }
+      expect(sizes).to eq([1])
+    end
+
+    it 'forwards #pluck' do
+      stub_page(1, [{ id: 1, name: 'Users' }])
+
+      expect(proxy.pluck(:name)).to eq(['Users'])
+    end
+
+    it 'keeps #find as a lookup by id rather than Enumerable#find' do
+      stub_request(:get, "#{url}/1").with(query: hash_including({})).to_return(json_response({ id: 1, name: 'Users' }))
+
+      expect(proxy.find(1).name).to eq('Users')
+    end
+
+    it 'leaves the block form to #detect' do
+      stub_page(1, [{ id: 1, name: 'Users' }, { id: 2, name: 'Support' }])
+
+      expect(proxy.detect { it.name == 'Support' }.id).to eq(2)
+    end
+
+    it 'does not pretend to be an array, so it is not flattened away' do
+      expect([proxy].flatten).to eq([proxy])
+    end
+  end
+
   describe '#search' do
     it 'requests the search endpoint' do
       stub = stub_request(:get, "#{url}/search")
