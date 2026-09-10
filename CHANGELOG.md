@@ -90,6 +90,12 @@ A breaking release that modernises the whole gem. See
   stack was closed to callers. A Faraday error while building the connection surfaces as
   `ConfigurationError`, so Faraday stays an implementation detail.
 - RBS signatures in `sig/`, verified by Steep in CI.
+- `require 'zammad_api/test'` ships a stand-in Zammad for testing code that calls this
+  client: `ZammadAPI::Test#stub` declares responses, `#client` hands back a real client
+  wired to them, and `#requests` records what was sent. Responses travel the same decoding,
+  error mapping and record building as real ones, so a stubbed 404 raises `NotFoundError`.
+  An unstubbed request raises rather than answering with something empty. Consumers
+  previously had to intercept HTTP to test against this client at all.
 - `respond_to?` now answers correctly for attribute readers and resource methods.
 - Records implement `deconstruct_keys`, so they can be used with `case/in` pattern
   matching, including against nested attributes. `Config` and `Response` are `Data`

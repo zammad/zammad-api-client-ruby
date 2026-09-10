@@ -31,6 +31,7 @@ module ZammadAPI
     def delete: (String path, ?query: Hash[untyped, untyped]?) -> Response
 
     def with: (**untyped options) -> Client
+    def with_transport: (untyped transport) -> Client
     def on_behalf_of: (String | Integer identifier) -> Client
                     | [T] (String | Integer identifier) { (Client) -> T } -> T
     def inspect: () -> String

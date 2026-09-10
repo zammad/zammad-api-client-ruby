@@ -238,6 +238,19 @@ module ZammadAPI
       derived
     end
 
+    # Returns a new client that performs its requests through +transport+.
+    #
+    # The seam the test kit uses to put a double in place of the HTTP stack.
+    #
+    # @api private
+    # @param transport [Transport] anything with a {Transport} interface
+    # @return [Client]
+    def with_transport(transport)
+      derived = dup
+      derived.instance_variable_set(:@transport, transport)
+      derived
+    end
+
     # Performs requests on behalf of another user.
     #
     # Returns a new client rather than mutating this one, so the original

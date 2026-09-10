@@ -523,6 +523,42 @@ client = ZammadAPI::Client.new(
 Requests, response statuses and durations are logged at `debug` level. Payload keys that
 look like credentials (`password`, `token`, `secret`, ...) are redacted.
 
+## Testing code that uses this client
+
+`zammad_api/test` ships a stand-in Zammad, so your own tests need no HTTP interception:
+
+```ruby
+require 'zammad_api/test'
+
+RSpec.describe TicketCloser do
+  let(:zammad) { ZammadAPI::Test.new }
+
+  it 'closes the ticket' do
+    zammad.stub(:get, 'api/v1/tickets/1', body: {id: 1, title: 'Help', state: 'open'})
+    zammad.stub(:put, 'api/v1/tickets/1', body: {id: 1, state: 'closed'})
+
+    described_class.new(zammad.client).close(1)
+
+    expect(zammad.requests.last.verb).to eq(:put)
+    expect(zammad.requests.last.body).to eq({state: 'closed'})
+  end
+end
+```
+
+`zammad.client` is a real `ZammadAPI::Client`, so responses come back through the same
+decoding, error mapping and record building as real ones — a stub with `status: 404`
+raises `NotFoundError`, and one with `status: 422` makes `save` return `false`.
+
+| Method | What it does |
+| ------ | ------------ |
+| `stub(verb, path, status:, body:, headers:, query:)` | Declares a response. Stubbing the same endpoint twice describes a sequence; the last stub answers every later request. `query:` matches a subset, so it need not repeat `expand`, `page` or `per_page`. |
+| `client` | A client wired to this stand-in. |
+| `requests` | Every request made, oldest first, as `verb` / `path` / `query` / `body` / `on_behalf_of`. |
+| `reset` | Forgets the stubs and the recorded requests. |
+
+A request that was not stubbed raises `ZammadAPI::Test::UnstubbedRequestError`, listing
+what is stubbed, rather than answering with something empty.
+
 ## Type signatures
 
 RBS signatures ship in `sig/` and are checked in CI with [Steep](https://github.com/soutaro/steep).
