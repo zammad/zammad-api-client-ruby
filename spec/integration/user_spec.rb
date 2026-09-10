@@ -15,7 +15,7 @@ RSpec.describe ZammadAPI, 'user object basics' do
     expect(user_invalid.class).to eq(ZammadAPI::Resources::User)
     expect(user_invalid.new_record?).to be(true)
 
-    expect { user_invalid.save }.to raise_error(ZammadAPI::ClientError)
+    expect { user_invalid.save! }.to raise_error(ZammadAPI::ClientError)
   end
 
   it 'new with valid attributes' do
