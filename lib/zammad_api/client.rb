@@ -85,6 +85,63 @@ module ZammadAPI
     # @return [Array<Symbol>] every resource name this client supports
     def resource_names = RESOURCES.keys
 
+    # @!group Raw requests
+
+    # Performs a +GET+ against any endpoint of the Zammad API.
+    #
+    # The resource classes cover a part of the API; these four methods reach
+    # the rest of it without giving up authentication, retries, credential
+    # redaction, JSON decoding or the error classes.
+    #
+    # @example An endpoint this gem does not model
+    #   client.get('api/v1/roles').body
+    #   # => [{id: 1, name: "Admin", ...}, ...]
+    #
+    # @example Reading a response header
+    #   client.get('api/v1/tickets').headers['x-total-count']
+    #
+    # @param path [String] path relative to {Config#url}; a leading slash is
+    #   ignored, so paths can be pasted from the Zammad documentation
+    # @param query [Hash, nil] query string parameters
+    # @return [Response]
+    # @raise [ResponseError] for any non-2xx response
+    # @raise [TransportError] when the request could not be completed
+    def get(path, query: nil) = raw(:get, path, query: query)
+
+    # Performs a +POST+ against any endpoint of the Zammad API.
+    #
+    # @example
+    #   client.post('api/v1/tags/add', query: {object: 'Ticket', o_id: 1, item: 'urgent'})
+    #
+    # @param path [String] path relative to {Config#url}
+    # @param query [Hash, nil] query string parameters
+    # @param body [Hash, Array, nil] request payload, encoded as JSON
+    # @return [Response]
+    # @raise [ResponseError] for any non-2xx response
+    # @see #get
+    def post(path, query: nil, body: nil) = raw(:post, path, query: query, body: body)
+
+    # Performs a +PUT+ against any endpoint of the Zammad API.
+    #
+    # @param path [String] path relative to {Config#url}
+    # @param query [Hash, nil] query string parameters
+    # @param body [Hash, Array, nil] request payload, encoded as JSON
+    # @return [Response]
+    # @raise [ResponseError] for any non-2xx response
+    # @see #get
+    def put(path, query: nil, body: nil) = raw(:put, path, query: query, body: body)
+
+    # Performs a +DELETE+ against any endpoint of the Zammad API.
+    #
+    # @param path [String] path relative to {Config#url}
+    # @param query [Hash, nil] query string parameters
+    # @return [Response]
+    # @raise [ResponseError] for any non-2xx response
+    # @see #get
+    def delete(path, query: nil) = raw(:delete, path, query: query)
+
+    # @!endgroup
+
     # Returns a new client with some configuration options changed.
     #
     # The options are re-validated, and any {#on_behalf_of} scope is carried
@@ -144,6 +201,21 @@ module ZammadAPI
     def respond_to_missing?(_name, _include_private = false) = false
 
     private
+
+    # The path is joined onto Config#url, which always ends in a slash, so a
+    # leading slash would resolve against the host and drop the sub-path of a
+    # Zammad served from one.
+    def raw(method, path, query: nil, body: nil)
+      relative = path.to_s.sub(%r{\A/+}, '')
+
+      @transport.request(
+        method,
+        relative,
+        operation: "#{method.to_s.upcase} #{relative}",
+        query:     query,
+        body:      body
+      )
+    end
 
     def unknown_resource_message(name) = "Unknown resource #{name}, available resources are: #{RESOURCES.keys.join(', ')}"
   end

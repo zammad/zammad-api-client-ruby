@@ -37,6 +37,11 @@ A breaking release that modernises the whole gem. See
 
 ### Added
 
+- `client.get`, `client.post`, `client.put` and `client.delete` reach any endpoint of the
+  Zammad API, including the many this gem does not model. They return a
+  `ZammadAPI::Response` and keep authentication, timeouts, retries, credential redaction,
+  JSON decoding and the error classes. Previously the only way past the seven resource
+  classes was to build a Faraday connection by hand.
 - Request and connection timeouts (`timeout`, `open_timeout`), on by default.
 - Automatic retry with exponential backoff for idempotent requests on connection failures,
   timeouts and transient statuses. `POST` is never retried, so a failed create cannot

@@ -19,6 +19,12 @@ module ZammadAPI
 
     def resource: (Symbol | String name) -> ResourceProxy
     def resource_names: () -> Array[Symbol]
+
+    def get: (String path, ?query: Hash[untyped, untyped]?) -> Response
+    def post: (String path, ?query: Hash[untyped, untyped]?, ?body: untyped) -> Response
+    def put: (String path, ?query: Hash[untyped, untyped]?, ?body: untyped) -> Response
+    def delete: (String path, ?query: Hash[untyped, untyped]?) -> Response
+
     def with: (**untyped options) -> Client
     def on_behalf_of: (String | Integer identifier) -> Client
                     | [T] (String | Integer identifier) { (Client) -> T } -> T
@@ -28,6 +34,7 @@ module ZammadAPI
 
     private
 
+    def raw: (Symbol method, String path, ?query: Hash[untyped, untyped]?, ?body: untyped) -> Response
     def unknown_resource_message: (Symbol | String) -> String
   end
 end

@@ -107,6 +107,140 @@ RSpec.describe ZammadAPI::Client do
     end
   end
 
+  describe 'raw requests' do
+    subject(:client) { unit_client }
+
+    let(:roles_url) { "#{ClientHelper::BASE_URL}api/v1/roles" }
+
+    describe '#get' do
+      it 'reaches an endpoint the gem does not model' do
+        stub_request(:get, roles_url).to_return(json_response([{ id: 1, name: 'Admin' }]))
+
+        expect(client.get('api/v1/roles').body).to eq([{ id: 1, name: 'Admin' }])
+      end
+
+      it 'returns a Response, so the status and headers stay reachable' do
+        stub_request(:get, roles_url).to_return(json_response([], headers: { 'X-Total-Count' => '7' }))
+
+        response = client.get('api/v1/roles')
+        expect(response).to be_a(ZammadAPI::Response)
+        expect(response.status).to eq(200)
+        expect(response.headers['x-total-count']).to eq('7')
+      end
+
+      it 'ignores a leading slash, so paths can be pasted from the Zammad docs' do
+        stub = stub_request(:get, roles_url).to_return(json_response([]))
+
+        client.get('/api/v1/roles')
+        expect(stub).to have_been_requested
+      end
+
+      it 'keeps the sub-path of a Zammad served from one' do
+        stub = stub_request(:get, 'http://zammad.test/helpdesk/api/v1/roles').to_return(json_response([]))
+
+        unit_client(url: 'http://zammad.test/helpdesk/').get('/api/v1/roles')
+        expect(stub).to have_been_requested
+      end
+
+      it 'passes query parameters' do
+        stub = stub_request(:get, roles_url).with(query: { 'active' => 'true' }).to_return(json_response([]))
+
+        client.get('api/v1/roles', query: { active: true })
+        expect(stub).to have_been_requested
+      end
+
+      it 'sends the configured authentication' do
+        stub = stub_request(:get, roles_url)
+          .with(headers: { 'Authorization' => 'Token test-token' })
+          .to_return(json_response([]))
+
+        client.get('api/v1/roles')
+        expect(stub).to have_been_requested
+      end
+
+      it 'carries an on_behalf_of scope' do
+        stub = stub_request(:get, roles_url)
+          .with(headers: { 'From' => 'agent@example.com' })
+          .to_return(json_response([]))
+
+        client.on_behalf_of('agent@example.com').get('api/v1/roles')
+        expect(stub).to have_been_requested
+      end
+
+      it 'raises the mapped error class' do
+        stub_request(:get, roles_url).to_return(json_response({ error: 'nope' }, status: 403))
+
+        expect { client.get('api/v1/roles') }.to raise_error(ZammadAPI::AuthorizationError, /nope/)
+      end
+
+      it 'names the request in the error message' do
+        stub_request(:get, roles_url).to_return(json_response({}, status: 500))
+
+        expect { client.get('api/v1/roles') }
+          .to raise_error(ZammadAPI::ServerError, "Can't GET api/v1/roles: HTTP 500")
+      end
+
+      it 'hands back a non-JSON body untouched' do
+        stub_request(:get, roles_url).to_return(status: 200, body: 'plain', headers: { 'Content-Type' => 'text/plain' })
+
+        expect(client.get('api/v1/roles').body).to eq('plain')
+      end
+    end
+
+    describe '#post' do
+      it 'sends a JSON body' do
+        stub = stub_request(:post, roles_url)
+          .with(body: JSON.generate({ name: 'Agent' }), headers: { 'Content-Type' => 'application/json' })
+          .to_return(json_response({ id: 2 }))
+
+        expect(client.post('api/v1/roles', body: { name: 'Agent' }).body).to eq({ id: 2 })
+        expect(stub).to have_been_requested
+      end
+
+      it 'is not retried, so a failed create cannot be duplicated' do
+        stub_request(:post, roles_url).to_return(json_response({}, status: 500))
+
+        expect { unit_client(retries: 3).post('api/v1/roles', body: {}) }.to raise_error(ZammadAPI::ServerError)
+        expect(a_request(:post, roles_url)).to have_been_made.once
+      end
+
+      it 'redacts credentials from the log' do
+        stub_request(:post, roles_url).to_return(json_response({}))
+
+        log    = StringIO.new
+        logger = Logger.new(log, level: Logger::DEBUG)
+        unit_client(logger: logger).post('api/v1/roles', body: { password: 'hunter2' })
+
+        expect(log.string).to include('[REDACTED]')
+        expect(log.string).not_to include('hunter2')
+      end
+    end
+
+    describe '#put' do
+      it 'sends a JSON body' do
+        stub = stub_request(:put, "#{roles_url}/1").with(body: JSON.generate({ name: 'Agent' })).to_return(json_response({ id: 1 }))
+
+        client.put('api/v1/roles/1', body: { name: 'Agent' })
+        expect(stub).to have_been_requested
+      end
+    end
+
+    describe '#delete' do
+      it 'passes query parameters, which is how Zammad takes tag removals' do
+        stub = stub_request(:delete, "#{ClientHelper::BASE_URL}api/v1/tags/remove")
+          .with(query: { 'object' => 'Ticket', 'o_id' => '1', 'item' => 'urgent' })
+          .to_return(json_response({ success: true }))
+
+        client.delete('api/v1/tags/remove', query: { object: 'Ticket', o_id: 1, item: 'urgent' })
+        expect(stub).to have_been_requested
+      end
+    end
+
+    it 'does not shadow a resource reader' do
+      expect(client.resource_names).not_to include(:get, :post, :put, :delete)
+    end
+  end
+
   describe '#on_behalf_of' do
     before do
       stub_request(:get, url).with(query: hash_including({})).to_return(json_response({ id: 1 }))

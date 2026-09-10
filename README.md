@@ -85,6 +85,36 @@ configuration object is safe to include in an error report.
 
 `client.resource_names` returns the current list.
 
+Anything not in that list is reachable with [raw requests](#raw-requests).
+
+## Raw requests
+
+`get`, `post`, `put` and `delete` reach any endpoint of the Zammad API, without giving up
+authentication, timeouts, retries, credential redaction, JSON decoding or the error
+classes. Use them for the endpoints this gem does not model yet.
+
+```ruby
+client.get('api/v1/roles').body
+# => [{id: 1, name: "Admin", ...}, ...]
+
+client.post('api/v1/tags/add', query: {object: 'Ticket', o_id: 1, item: 'urgent'})
+client.put('api/v1/roles/2', body: {note: 'Updated'})
+client.delete('api/v1/tags/remove', query: {object: 'Ticket', o_id: 1, item: 'urgent'})
+```
+
+Each returns a `ZammadAPI::Response`, so the status and headers stay reachable:
+
+```ruby
+response = client.get('api/v1/tickets')
+response.status              # => 200
+response.headers['x-total-count']
+response.body                # decoded JSON, or the raw body for anything else
+```
+
+Paths are relative to the instance URL, and a leading slash is ignored, so they can be
+pasted straight from the Zammad documentation. A non-2xx response raises the same error
+class it would raise for a modelled resource, and `POST` is not retried.
+
 ## Working with records
 
 ### Create
