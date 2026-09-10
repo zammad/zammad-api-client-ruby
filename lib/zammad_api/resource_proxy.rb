@@ -201,6 +201,18 @@ module ZammadAPI
     # @see Collection#count
     def count(*args, &block) = all.count(*args, &block)
 
+    # @return [Integer]
+    # @see Collection#size
+    def size = all.size
+
+    # @return [Integer]
+    # @see Collection#size
+    def length = all.length
+
+    # @return [Boolean]
+    # @see Collection#empty?
+    def empty? = all.empty?
+
     # @!endgroup
 
     # Records matching a Zammad search term, as a lazily paginated collection.

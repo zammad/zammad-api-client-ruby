@@ -38,6 +38,9 @@ module ZammadAPI
     def where: (**untyped) -> Collection
     def pluck: (*(Symbol | String) keys) -> Array[untyped]
     def count: (*untyped) ?{ (untyped) -> boolish } -> Integer
+    def size: (*untyped) ?{ (untyped) -> boolish } -> Integer
+    def length: (*untyped) ?{ (untyped) -> boolish } -> Integer
+    def empty?: () -> bool
     def inspect: () -> String
 
     private

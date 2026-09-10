@@ -321,6 +321,57 @@ RSpec.describe ZammadAPI::Collection do
     end
   end
 
+  describe '#size' do
+    it 'walks the pages, like #count' do
+      stub_page(1, [{ id: 1 }, { id: 2 }])
+      stub_page(2, [{ id: 3 }])
+
+      expect(collection.size).to eq(3)
+    end
+
+    it 'asks a search endpoint for the total in one request' do
+      stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/users/search")
+        .with(query: { 'expand' => 'true', 'query' => 'smith', 'only_total_count' => 'true' })
+        .to_return(json_response({ total_count: 4711 }))
+
+      expect(client.user.search('smith').size).to eq(4711)
+    end
+
+    it 'is also spelled #length' do
+      stub_page(1, [{ id: 1 }])
+
+      expect(collection.length).to eq(1)
+    end
+  end
+
+  describe '#empty?' do
+    it 'is false when the endpoint has a record' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([{ id: 1 }]))
+
+      expect(collection).not_to be_empty
+    end
+
+    it 'is true when the endpoint has none' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([]))
+
+      expect(collection).to be_empty
+    end
+
+    it 'asks for a single record rather than a whole page' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([{ id: 1 }]))
+
+      collection.empty?
+      expect(a_request(:get, url).with(query: hash_including('per_page' => '1'))).to have_been_made
+    end
+
+    it 'leaves the page size alone on a collection limited to one page' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([{ id: 3 }]))
+
+      collection.page(2).empty?
+      expect(a_request(:get, url).with(query: hash_including('page' => '2', 'per_page' => '2'))).to have_been_made
+    end
+  end
+
   describe '#inspect' do
     it 'describes the collection without fetching it' do
       expect(collection.inspect)

@@ -153,6 +153,31 @@ module ZammadAPI
       total_count || super
     end
 
+    # Number of records in this collection.
+    #
+    # An alias of {#count}, and so the same cost: one request on a search
+    # endpoint, a walk of every page on any other.
+    #
+    # @return [Integer]
+    # @see #count
+    alias size count
+
+    # @return [Integer]
+    # @see #count
+    alias length count
+
+    # Whether this collection has no records.
+    #
+    # Costs one request, which asks for a single record rather than a whole
+    # page - except on a collection limited to one page, where the page size
+    # decides which records that page holds and so cannot be narrowed.
+    #
+    # @example
+    #   client.ticket.where(state: 'merged').empty?
+    #
+    # @return [Boolean]
+    def empty? = (@page ? self : per(1)).first.nil?
+
     def inspect
       "#<#{self.class.name} #{@resource_class.name} path=#{@path.inspect} per_page=#{@per_page}#{" page=#{@page}" if @page}>"
     end

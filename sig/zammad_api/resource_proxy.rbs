@@ -29,6 +29,9 @@ module ZammadAPI
     def per: (Integer size) -> Collection
     def pluck: (*(Symbol | String) keys) -> Array[untyped]
     def count: (*untyped) ?{ (untyped) -> boolish } -> Integer
+    def size: () -> Integer
+    def length: () -> Integer
+    def empty?: () -> bool
     def search: (String term) -> Collection
     def inspect: () -> String
 

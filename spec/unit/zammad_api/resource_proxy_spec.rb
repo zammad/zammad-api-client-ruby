@@ -292,6 +292,24 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect(proxy.pluck(:name)).to eq(['Users'])
     end
 
+    it 'forwards #size' do
+      stub_page(1, [{ id: 1 }])
+
+      expect(proxy.size).to eq(1)
+    end
+
+    it 'forwards #length' do
+      stub_page(1, [{ id: 1 }])
+
+      expect(proxy.length).to eq(1)
+    end
+
+    it 'forwards #empty?' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([]))
+
+      expect(proxy).to be_empty
+    end
+
     it 'keeps #find as a lookup by id rather than Enumerable#find' do
       stub_request(:get, "#{url}/1").with(query: hash_including({})).to_return(json_response({ id: 1, name: 'Users' }))
 
