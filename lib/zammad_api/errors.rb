@@ -63,7 +63,7 @@ module ZammadAPI
   # Use {.build} rather than +new+ to get the most specific subclass for a
   # given status code.
   class ResponseError < Error
-    # @return [Faraday::Response, nil]
+    # @return [Response, nil] the decoded HTTP response
     attr_reader :response
 
     # @return [String] human readable description of what was attempted
@@ -74,7 +74,7 @@ module ZammadAPI
 
     # Returns the most specific error class for +response+ and instantiates it.
     #
-    # @param response [Faraday::Response, nil]
+    # @param response [Response, nil]
     # @param operation [String]
     # @param resource_class [Class, nil]
     # @return [ResponseError]
