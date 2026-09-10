@@ -19,10 +19,7 @@ rescue ZammadAPI::ConfigurationError => e
   puts "config rejected early: #{e.message}"
 end
 
-client = ZammadAPI::Client.new(
-  url:        ENV.fetch('ZAMMAD_URL'),
-  http_token: ENV.fetch('ZAMMAD_TOKEN')
-)
+client = ZammadAPI::Client.from_env
 
 # A realistic wrapper: retry what is worth retrying, give up on what is not.
 def fetch_ticket(client, id, attempts: 3)

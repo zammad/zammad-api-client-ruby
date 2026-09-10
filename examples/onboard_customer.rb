@@ -12,10 +12,7 @@
 
 require 'zammad_api'
 
-client = ZammadAPI::Client.new(
-  url:        ENV.fetch('ZAMMAD_URL'),
-  http_token: ENV.fetch('ZAMMAD_TOKEN')
-)
+client = ZammadAPI::Client.from_env
 
 company, email, firstname, lastname = ARGV
 abort "usage: #{$PROGRAM_NAME} COMPANY EMAIL FIRSTNAME LASTNAME" if [company, email, firstname, lastname].any?(&:nil?)

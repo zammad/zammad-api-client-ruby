@@ -37,6 +37,120 @@ RSpec.describe ZammadAPI::Client do
     end
   end
 
+  describe '.from_env' do
+    it 'reads the url and access token' do
+      stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_TOKEN' => 'from-env' })
+
+      config = described_class.from_env.config
+      expect(config.url).to eq('http://zammad.test/')
+      expect(config.http_token).to eq('from-env')
+    end
+
+    it 'reads basic auth credentials' do
+      stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_USER' => 'u', 'ZAMMAD_PASSWORD' => 'p' })
+
+      expect(described_class.from_env.config.authentication_scheme).to eq(:basic)
+    end
+
+    it 'reads an OAuth2 token' do
+      stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_OAUTH2_TOKEN' => 'oauth' })
+
+      expect(described_class.from_env.config.oauth2_token).to eq('oauth')
+    end
+
+    it 'prefers ZAMMAD_HTTP_TOKEN over ZAMMAD_TOKEN' do
+      stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_TOKEN' => 'short', 'ZAMMAD_HTTP_TOKEN' => 'explicit' })
+
+      expect(described_class.from_env.config.http_token).to eq('explicit')
+    end
+
+    it 'lets an argument win over the environment' do
+      stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_TOKEN' => 'from-env' })
+
+      expect(described_class.from_env(http_token: 'passed in').config.http_token).to eq('passed in')
+    end
+
+    it 'accepts options that have no environment variable' do
+      stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_TOKEN' => 't' })
+
+      expect(described_class.from_env(timeout: 300).config.timeout).to eq(300)
+    end
+
+    it 'treats an empty variable as unset' do
+      stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_TOKEN' => '', 'ZAMMAD_USER' => 'u', 'ZAMMAD_PASSWORD' => 'p' })
+
+      expect(described_class.from_env.config.authentication_scheme).to eq(:basic)
+    end
+
+    it 'names the variable to set when the url is missing' do
+      stub_const('ENV', { 'ZAMMAD_TOKEN' => 't' })
+
+      expect { described_class.from_env }
+        .to raise_error(ZammadAPI::ConfigurationError, /set ZAMMAD_URL or pass url:/)
+    end
+
+    it 'still validates the credentials' do
+      stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/' })
+
+      expect { described_class.from_env }.to raise_error(ZammadAPI::ConfigurationError, 'missing user in config')
+    end
+  end
+
+  describe '#me' do
+    it 'reads the current user' do
+      stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/users/me")
+        .with(query: { 'expand' => 'true' })
+        .to_return(json_response({ id: 3, email: 'agent@example.com' }))
+
+      expect(unit_client.me.email).to eq('agent@example.com')
+    end
+
+    it 'returns a persisted user record' do
+      stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/users/me").with(query: hash_including({}))
+        .to_return(json_response({ id: 3 }))
+
+      me = unit_client.me
+      expect(me).to be_a(ZammadAPI::Resources::User)
+      expect(me).to be_persisted
+    end
+
+    it 'follows an on_behalf_of scope' do
+      stub = stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/users/me")
+        .with(query: hash_including({}), headers: { 'From' => 'agent@example.com' })
+        .to_return(json_response({ id: 3 }))
+
+      unit_client.on_behalf_of('agent@example.com').me
+      expect(stub).to have_been_requested
+    end
+
+    it 'raises AuthenticationError for invalid credentials' do
+      stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/users/me").with(query: hash_including({}))
+        .to_return(json_response({ error: 'authentication failed' }, status: 401))
+
+      expect { unit_client.me }.to raise_error(ZammadAPI::AuthenticationError)
+    end
+  end
+
+  describe '#version' do
+    it 'reports the version of the Zammad instance' do
+      stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/version").to_return(json_response({ version: '6.4.0' }))
+
+      expect(unit_client.version).to eq('6.4.0')
+    end
+
+    it 'is nil when the instance reports no version' do
+      stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/version").to_return(json_response({}))
+
+      expect(unit_client.version).to be_nil
+    end
+
+    it 'is not the version of this gem' do
+      stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/version").to_return(json_response({ version: '6.4.0' }))
+
+      expect(unit_client.version).not_to eq(ZammadAPI::VERSION)
+    end
+  end
+
   describe 'resource readers' do
     ZammadAPI::Client::RESOURCES.each do |name, resource_class|
       it "exposes ##{name}" do

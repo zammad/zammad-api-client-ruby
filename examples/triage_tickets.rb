@@ -12,10 +12,7 @@
 require 'zammad_api'
 require 'time'
 
-client = ZammadAPI::Client.new(
-  url:        ENV.fetch('ZAMMAD_URL'),
-  http_token: ENV.fetch('ZAMMAD_TOKEN')
-)
+client = ZammadAPI::Client.from_env
 
 STALE_AFTER = 7 * 24 * 60 * 60 # seconds
 

@@ -20,10 +20,7 @@ require 'zammad_api'
 require 'fileutils'
 require 'tmpdir'
 
-client = ZammadAPI::Client.new(
-  url:        ENV.fetch('ZAMMAD_URL'),
-  http_token: ENV.fetch('ZAMMAD_TOKEN')
-)
+client = ZammadAPI::Client.from_env
 
 PER_PAGE    = 5
 CURSOR_FILE = ENV.fetch('CURSOR_FILE', File.join(Dir.tmpdir, 'zammad_batch_cursor'))

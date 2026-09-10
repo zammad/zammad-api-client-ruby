@@ -2,10 +2,13 @@ module ZammadAPI
   class Client
     RESOURCES: Hash[Symbol, untyped]
     CONVERSION_METHODS: Array[Symbol]
+    ENV_OPTIONS: Hash[String, Symbol]
 
     attr_reader config: Config
 
     @transport: Transport
+
+    def self.from_env: (**untyped overrides) -> Client
 
     def initialize: (**untyped options) -> void
 
@@ -19,6 +22,8 @@ module ZammadAPI
 
     def resource: (Symbol | String name) -> ResourceProxy
     def resource_names: () -> Array[Symbol]
+    def me: () -> Resources::User
+    def version: () -> String?
 
     def get: (String path, ?query: Hash[untyped, untyped]?) -> Response
     def post: (String path, ?query: Hash[untyped, untyped]?, ?body: untyped) -> Response

@@ -92,6 +92,11 @@ A breaking release that modernises the whole gem. See
   objects and match as well.
 - `Client#with(**options)` derives a new client with changed options. The options are
   re-validated and any `on_behalf_of` scope is carried over.
+- `Client.from_env` builds a client from `ZAMMAD_URL`, `ZAMMAD_TOKEN`,
+  `ZAMMAD_HTTP_TOKEN`, `ZAMMAD_OAUTH2_TOKEN`, `ZAMMAD_USER` and `ZAMMAD_PASSWORD`, with
+  passed-in options winning. Every example script used to repeat the same `ENV.fetch` pair.
+- `Client#me`, the user the credentials authenticate as, and `Client#version`, the version
+  of the Zammad instance.
 - `Response#decoded(:object | :array)` validates the shape of a response body in one
   place, so an unexpected payload raises `ParseError` with a consistent message instead of
   failing further downstream.

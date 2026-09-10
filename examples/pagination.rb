@@ -32,11 +32,7 @@ class RequestCounter < Logger
 end
 
 counter = RequestCounter.new
-client  = ZammadAPI::Client.new(
-  url:        ENV.fetch('ZAMMAD_URL'),
-  http_token: ENV.fetch('ZAMMAD_TOKEN'),
-  logger:     counter
-)
+client  = ZammadAPI::Client.from_env(logger: counter)
 
 def measure(counter, label)
   counter.count = 0

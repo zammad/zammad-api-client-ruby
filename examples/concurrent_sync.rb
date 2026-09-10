@@ -24,11 +24,9 @@ require 'logger'
 
 WORKERS = 4
 
-client = ZammadAPI::Client.new(
-  url:        ENV.fetch('ZAMMAD_URL'),
-  http_token: ENV.fetch('ZAMMAD_TOKEN'),
-  timeout:    15,
-  logger:     Logger.new($stderr, level: Logger::WARN)
+client = ZammadAPI::Client.from_env(
+  timeout: 15,
+  logger:  Logger.new($stderr, level: Logger::WARN)
 )
 
 # Collect the work up front; `first` stops paginating once it has enough.

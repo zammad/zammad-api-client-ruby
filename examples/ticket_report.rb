@@ -14,11 +14,7 @@ require 'zammad_api'
 require 'csv'
 require 'logger'
 
-client = ZammadAPI::Client.new(
-  url:        ENV.fetch('ZAMMAD_URL'),
-  http_token: ENV.fetch('ZAMMAD_TOKEN'),
-  logger:     Logger.new($stderr, level: Logger::WARN)
-)
+client = ZammadAPI::Client.from_env(logger: Logger.new($stderr, level: Logger::WARN))
 
 # A bulk export can run for a while, so derive a client with a longer timeout
 # and more patience for transient failures. The original client is untouched.

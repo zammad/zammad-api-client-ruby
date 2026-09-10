@@ -1,7 +1,8 @@
 # Examples
 
 Runnable scripts showing how the 2.0 API works in a real project. Each is
-self-contained and reads its credentials from the environment:
+self-contained and builds its client with `ZammadAPI::Client.from_env`, which
+reads the credentials from the environment:
 
 ```sh
 export ZAMMAD_URL=https://zammad.example.com/
@@ -9,6 +10,9 @@ export ZAMMAD_TOKEN=your-access-token
 
 ruby examples/ticket_report.rb tickets.csv
 ```
+
+`ZAMMAD_USER` and `ZAMMAD_PASSWORD` work instead of a token, as does
+`ZAMMAD_OAUTH2_TOKEN`.
 
 > These scripts **create, modify and delete records**. Point them at a
 > disposable instance.

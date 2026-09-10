@@ -62,6 +62,45 @@ module ZammadAPI
       define_method(name) { resource(name) } # steep:ignore NoMethod
     end
 
+    # Environment variables {.from_env} reads, mapped to the options they set.
+    ENV_OPTIONS = {
+      'ZAMMAD_URL'          => :url,
+      'ZAMMAD_TOKEN'        => :http_token,
+      'ZAMMAD_HTTP_TOKEN'   => :http_token,
+      'ZAMMAD_OAUTH2_TOKEN' => :oauth2_token,
+      'ZAMMAD_USER'         => :user,
+      'ZAMMAD_PASSWORD'     => :password
+    }.freeze
+
+    # Builds a client from the environment.
+    #
+    # Reads {ENV_OPTIONS}, so a script needs no configuration of its own.
+    # Anything passed in wins over the environment, and every other option
+    # keeps its default. An empty variable counts as unset, and
+    # +ZAMMAD_HTTP_TOKEN+ wins over +ZAMMAD_TOKEN+ if both are set.
+    #
+    # @example
+    #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=secret ruby report.rb
+    #
+    #   client = ZammadAPI::Client.from_env
+    #   client = ZammadAPI::Client.from_env(timeout: 300) # for one bulk job
+    #
+    # @param overrides [Hash] any option accepted by {Config}
+    # @return [Client]
+    # @raise [ConfigurationError] when neither the environment nor +overrides+
+    #   supply a URL and credentials
+    def self.from_env(**overrides)
+      from_environment = ENV_OPTIONS.filter_map do |name, option|
+        value = ENV.fetch(name, nil)
+        [option, value] if !value.to_s.empty?
+      end
+      options = from_environment.to_h.merge(overrides)
+
+      raise ConfigurationError, "missing url: set ZAMMAD_URL or pass url: to #{name}.from_env" if options[:url].to_s.empty?
+
+      new(**options)
+    end
+
     # @param options [Hash] see {Config} for every supported option
     # @option options [String] :url base URL of the Zammad instance
     # @option options [String] :http_token access token
@@ -84,6 +123,40 @@ module ZammadAPI
 
     # @return [Array<Symbol>] every resource name this client supports
     def resource_names = RESOURCES.keys
+
+    # The user these requests authenticate as, or the one {#on_behalf_of}
+    # scoped them to.
+    #
+    # @example Checking which account a token belongs to
+    #   client.me.email # => "agent@example.com"
+    #
+    # @return [Resources::User]
+    # @raise [AuthenticationError] when the credentials are not valid
+    def me
+      response = @transport.get(
+        'api/v1/users/me',
+        operation:      'find current user',
+        resource_class: Resources::User,
+        query:          { expand: true }
+      )
+      Resources::User.from_response(
+        @transport,
+        response.decoded(:object, operation: 'find current user', resource_class: Resources::User)
+      )
+    end
+
+    # The version of the Zammad instance, not of this gem — that is
+    # {ZammadAPI::VERSION}.
+    #
+    # @example
+    #   client.version # => "6.4.0"
+    #
+    # @return [String, nil] nil when the instance reported no version
+    def version
+      response = @transport.get('api/v1/version', operation: 'get the Zammad version')
+      version  = response.decoded(:object, operation: 'get the Zammad version')[:version]
+      version&.to_s
+    end
 
     # @!group Raw requests
 

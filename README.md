@@ -58,6 +58,17 @@ client = ZammadAPI::Client.new(
 )
 ```
 
+### From the environment
+
+`from_env` reads `ZAMMAD_URL` and `ZAMMAD_TOKEN` (or `ZAMMAD_USER` and
+`ZAMMAD_PASSWORD`, or `ZAMMAD_OAUTH2_TOKEN`), so a script needs no configuration of its
+own. Anything passed in wins over the environment:
+
+```ruby
+client = ZammadAPI::Client.from_env
+client = ZammadAPI::Client.from_env(timeout: 300)
+```
+
 ### Options
 
 | Option           | Default            | Description                                                        |
@@ -80,6 +91,16 @@ client = ZammadAPI::Client.new(
 
 Credentials are never written to the log, and `client.config.inspect` redacts them, so a
 configuration object is safe to include in an error report.
+
+### Checking the connection
+
+```ruby
+client.me.email # => "agent@example.com", the account the credentials belong to
+client.version  # => "6.4.0", the Zammad instance's version
+```
+
+`client.version` is the version of the Zammad instance; `ZammadAPI::VERSION` is the
+version of this gem.
 
 ### Adapter and middleware
 

@@ -13,6 +13,8 @@ module ZammadAPI
     end
 
     class User < Base
+      # Narrowed from Base so Client#me returns the concrete user type.
+      def self.from_response: (Transport, Hash[untyped, untyped] attributes) -> User
     end
 
     class Ticket < Base

@@ -12,10 +12,7 @@
 require 'zammad_api'
 require 'fileutils'
 
-client = ZammadAPI::Client.new(
-  url:        ENV.fetch('ZAMMAD_URL'),
-  http_token: ENV.fetch('ZAMMAD_TOKEN')
-)
+client = ZammadAPI::Client.from_env
 
 ticket_id = Integer(ARGV.fetch(0) { abort "usage: #{$PROGRAM_NAME} TICKET_ID [DIRECTORY]" })
 directory = ARGV.fetch(1, "ticket-#{ticket_id}")
