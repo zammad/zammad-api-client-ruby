@@ -8,6 +8,7 @@ module ZammadAPI
     REDACTED_ATTRIBUTES: Array[Symbol]
     REDACTION: String
     URL_PATTERN: Regexp
+    USERINFO_PATTERN: Regexp
 
     def self.new: (**untyped) -> instance
 
@@ -54,6 +55,6 @@ module ZammadAPI
     def validate_credentials!: () -> void
     def validate_numbers!: () -> void
     def presence: (untyped) -> untyped
-    def normalized_string: (untyped) -> String
+    def immutable: (untyped) -> untyped
   end
 end

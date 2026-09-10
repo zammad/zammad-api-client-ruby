@@ -76,6 +76,10 @@ module ZammadAPI
 
     URL_PATTERN = %r{\Ahttps?://}i
 
+    # The +user:password@+ part of a URL. A proxy URL carries its credentials
+    # inline, so {#inspect} has to blank them while keeping the host visible.
+    USERINFO_PATTERN = %r{(?<=://)[^/@]+(?=@)}
+
     def initialize(
       url:,
       user: nil,
@@ -95,18 +99,18 @@ module ZammadAPI
       # these keyword arguments are invisible to the type checker.
       # steep:ignore:start
       super(
-        url:            normalize_url(url),
-        user:           presence(user),
-        password:       presence(password),
-        http_token:     presence(http_token),
-        oauth2_token:   presence(oauth2_token),
-        user_agent:     user_agent,
+        url:            immutable(normalize_url(url)),
+        user:           immutable(presence(user)),
+        password:       immutable(presence(password)),
+        http_token:     immutable(presence(http_token)),
+        oauth2_token:   immutable(presence(oauth2_token)),
+        user_agent:     immutable(user_agent),
         timeout:        timeout,
         open_timeout:   open_timeout,
         retries:        retries,
         retry_interval: retry_interval,
         ssl_verify:     ssl_verify,
-        proxy:          presence(proxy),
+        proxy:          immutable(presence(proxy)),
         logger:         logger || Logger.new(IO::NULL)
       )
       # steep:ignore:end
@@ -136,6 +140,7 @@ module ZammadAPI
       # Loggers have verbose default inspect output that would drown out the
       # rest of the configuration.
       return "#<#{value.class}>" if key == :logger
+      return value.sub(USERINFO_PATTERN, REDACTION).inspect if key == :proxy && value
 
       value.inspect
     end
@@ -172,8 +177,16 @@ module ZammadAPI
       value
     end
 
-    def normalized_string(value)
-      value.to_s
+    # Ruby leaves the members of a Data object mutable, so a caller-supplied
+    # String would otherwise stay writable through the config - and shared
+    # with the caller's own variable. Freezing a copy keeps a Config, and any
+    # Transport built from one, genuinely immutable.
+    #
+    # This deliberately copies rather than using String#-@: interning would
+    # keep a credential in the global fstring table for the life of the
+    # process, well past the config that held it.
+    def immutable(value)
+      value.is_a?(String) ? value.dup.freeze : value
     end
   end
 end

@@ -3,7 +3,7 @@ module ZammadAPI
     RETRIABLE_METHODS: Array[Symbol]
     RETRIABLE_STATUSES: Array[Integer]
     RETRIABLE_EXCEPTIONS: Array[untyped]
-    SENSITIVE_KEYS: Array[Symbol]
+    SENSITIVE_KEY_PATTERN: Regexp
     REDACTED: String
 
     attr_reader config: Config

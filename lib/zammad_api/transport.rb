@@ -35,8 +35,12 @@ module ZammadAPI
       Timeout::Error
     ].freeze
 
-    # Request payload keys whose values must never reach the log.
-    SENSITIVE_KEYS = %i[password token api_token http_token oauth2_token secret private_key].freeze
+    # Substrings that mark a request payload key as carrying a credential.
+    # Matching on a substring rather than the whole key covers the variants
+    # Zammad and OAuth actually send - password_confirm, access_token,
+    # refresh_token, client_secret - which an exact-match list silently let
+    # through to the log.
+    SENSITIVE_KEY_PATTERN = /password|token|secret|private_key/i
 
     REDACTED = '[REDACTED]'
 
@@ -195,7 +199,7 @@ module ZammadAPI
 
     def redact(value)
       case value
-      when Hash  then value.to_h { |key, nested| [key, SENSITIVE_KEYS.include?(key.to_s.to_sym) ? REDACTED : redact(nested)] }
+      when Hash  then value.to_h { |key, nested| [key, SENSITIVE_KEY_PATTERN.match?(key.to_s) ? REDACTED : redact(nested)] }
       when Array then value.map { redact(it) }
       else value
       end

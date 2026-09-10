@@ -250,10 +250,10 @@ RSpec.describe ZammadAPI::Transport do
   end
 
   describe 'logging' do
-    subject(:log) { output.string }
+    subject(:log) { log_device.string }
 
-    let(:output) { StringIO.new }
-    let(:logger) { Logger.new(output, level: Logger::DEBUG) }
+    let(:log_device) { StringIO.new }
+    let(:logger) { Logger.new(log_device, level: Logger::DEBUG) }
 
     before do
       stub_request(:post, url).to_return(json_response({ id: 1 }, status: 201))
@@ -282,11 +282,51 @@ RSpec.describe ZammadAPI::Transport do
     end
 
     it 'stays silent by default' do
-      quiet = StringIO.new
-      allow(quiet).to receive(:write)
       stub_request(:get, url).to_return(json_response([]))
-      unit_transport.get('api/v1/groups', operation: 'test')
-      expect(quiet).not_to have_received(:write)
+
+      expect { unit_transport.get('api/v1/groups', operation: 'test') }
+        .to output('').to_stdout.and output('').to_stderr
+    end
+
+    context 'with credential-bearing payload keys' do
+      subject(:log) { log_device.string }
+
+      let(:log_device) { StringIO.new }
+
+      before do
+        stub_request(:post, url).to_return(json_response({ id: 1 }, status: 201))
+        unit_transport(logger: Logger.new(log_device, level: Logger::DEBUG)).post(
+          'api/v1/groups',
+          operation: 'test',
+          body:      {
+            login:            'jane',
+            password_confirm: 'confirm-s3cret',
+            access_token:     'access-s3cret',
+            refresh_token:    'refresh-s3cret',
+            client_secret:    'client-s3cret'
+          }
+        )
+      end
+
+      it 'redacts a password_confirm' do
+        expect(log).not_to include('confirm-s3cret')
+      end
+
+      it 'redacts an access_token' do
+        expect(log).not_to include('access-s3cret')
+      end
+
+      it 'redacts a refresh_token' do
+        expect(log).not_to include('refresh-s3cret')
+      end
+
+      it 'redacts a client_secret' do
+        expect(log).not_to include('client-s3cret')
+      end
+
+      it 'still keeps a non-sensitive value' do
+        expect(log).to include('login: "jane"')
+      end
     end
   end
 end

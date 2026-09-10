@@ -149,6 +149,52 @@ RSpec.describe ZammadAPI::Config do
       config = build(password: 'hunter2')
       expect(config.to_s).to eq(config.inspect)
     end
+
+    context 'with an authenticated proxy' do
+      subject(:rendered) { build(proxy: 'http://puser:pproxy-s3cret@proxy.test:8080').inspect }
+
+      it 'redacts the proxy credentials' do
+        expect(rendered).not_to include('pproxy-s3cret')
+      end
+
+      it 'keeps the proxy host visible' do
+        expect(rendered).to include('proxy.test:8080')
+      end
+
+      it 'marks the redacted userinfo' do
+        expect(rendered).to include('proxy="http://[REDACTED]@proxy.test:8080"')
+      end
+    end
+
+    it 'leaves a proxy without credentials alone' do
+      expect(build(proxy: 'http://proxy.test:8080').inspect).to include('proxy="http://proxy.test:8080"')
+    end
+  end
+
+  describe 'immutability of string members' do
+    it 'freezes the url' do
+      expect(build.url).to be_frozen
+    end
+
+    it 'does not share the url with the caller' do
+      supplied = +'https://zammad.example.com/'
+      config   = described_class.new(url: supplied, http_token: 'tok')
+      supplied << 'mutated'
+      expect(config.url).to eq('https://zammad.example.com/')
+    end
+
+    it 'freezes the credentials' do
+      config = build(user: 'u', password: +'pw', http_token: nil)
+      expect(config.password).to be_frozen
+    end
+
+    it 'freezes the proxy' do
+      expect(build(proxy: +'http://proxy.test:8080').proxy).to be_frozen
+    end
+
+    it 'freezes the user agent' do
+      expect(build(user_agent: +'custom/1.0').user_agent).to be_frozen
+    end
   end
 
   it 'is immutable' do
