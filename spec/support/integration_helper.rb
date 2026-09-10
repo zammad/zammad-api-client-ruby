@@ -56,8 +56,11 @@ class Helper
           "authenticating as #{config[:user]} failed (#{e.class}: #{e.message})"
   end
 
+  # Finite timeouts matter here: a TEST_URL that accepts the connection but
+  # never answers would otherwise hang the integration job until the CI
+  # timeout rather than failing the setup check.
   def self.connection
-    Faraday.new(url: config[:url])
+    Faraday.new(url: config[:url], request: { open_timeout: 10, timeout: 30 })
   end
 
   def self.parse(body)

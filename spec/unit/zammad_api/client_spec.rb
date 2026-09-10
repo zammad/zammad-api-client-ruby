@@ -234,7 +234,11 @@ RSpec.describe ZammadAPI::Client do
       end
       threads.each(&:join)
 
-      expect(client.config).to be_frozen
+      client.user.find(1)
+
+      expect(
+        a_request(:get, url).with(query: hash_including({})) { |request| !request.headers.key?('From') }
+      ).to have_been_made
     end
   end
 
