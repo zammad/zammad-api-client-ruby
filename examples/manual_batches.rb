@@ -103,13 +103,22 @@ puts "   cursor cleared\n\n"
 
 puts '4. Throttled loop (2 pages, 0.2s apart)'
 
+MAX_RATE_LIMIT_RETRIES = 5
+
 page = 1
 2.times do
+  attempt = 0
+
+  # Bounded on purpose: an instance that keeps returning 429 would otherwise
+  # make this loop sleep and retry forever with no way out.
   batch = begin
     client.ticket.all.page(page, per_page: PER_PAGE).to_a
   rescue ZammadAPI::RateLimitError => e
+    attempt += 1
+    raise if attempt > MAX_RATE_LIMIT_RETRIES
+
     wait = e.retry_after || 5
-    puts "   rate limited, waiting #{wait}s"
+    puts "   rate limited, waiting #{wait}s (attempt #{attempt}/#{MAX_RATE_LIMIT_RETRIES})"
     sleep wait
     retry
   end

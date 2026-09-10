@@ -23,13 +23,23 @@ directory = ARGV.fetch(1, "ticket-#{ticket_id}")
 ticket = client.ticket.find(ticket_id)
 FileUtils.mkdir_p(directory)
 
+# The filename comes from the server, so it is not trusted to be a plain
+# basename: `File.basename` strips any directory part that would otherwise
+# let `../` escape the download directory. The attachment id keeps two
+# same-named attachments on one article from overwriting each other.
+def safe_filename(article_id, attachment)
+  name = File.basename(attachment.filename.to_s)
+  name = 'attachment' if name.empty? || name.start_with?('.')
+  "#{article_id}-#{attachment.id}-#{name}"
+end
+
 saved = 0
 ticket.articles.each do |article|
   article.attachments.each do |attachment|
     # `download` returns the bytes in ASCII-8BIT, so images and archives
     # survive intact.
     contents = attachment.download
-    path     = File.join(directory, "#{article.id}-#{attachment.filename}")
+    path     = File.join(directory, safe_filename(article.id, attachment))
 
     File.binwrite(path, contents)
     saved += 1

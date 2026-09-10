@@ -27,6 +27,17 @@ export_client = client.with(timeout: 300, retries: 5)
 destination = ARGV.fetch(0, 'tickets.csv')
 exported    = 0
 
+# A ticket title is whatever the customer typed, and a spreadsheet treats a
+# cell starting with =, +, -, @, tab or CR as a formula rather than text. A
+# title of `=1+1` would be evaluated on open, and worse ones can call out to
+# the network, so prefix an apostrophe to force every exported cell to text.
+FORMULA_PREFIX = /\A[=+\-@\t\r]/
+
+def csv_safe(value)
+  text = value.to_s
+  FORMULA_PREFIX.match?(text) ? "'#{text}" : text
+end
+
 CSV.open(destination, 'w') do |csv|
   csv << %w[id number title state priority group customer created_at]
 
@@ -36,13 +47,13 @@ CSV.open(destination, 'w') do |csv|
     tickets.each do |ticket|
       csv << [
         ticket.fetch(:id),        # must exist; raises KeyError otherwise
-        ticket.number,
-        ticket.title,
-        ticket.state,             # present because requests expand by default
-        ticket.priority,
-        ticket.group,
-        ticket.customer,
-        ticket.created_at
+        csv_safe(ticket.number),
+        csv_safe(ticket.title),
+        csv_safe(ticket.state),   # present because requests expand by default
+        csv_safe(ticket.priority),
+        csv_safe(ticket.group),
+        csv_safe(ticket.customer),
+        csv_safe(ticket.created_at)
       ]
     end
 

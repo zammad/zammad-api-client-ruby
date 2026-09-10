@@ -246,7 +246,7 @@ HTTP `From` header and requires Zammad 5.0 or later.
 
 Every error descends from `ZammadAPI::Error`.
 
-```
+```text
 ZammadAPI::Error
 ├── ZammadAPI::ConfigurationError    invalid client options
 ├── ZammadAPI::UnknownResourceError  no such resource, e.g. client.unicorn

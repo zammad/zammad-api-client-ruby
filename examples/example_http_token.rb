@@ -3,6 +3,7 @@
 
 $LOAD_PATH.unshift File.expand_path('../lib', __dir__)
 require 'zammad_api'
+require 'fileutils'
 require 'logger'
 
 client = ZammadAPI::Client.new(
@@ -52,10 +53,21 @@ client.ticket.all.lazy.select { it.state == 'open' }.first(5).each do |open_tick
 end
 
 # Download the attachments of the first article, if any.
+#
+# The filename is server-supplied, so it goes through `File.basename` and
+# lands in a dedicated directory rather than being written straight to the
+# working directory - otherwise a name containing `../` could be written
+# anywhere the process can reach.
 puts separator
+download_dir = 'downloads'
 ticket.articles.first&.attachments&.each do |attachment|
   puts "Attachment #{attachment.filename} (#{attachment.size} bytes)"
-  File.binwrite(attachment.filename, attachment.download)
+
+  FileUtils.mkdir_p(download_dir)
+  name = File.basename(attachment.filename.to_s)
+  name = "attachment-#{attachment.id}" if name.empty? || name.start_with?('.')
+
+  File.binwrite(File.join(download_dir, name), attachment.download)
 end
 
 # Errors carry the status and Zammad's own message.
