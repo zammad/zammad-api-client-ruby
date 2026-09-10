@@ -198,17 +198,17 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
 
     count = 0
     tickets = client.ticket.all
-    tickets.page(1).per(5).each do |local_ticket|
+    tickets.page(1, of: 5).each do |local_ticket|
       expect(local_ticket.class).to eq(ZammadAPI::Resources::Ticket)
       count += 1
     end
     expect(count).to eq(5)
-    tickets.page(2).per(5).each do |local_ticket|
+    tickets.page(2, of: 5).each do |local_ticket|
       expect(local_ticket.class).to eq(ZammadAPI::Resources::Ticket)
       count += 1
     end
     expect(count).to eq(10)
-    tickets.page(3).per(5).each do |local_ticket|
+    tickets.page(3, of: 5).each do |local_ticket|
       expect(local_ticket.class).to eq(ZammadAPI::Resources::Ticket)
       count += 1
     end

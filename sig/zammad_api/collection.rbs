@@ -33,8 +33,7 @@ module ZammadAPI
                  | (?batch_size: Integer?) -> Enumerator[untyped, Collection]
     def in_batches: (?of: Integer?) { (Array[untyped]) -> void } -> Collection
                   | (?of: Integer?) -> Enumerator[Array[untyped], Collection]
-    def page: (Integer number) -> Collection
-    def per: (Integer size) -> Collection
+    def page: (Integer number, ?of: Integer?) -> Collection
     def where: (**untyped) -> Collection
     def pluck: (*(Symbol | String) keys) -> Array[untyped]
     def count: (*untyped) ?{ (untyped) -> boolish } -> Integer
@@ -45,6 +44,7 @@ module ZammadAPI
 
     private
 
+    def positive_integer!: (untyped, String) -> Integer
     def walk: () { (Array[untyped]) -> void } -> void
     def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped]) -> Collection
     def fetch: (Integer, Integer) -> Array[untyped]

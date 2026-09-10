@@ -9,7 +9,7 @@ Ruby client for the Zammad API v1.0.
 - Ships **RBS signatures** in `sig/`, so typed projects get completion and checking out of the box.
 - Requests carry **timeouts** and **retry with backoff** for transient failures by default.
 - Collections are **lazily paginated** `Enumerable`s, with a familiar
-  `where` / `page` / `per` / `in_batches` / `find_each` surface.
+  `where` / `page` / `in_batches` / `find_each` surface.
 - Records support **pattern matching**, and clients are **immutable** and safe to share
   between threads.
 - **Raw requests** reach the endpoints this gem does not model yet, without giving up
@@ -402,7 +402,7 @@ client.group.all.where(active: true)           # the same, from an existing coll
 ```
 
 `where` takes Zammad query parameters, such as `sort_by` where the endpoint supports it.
-Paging is not one of them: that is what `page` and `per` are for, and passing `page:` or
+Paging is not one of them: that is what `page`, `in_batches` and `find_each` are for, and passing `page:` or
 `per_page:` to `where` raises `ArgumentError` rather than being silently ignored.
 
 ### Search
@@ -416,22 +416,33 @@ end
 ### Explicit pages
 
 ```ruby
-tickets = client.ticket.all.per(50)
+tickets = client.ticket.all
 
-tickets.page(2)           # a new collection limited to page 2
-tickets.page(2).per(10)   # ... with a different page size
+tickets.page(2)           # page 2 of the default 100 per page
+tickets.page(2, of: 10)   # records 11 to 20
 ```
 
-Collections are immutable: `where`, `page` and `per` return a new collection and leave the
+Collections are immutable: `where` and `page` return a new collection and leave the
 original untouched.
 
 ### Page size
 
-`per` sets how many records one request fetches, 100 by default. Zammad caps the page size
-per endpoint — 100 for `/api/v1/tickets`, 200 for a search, 1000 for the other index
-endpoints — and a larger size is reduced to what the endpoint serves. That keeps a walk
-complete: a page size the server silently shrank would otherwise end the iteration at the
-first page.
+A request fetches 100 records by default. Three calls take another size, each for its own
+kind of work:
+
+```ruby
+client.ticket.all.find_each(batch_size: 500) { |ticket| archive(ticket) }  # walking
+client.ticket.all.in_batches(of: 500) { |tickets| import(tickets) }        # batching
+client.ticket.all.page(2, of: 500)                                         # one page
+```
+
+`find_each` without a block is an Enumerator, so it is also how you read at a chosen page
+size: `client.ticket.all.find_each(batch_size: 500).first(7)`.
+
+Zammad caps the page size per endpoint — 100 for `/api/v1/tickets`, 200 for a search, 1000
+for the other index endpoints — and a larger size is reduced to what the endpoint serves.
+That keeps a walk complete: a page size the server silently shrank would otherwise end the
+iteration at the first page.
 
 ### Reading single attributes
 
@@ -449,7 +460,7 @@ shrinking the request.
 
 ```ruby
 client.ticket.search('state.name:open').count   # one request
-client.ticket.all.count                         # one request per page
+client.ticket.all.count                         # one request per page of 100
 ```
 
 `size` and `length` are `count`, and cost the same. `empty?` asks for a single record
@@ -662,13 +673,13 @@ compatibility. Most calling code needs no edits; the table lists everything that
 | 1.x                                   | 2.0                                              | Why                                                                 |
 | ------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------- |
 | `collection.each` stopped after one page | `each` walks every page                        | Iterating a collection silently truncated at 100 records            |
-| `collection.page(1, 3) { \|r\| ... }`  | `collection.page(1).per(3).each { ... }`         | `page` now returns a collection instead of mutating and yielding    |
+| `collection.page(1, 3) { \|r\| ... }`  | `collection.page(1, of: 3).each { ... }`         | `page` now returns a collection instead of mutating and yielding    |
 | `collection.page_next` / `page_prev`   | `collection.page(n)` or `in_batches`             | Removed; they mutated shared state                                  |
-| `client.x.all(per_page: 50)`           | `client.x.all.per(50)`                           | Page size is chainable instead of an argument at every entry point  |
+| `client.x.all(per_page: 50)`           | `client.x.all.page(1, of: 50)`, `find_each(batch_size: 50)` | Page size belongs to the call that reads, not to every entry point  |
 | `client.x.all(active: true)`           | `client.x.where(active: true)`                   | Filters no longer share a keyword bag with the paging parameters    |
 | `client.x.search(query: 'zammad')`     | `client.x.search('zammad')`                      | The search term is the argument, not a keyword                      |
 | `collection.each_page { ... }`         | `collection.in_batches { ... }`                  | Ruby already has a name for this                                    |
-| `collection[3]`                        | `collection.page(4).per(1).first`                | An index that costs a request, and that ignored `page`, was a trap  |
+| `collection[3]`                        | `collection.page(4, of: 1).first`                | An index that costs a request, and that ignored `page`, was a trap  |
 | `record.save` raised on a rejection    | `save` → `false` with `record.error`; `save!` raises | Branching on a rejected attribute needed a begin/rescue         |
 | `record.attributes[:x] = 1`            | `record.x = 1`, or `record.to_h` for a copy      | Writing through the reader staged no change, so `save` never sent it |
 | `client.user.find(ticket.customer_id)` | `ticket.related.customer`                        | Following a foreign key needed the client threaded through          |

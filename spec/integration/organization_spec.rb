@@ -128,12 +128,12 @@ RSpec.describe ZammadAPI, 'organization object basics' do
 
     count = 0
     organizations = client.organization.all
-    organizations.page(1).per(3).each do |local_organization|
+    organizations.page(1, of: 3).each do |local_organization|
       expect(local_organization.class).to eq(ZammadAPI::Resources::Organization)
       count += 1
     end
     expect(count).to eq(2)
-    organizations.page(2).per(3).each do |local_organization|
+    organizations.page(2, of: 3).each do |local_organization|
       expect(local_organization.class).to eq(ZammadAPI::Resources::Organization)
       count += 1
     end
@@ -195,12 +195,12 @@ RSpec.describe ZammadAPI, 'organization object basics' do
 
     count = 0
     organizations = client.organization.search('zammad')
-    organizations.page(1).per(3).each do |local_organization|
+    organizations.page(1, of: 3).each do |local_organization|
       expect(local_organization.class).to eq(ZammadAPI::Resources::Organization)
       count += 1
     end
     expect(count).to eq(1)
-    organizations.page(2).per(3).each do |local_organization|
+    organizations.page(2, of: 3).each do |local_organization|
       expect(local_organization.class).to eq(ZammadAPI::Resources::Organization)
       count += 1
     end

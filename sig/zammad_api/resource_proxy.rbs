@@ -25,8 +25,7 @@ module ZammadAPI
                  | (?batch_size: Integer?) -> Enumerator[untyped, Collection]
     def in_batches: (?of: Integer?) { (Array[untyped]) -> void } -> Collection
                   | (?of: Integer?) -> Enumerator[Array[untyped], Collection]
-    def page: (Integer number) -> Collection
-    def per: (Integer size) -> Collection
+    def page: (Integer number, ?of: Integer?) -> Collection
     def pluck: (*(Symbol | String) keys) -> Array[untyped]
     def count: (*untyped) ?{ (untyped) -> boolish } -> Integer
     def size: () -> Integer

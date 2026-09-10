@@ -110,17 +110,17 @@ RSpec.describe ZammadAPI, 'ticket priority object basics' do
 
     count = 0
     ticket_priorities = client.ticket_priority.all
-    ticket_priorities.page(1).per(2).each do |local_ticket_priority|
+    ticket_priorities.page(1, of: 2).each do |local_ticket_priority|
       expect(local_ticket_priority.class).to eq(ZammadAPI::Resources::TicketPriority)
       count += 1
     end
     expect(count).to eq(2)
-    ticket_priorities.page(2).per(2).each do |local_ticket_priority|
+    ticket_priorities.page(2, of: 2).each do |local_ticket_priority|
       expect(local_ticket_priority.class).to eq(ZammadAPI::Resources::TicketPriority)
       count += 1
     end
     expect(count).to eq(4)
-    ticket_priorities.page(3).per(2).each do |local_ticket_priority|
+    ticket_priorities.page(3, of: 2).each do |local_ticket_priority|
       expect(local_ticket_priority.class).to eq(ZammadAPI::Resources::TicketPriority)
       count += 1
     end

@@ -11,16 +11,20 @@ A breaking release that modernises the whole gem. See
 - `Collection#each` (`client.x.all`, `client.x.search`) now walks every page. Previously it
   fetched a single page, so iterating silently stopped at 100 records.
 - Collections are built up by chaining instead of by keyword arguments:
-  `all(per_page: 50)` is now `all.per(50)`, `all(active: true)` is `where(active: true)`,
+  `all(per_page: 50)` is now `find_each(batch_size: 50)` or `page(1, of: 50)`,
+  `all(active: true)` is `where(active: true)`,
   and `search(query: 'zammad')` is `search('zammad')`.
-- `page(number, per_page)` with a block was replaced by `page(number)`, which returns a new
-  collection, and `per(size)` for the page size. `page_next` and `page_prev` were removed.
+- `page(number, per_page)` with a block was replaced by `page(number, of: size)`, which
+  returns a new collection. `page_next` and `page_prev` were removed.
 - `Collection#each_page` was renamed to `#in_batches`, which also takes the page size as
   `in_batches(of: 500)`.
 - `Collection#[]` was removed. It cost a request per index and ignored the page a
-  collection was limited to; use `first`, or `page(n).per(1).first` for one record at an
+  collection was limited to; use `first`, or `page(n, of: 1).first` for one record at an
   offset.
 - `Collection#per_page` and `#current_page` are no longer public. `inspect` reports both.
+- There is no `per`. The page size belongs to the call that reads: `find_each(batch_size:)`
+  to walk, `in_batches(of:)` to batch, `page(number, of:)` for one page. Everything else —
+  `each`, `first`, `lazy`, `count` — fetches 100 per request.
 - `where` rejects `page`, `per_page`, `expand` and `only_total_count` with an
   `ArgumentError`. They used to be accepted and silently overridden.
 - `client.on_behalf_of = 'login'` and `client.perform_on_behalf_of` were replaced by
@@ -60,11 +64,11 @@ A breaking release that modernises the whole gem. See
   (403), `NotFoundError` (404), `ValidationError` (422) and `RateLimitError` (429, with
   `#retry_after`). Network failures raise `ConnectionError` or `TimeoutError` instead of
   leaking Faraday exceptions.
-- `Collection#where`, `#page`, `#per`, `#in_batches`, `#find_each`, `#count` and lazy
+- `Collection#where`, `#page`, `#in_batches`, `#find_each`, `#count` and lazy
   enumeration, plus `client.x.where(...)` as a shorthand for `all.where(...)`.
 - A resource proxy is `Enumerable` over `all`, so `client.ticket.each`,
   `client.ticket.first(5)`, `client.ticket.map`, `#find_each`, `#in_batches`, `#page`,
-  `#per`, `#pluck` and `#count` all work without naming `all`. `client.x.find(id)` keeps
+  `#pluck` and `#count` all work without naming `all`. `client.x.find(id)` keeps
   its own meaning rather than becoming `Enumerable#find`; `detect` is the block form.
 - `Collection#count` costs a single request on a search endpoint, which Zammad can count
   without returning the records.

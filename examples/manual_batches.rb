@@ -9,7 +9,7 @@
 # Four approaches, in increasing order of control:
 #
 #   1. pull one page at a time from an Enumerator
-#   2. fixed-size record batches, independent of the API page size
+#   2. one whole response per block call, numbered or not
 #   3. an explicit page loop that can resume where it left off
 #   4. the same, throttled between batches
 #
@@ -45,16 +45,25 @@ end
 
 puts "   stopped after two pages; the rest was never fetched\n\n"
 
-# 2. Fixed-size record batches ----------------------------------------------
+# 2. A batch at a time -------------------------------------------------------
 #
-# Page size is an API concern; your batch size is a processing concern. Slice
-# the record enumerator to decouple them, e.g. fetch 5 per request but commit
-# 12 at a time.
+# `in_batches` hands the whole response to the block, so the page size is the
+# batch size. Without a block it is an Enumerator, so Ruby's `with_index`
+# numbers the batches as they arrive - for a progress line, a log prefix, or
+# a checkpoint every nth batch.
 
-puts '2. Batches of 12 records, fetched 5 per request'
+puts '2. One response at a time, numbered'
 
-client.ticket.all.find_each(batch_size: PER_PAGE).each_slice(12).with_index(1) do |batch, index|
+client.ticket.all.in_batches(of: PER_PAGE).with_index do |batch, index|
   puts "   batch #{index}: #{batch.size} tickets (ids #{batch.first.id}..#{batch.last.id})"
+end
+
+# Drop `with_index` where the number is not interesting.
+
+puts '   ... and the same without the numbering'
+
+client.ticket.all.in_batches(of: PER_PAGE) do |batch|
+  puts "   batch of #{batch.size} tickets (ids #{batch.first.id}..#{batch.last.id})"
 end
 puts
 
@@ -68,13 +77,13 @@ puts '3. Resumable page loop'
 start_page = File.exist?(CURSOR_FILE) ? Integer(File.read(CURSOR_FILE).strip) : 1
 puts "   resuming at page #{start_page} (cursor: #{CURSOR_FILE})"
 
-tickets    = client.ticket.all.per(PER_PAGE)
+tickets    = client.ticket.all
 page       = start_page
 processed  = 0
 pages_done = 0
 
 loop do
-  batch = tickets.page(page).to_a
+  batch = tickets.page(page, of: PER_PAGE).to_a
   break if batch.empty?
 
   processed  += batch.size
@@ -110,7 +119,7 @@ page = 1
   # Bounded on purpose: an instance that keeps returning 429 would otherwise
   # make this loop sleep and retry forever with no way out.
   batch = begin
-    tickets.page(page).to_a
+    tickets.page(page, of: PER_PAGE).to_a
   rescue ZammadAPI::RateLimitError => e
     attempt += 1
     raise if attempt > MAX_RATE_LIMIT_RETRIES
@@ -133,8 +142,8 @@ puts <<~NOTE
   Which to reach for:
 
     each / find_each        the loop is yours and runs to completion
-    in_batches              you want an array of records per request
+    in_batches              you want one whole response at a time
     in_batches.next         you want to pull batches as a consumer is ready
-    find_each.each_slice(n) batch size should not be tied to the API page size
-    page(n).per(m)          the page number must be persisted, retried or skipped
+    in_batches.with_index   you want the batches numbered as they arrive
+    page(n, of: m)          the page number must be persisted, retried or skipped
 NOTE

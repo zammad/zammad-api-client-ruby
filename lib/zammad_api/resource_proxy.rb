@@ -93,7 +93,7 @@ module ZammadAPI
     #
     # @param params [Hash] Zammad query parameters
     # @return [Resources::Base, nil] nil when nothing matched
-    def find_by(**params) = where(**params).per(1).first
+    def find_by(**params) = where(**params).page(1, of: 1).first
 
     # Fetches the first record matching Zammad query parameters, raising when
     # nothing matched.
@@ -180,14 +180,10 @@ module ZammadAPI
     def in_batches(of: nil, &block) = all.in_batches(of: of, &block) # steep:ignore BlockTypeMismatch
 
     # @param number [Integer] one-based page number
+    # @param of [Integer, nil] records on the page
     # @return [Collection]
     # @see Collection#page
-    def page(number) = all.page(number)
-
-    # @param size [Integer] records per request
-    # @return [Collection]
-    # @see Collection#per
-    def per(size) = all.per(size)
+    def page(number, of: nil) = all.page(number, of: of)
 
     # @param keys [Array<Symbol, String>] attribute names
     # @return [Array]

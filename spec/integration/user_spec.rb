@@ -169,18 +169,18 @@ RSpec.describe ZammadAPI, 'user object basics' do
 
     count = 0
     users = client.user.all
-    users.page(1).per(4).each do |local_user|
+    users.page(1, of: 4).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end
     expect(count).to eq(4)
-    users.page(2).per(5).each do |local_user|
+    users.page(2, of: 5).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end
     expect(count).to eq(9)
     count = 0
-    users.page(1).per(200).each do |local_user|
+    users.page(1, of: 200).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end
@@ -251,12 +251,12 @@ RSpec.describe ZammadAPI, 'user object basics' do
 
     count = 0
     users = client.user.search(firstname)
-    users.page(1).per(3).each do |local_user|
+    users.page(1, of: 3).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end
     expect(count).to eq(1)
-    users.page(2).per(3).each do |local_user|
+    users.page(2, of: 3).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end

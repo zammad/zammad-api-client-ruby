@@ -254,19 +254,19 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect(proxy.lazy.select(&:active).first(1).map(&:id)).to eq([1])
     end
 
-    it 'forwards #per to the collection' do
-      stub = stub_page(1, [], per_page: 5)
-
-      proxy.per(5).to_a
-      expect(stub).to have_been_requested
-    end
-
     it 'forwards #page to the collection' do
       stub = stub_request(:get, url)
         .with(query: hash_including({ 'page' => '3' }))
         .to_return(json_response([]))
 
       proxy.page(3).to_a
+      expect(stub).to have_been_requested
+    end
+
+    it 'forwards the page size #page was given' do
+      stub = stub_page(1, [], per_page: 5)
+
+      proxy.page(1, of: 5).to_a
       expect(stub).to have_been_requested
     end
 

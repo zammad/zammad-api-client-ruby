@@ -20,8 +20,8 @@ ruby examples/ticket_report.rb tickets.csv
 | Script | What it does | API features it shows |
 | ------ | ------------ | --------------------- |
 | [`example_http_token.rb`](example_http_token.rb) | Creates a ticket, reads it back, adds an article | The basics end to end |
-| [`pagination.rb`](pagination.rb) | Walks a collection every available way and prints the HTTP cost of each | `each`, `find_each`, `in_batches`, `page`, `per`, `where`, `count`, `lazy`, `first(n)`, page-size caps, and collection immutability |
-| [`manual_batches.rb`](manual_batches.rb) | Drives pagination by hand: pull-based, record-sized, resumable and throttled | `in_batches` as an Enumerator (`next`), `find_each.each_slice(n)`, an explicit `page(n)` loop with a persisted cursor |
+| [`pagination.rb`](pagination.rb) | Walks a collection every available way and prints the HTTP cost of each | `each`, `find_each`, `in_batches`, `page(n, of: m)`, `where`, `count`, `lazy`, `first(n)`, page-size caps, and collection immutability |
+| [`manual_batches.rb`](manual_batches.rb) | Drives pagination by hand: pull-based, numbered, resumable and throttled | `in_batches` as an Enumerator (`next`) and with `with_index`, an explicit `page(n, of: m)` loop with a persisted cursor |
 | [`ticket_report.rb`](ticket_report.rb) | Exports every ticket to CSV | Automatic pagination, `in_batches` batching, `client.with` for a long-running job, `fetch` for required attributes |
 | [`triage_tickets.rb`](triage_tickets.rb) | Escalates urgent tickets, nudges stale ones | `search`, `lazy` early exit, `case/in` pattern matching on records, staged `changes` so only diffs are sent, `article` |
 | [`onboard_customer.rb`](onboard_customer.rb) | Creates an organization, a user, and a welcome ticket raised as that user | `create`, `on_behalf_of` as a scoped client and as a block |
