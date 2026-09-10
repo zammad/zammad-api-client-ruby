@@ -279,6 +279,37 @@ group.update!(name: '')   # the same, in one call
 `client.group.create(...)` uses `save!`, so it raises rather than handing back a record
 that looks created but is not. Use `new` plus `save` when you need to branch instead.
 
+### Associations
+
+Zammad expands an association into a name under the plain attribute, so those reads are
+already loaded and free:
+
+```ruby
+ticket = client.ticket.find(1)
+
+ticket.customer    # => "customer@example.com"
+ticket.state       # => "open"
+ticket.group       # => "Users"
+ticket.customer_id # => 7
+```
+
+`related` reaches the whole record behind one of those, which costs a request:
+
+```ruby
+ticket.related.customer.firstname     # => "Nicole"
+ticket.related.group.note
+ticket.related.articles               # => [TicketArticle, ...]
+ticket.related.created_by.email
+
+client.user.find(7).related.organization
+```
+
+The readers live under `related` rather than on the record so that `ticket.customer` keeps
+returning the name it always did — an attribute read that silently became an HTTP request
+would be a poor trade. `belongs_to` targets are memoized, and `reload` or a save drops the
+memo; `has_many` lists are fetched each call, so an article added in between shows up.
+`Ticket.associations` lists what a resource declares.
+
 ### Reload and destroy
 
 ```ruby

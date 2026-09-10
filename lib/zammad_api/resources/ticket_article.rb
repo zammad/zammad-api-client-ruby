@@ -8,6 +8,8 @@ module ZammadAPI
     class TicketArticle < Base
       path 'api/v1/ticket_articles'
 
+      belongs_to :ticket, class_name: 'Ticket'
+
       # @return [Array<TicketArticleAttachment>] the article's attachments
       def attachments
         list = attributes[:attachments] || []

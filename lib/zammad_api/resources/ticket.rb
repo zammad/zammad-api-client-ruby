@@ -12,18 +12,24 @@ module ZammadAPI
       # endpoints, see TicketsController#index.
       MAX_PER_PAGE = 100
 
-      # @return [Array<TicketArticle>] every article of this ticket
+      belongs_to :customer,     class_name: 'User'
+      belongs_to :owner,        class_name: 'User'
+      belongs_to :organization, class_name: 'Organization'
+      belongs_to :group,        class_name: 'Group'
+      belongs_to :state,        class_name: 'TicketState'
+      belongs_to :priority,     class_name: 'TicketPriority'
+
+      has_many :articles, class_name: 'TicketArticle', path: ->(ticket) { "api/v1/ticket_articles/by_ticket/#{ticket.id}" }
+
+      # Every article of this ticket, refetched on each call.
+      #
+      # The same list as +ticket.related.articles+; this is the older name and
+      # stays because it reads better than reaching through +related+ for the
+      # one association a ticket is usually asked for.
+      #
+      # @return [Array<TicketArticle>]
       # @raise [ResponseError] when Zammad rejected the request
-      def articles
-        response = transport.get(
-          "api/v1/ticket_articles/by_ticket/#{id}",
-          operation:      'get articles',
-          resource_class: self.class,
-          query:          { expand: true }
-        )
-        articles = response.decoded(:array, operation: 'get articles', resource_class: self.class)
-        articles.map { TicketArticle.from_response(transport, it) }
-      end
+      def articles = related.articles
 
       # Adds an article to this ticket.
       #

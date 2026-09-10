@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../associations'
 require_relative '../attribute_access'
 require_relative '../errors'
 
@@ -65,7 +66,70 @@ module ZammadAPI
           record.send(:mark_persisted!)
           record
         end
+
+        # Every association declared on this resource, including inherited
+        # ones.
+        #
+        # @return [Hash{Symbol => Hash}]
+        def associations
+          ancestors
+            .select { it.respond_to?(:declared_associations, true) }
+            .reverse
+            .inject({}) { |result, ancestor| result.merge(ancestor.send(:declared_associations)) }
+        end
+
+        # The class carrying this resource's association readers, reached
+        # through {Base#related}.
+        #
+        # @api private
+        # @return [Class]
+        def related_class
+          # A resource's proxy inherits its parent's readers, so Base's
+          # created_by and updated_by reach every resource.
+          @related_class ||= Class.new(superclass.respond_to?(:related_class) ? superclass.related_class : Associations::Proxy) # steep:ignore NoMethod
+        end
+
+        private
+
+        def declared_associations = @declared_associations ||= {}
+
+        # Declares that this resource points at a single other record, through
+        # a foreign key on itself.
+        #
+        # The reader lands on {Base#related}, not on the record, because Zammad
+        # already expands the association into a name under the plain
+        # attribute: +ticket.customer+ is a login, +ticket.related.customer+ is
+        # the User record.
+        #
+        # @param name [Symbol] name of the reader on {Base#related}
+        # @param class_name [String] the target resource, named rather than
+        #   referenced so that two resources may point at each other
+        # @param foreign_key [Symbol] attribute holding the target's id
+        # @return [void]
+        def belongs_to(name, class_name:, foreign_key: :"#{name}_id")
+          declared_associations[name] = { type: :belongs_to, class_name: class_name, foreign_key: foreign_key }
+          # The block runs against a Proxy instance, which the type checker
+          # cannot see through define_method.
+          related_class.define_method(name) { belongs_to_target(name, class_name, foreign_key) } # steep:ignore NoMethod
+        end
+
+        # Declares that this resource points at a list of other records,
+        # served by an endpoint of its own.
+        #
+        # @param name [Symbol] name of the reader on {Base#related}
+        # @param class_name [String] the target resource
+        # @param path [Proc] called with the record, returns the API path
+        # @return [void]
+        def has_many(name, class_name:, path:)
+          declared_associations[name] = { type: :has_many, class_name: class_name, path: path }
+          related_class.define_method(name) { has_many_target(name, class_name, path) } # steep:ignore NoMethod
+        end
       end
+
+      # Zammad stamps every object with the user that created and last
+      # touched it.
+      belongs_to :created_by, class_name: 'User'
+      belongs_to :updated_by, class_name: 'User'
 
       # @param transport [Transport]
       # @param attributes [Hash, nil]
@@ -75,6 +139,7 @@ module ZammadAPI
         @changes    = {}
         @new_record = true
         @error      = nil
+        @related    = nil
       end
 
       # @return [Boolean] whether this record has not been stored yet
@@ -85,6 +150,21 @@ module ZammadAPI
 
       # @return [Boolean] whether there are unsaved changes
       def changed? = !@changes.empty?
+
+      # The records this one points at, each fetched on demand.
+      #
+      # Zammad expands an association into a name under the plain attribute,
+      # so +ticket.customer+ is already the customer's login. These readers
+      # return the whole record instead, which costs a request.
+      #
+      # @example
+      #   ticket.customer               # => "customer@example.com", already loaded
+      #   ticket.related.customer.email # => the same, from the User record
+      #   ticket.related.articles       # => [TicketArticle, ...]
+      #
+      # @return [Associations::Proxy]
+      # @see .associations
+      def related = @related ||= self.class.related_class.new(self)
 
       # Stages several attributes as changes, without saving.
       #
@@ -139,6 +219,7 @@ module ZammadAPI
         @changes    = {}
         @new_record = false
         @error      = nil
+        @related    = nil
         true
       end
 
@@ -184,6 +265,7 @@ module ZammadAPI
         @changes    = {}
         @new_record = false
         @error      = nil
+        @related    = nil
         self
       end
 

@@ -42,6 +42,13 @@ Layout/HashAlignment:
 Style/ClassAndModuleChildren:
   Enabled: false
 
+Naming/PredicatePrefix:
+  # `has_many` is the established name for the declaration, and neither it nor
+  # the reader behind it is a predicate.
+  AllowedMethods:
+    - has_many
+    - has_many_target
+
 Naming/MethodParameterName:
   # `of` is ActiveRecord's name for a batch size, see Collection#in_batches.
   AllowedNames: [id, to, of]

@@ -11,16 +11,25 @@ module ZammadAPI
       @new_record: bool
       @error: ValidationError?
       @changes: Hash[Symbol, Array[untyped]]
+      @related: Associations::Proxy?
+      self.@related_class: untyped
+      self.@declared_associations: Hash[Symbol, Hash[Symbol, untyped]]?
 
       def self.path: (String) -> void
       def self.resource_path: () -> String
       def self.from_response: (Transport, Hash[untyped, untyped] attributes) -> Base
+      def self.associations: () -> Hash[Symbol, Hash[Symbol, untyped]]
+      def self.related_class: () -> untyped
+      def self.declared_associations: () -> Hash[Symbol, Hash[Symbol, untyped]]
+      def self.belongs_to: (Symbol name, class_name: String, ?foreign_key: Symbol) -> void
+      def self.has_many: (Symbol name, class_name: String, path: ^(Base) -> String) -> void
 
       def initialize: (Transport, ?Hash[untyped, untyped]? attributes) -> void
       def new_record?: () -> bool
       def persisted?: () -> bool
       def changes: () -> Hash[Symbol, Array[untyped]]
       def changed?: () -> bool
+      def related: () -> Associations::Proxy
       def assign_attributes: (Hash[untyped, untyped] attributes) -> self
       def save: () -> bool
       def save!: () -> true

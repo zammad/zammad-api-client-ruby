@@ -100,6 +100,13 @@ A breaking release that modernises the whole gem. See
 - `Response#decoded(:object | :array)` validates the shape of a response body in one
   place, so an unexpected payload raises `ParseError` with a consistent message instead of
   failing further downstream.
+- `record.related` reaches the records a record points at: `ticket.related.customer`,
+  `ticket.related.group`, `ticket.related.articles`, `user.related.organization`, and
+  `created_by` / `updated_by` on everything. Following a foreign key used to mean
+  `client.user.find(ticket.customer_id)` by hand. The readers sit under `related` rather
+  than on the record because Zammad expands an association into a name under the plain
+  attribute, and `ticket.customer` has to keep returning that name rather than turning
+  into a request. `Resource.associations` lists what a resource declares.
 
 ### Fixed
 
