@@ -33,7 +33,8 @@ module ZammadAPI
       def changes = @changes.dup.freeze
 
       # The validation failure from the most recent {#save}, so that a +false+
-      # return value can be acted on. Cleared by a successful save.
+      # return value can be acted on. Cleared when the next save is attempted,
+      # so it never describes anything but the most recent one.
       #
       # @return [ValidationError, nil]
       attr_reader :error
@@ -213,6 +214,11 @@ module ZammadAPI
       # @raise [ResponseError] when Zammad rejected the request
       # @see #save
       def save!
+        # Before the request, not after it. Only the success path and the
+        # rescue in `save` used to clear this, so a save that raised anything
+        # else left the previous attempt's ValidationError in place and a
+        # caller reading #error to report the failure read the wrong cause.
+        @error   = nil
         response = new_record? ? create_record : update_record
 
         replace_attributes!(response, operation: 'save object')

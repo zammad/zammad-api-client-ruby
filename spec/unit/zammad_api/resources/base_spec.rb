@@ -272,6 +272,29 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(group.save).to be(true)
       expect(group.error).to be_nil
     end
+
+    context 'when the save after a rejected one fails some other way' do
+      subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Users') }
+
+      before do
+        stub_request(:put, "#{url}/1").with(query: hash_including({})).to_return(
+          json_response({ error: 'Name is required' }, status: 422),
+          json_response({ error: 'not yours' }, status: 403)
+        )
+        group.name = ''
+        group.save
+        group.name = 'Support'
+      end
+
+      it 'records the first rejection' do
+        expect(group.error).to be_a(ZammadAPI::ValidationError)
+      end
+
+      it 'clears it rather than reporting it as the second failure' do
+        expect { group.save }.to raise_error(ZammadAPI::AuthorizationError)
+        expect(group.error).to be_nil
+      end
+    end
   end
 
   describe '#save!' do
