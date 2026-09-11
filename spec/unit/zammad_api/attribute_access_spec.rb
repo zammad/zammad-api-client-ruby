@@ -129,8 +129,12 @@ RSpec.describe ZammadAPI::AttributeAccess do
       expect(record).not_to respond_to(:nope)
     end
 
-    it 'is true for any writer' do
-      expect(record).to respond_to(:anything=)
+    it 'is false for a writer on a read-only record, which would raise' do
+      expect(record).not_to respond_to(:anything=)
+    end
+
+    it 'is true for any writer on a record that stages changes' do
+      expect(ZammadAPI::Resources::Group.new(unit_transport)).to respond_to(:anything=)
     end
 
     it 'is false for a predicate' do

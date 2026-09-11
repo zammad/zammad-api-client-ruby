@@ -80,6 +80,10 @@ RSpec.describe ZammadAPI::Resources::TicketArticleAttachment do
     expect { attachment.filename = 'other.txt' }.to raise_error(NoMethodError, /read-only/)
   end
 
+  it 'does not claim a writer it would refuse' do
+    expect(described_class.new(transport, id: 3)).not_to respond_to(:filename=)
+  end
+
   describe '#inspect' do
     it 'summarizes the attachment' do
       attachment = described_class.new(transport, id: 3, filename: 'note.txt', size: '12')

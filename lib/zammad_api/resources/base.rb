@@ -305,6 +305,8 @@ module ZammadAPI
         @new_record = false
       end
 
+      def writable_attributes? = true
+
       # Everything a freshly loaded record has to forget, in the one place that
       # every load path goes through. Held apart, `save!` and `reload` drifted
       # the moment a sixth field was added to only one of them, and nothing

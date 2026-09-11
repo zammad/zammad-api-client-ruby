@@ -134,12 +134,21 @@ module ZammadAPI
     def respond_to_missing?(name, include_private = false)
       identifier = name.to_s
       return false if NON_ATTRIBUTE_SUFFIXES.any? { identifier.end_with?(it) }
-      return true if identifier.end_with?('=')
+      # Not an unconditional true: a read-only record that claimed a writer and
+      # then raised NoMethodError when one was called would defeat the point of
+      # asking, and lead generic code - serializers, form binders,
+      # assign_attributes loops - straight into the exception it was checking
+      # to avoid.
+      return writable_attributes? if identifier.end_with?('=')
 
       attributes.key?(name) || super
     end
 
     private
+
+    # Whether this record stages attribute writes, so that {#respond_to?} and
+    # calling a writer agree.
+    def writable_attributes? = false
 
     # Overridden by writable records; read-only ones fall back to NoMethodError.
     def write_attribute(key, _value)
