@@ -1,80 +1,75 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Shows how to handle every failure this gem can raise.
+# What to rescue, and what the client has already handled for you.
 #
-# Demonstrates: the error hierarchy, `RateLimitError#retry_after`,
-# `server_message` for Zammad's own wording, and that a proxy error page does
-# not turn into a JSON parse failure.
+# Timeouts, connection failures and the transient statuses (429, 500, 502,
+# 503, 504) are retried with backoff on GET, PUT and DELETE before any error
+# reaches your code, so what is left to handle is what only you can decide
+# about: a missing record, a rejected attribute, bad credentials.
 #
 #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=... \
 #     ruby examples/error_handling.rb
 
 require 'zammad_api'
 
-# Configuration is validated up front, before any request is made.
+# Options are validated up front, before any request is made.
 begin
   ZammadAPI::Client.new(url: 'not-a-url', http_token: 'x')
 rescue ZammadAPI::ConfigurationError => e
-  puts "config rejected early: #{e.message}"
+  puts "rejected early:   #{e.message}"
 end
 
 client = ZammadAPI::Client.from_env
 
-# A realistic wrapper: retry what is worth retrying, give up on what is not.
-def fetch_ticket(client, id, attempts: 3)
-  last = attempts - 1
-
-  attempts.times do |attempt|
-    return client.ticket.find(id)
-  rescue ZammadAPI::NotFoundError
-    # The record does not exist. Not worth retrying.
-    return nil
-  rescue ZammadAPI::AuthenticationError, ZammadAPI::AuthorizationError => e
-    # Credentials or permissions: retrying will not help, fail loudly.
-    abort "cannot continue: #{e.message}"
-  rescue ZammadAPI::RateLimitError => e
-    raise if attempt == last
-
-    # Zammad tells us how long to wait; honour it.
-    wait = e.retry_after || 5
-    warn "rate limited, sleeping #{wait}s"
-    sleep wait
-  rescue ZammadAPI::TimeoutError, ZammadAPI::ConnectionError => e
-    raise if attempt == last
-
-    warn "transient transport failure (#{e.class}), retrying"
-  end
+# A missing record is a decision to make, not a failure to retry.
+ticket = begin
+  client.ticket.find(0)
+rescue ZammadAPI::NotFoundError
+  nil
 end
 
-puts "existing ticket:  #{fetch_ticket(client, 1)&.number || 'not found'}"
-puts "missing ticket:   #{fetch_ticket(client, 0).inspect}"
+puts "missing ticket:   #{ticket.inspect}"
 
-# Validation failures carry Zammad's own message and the offending payload.
+# A rejected attribute (422) makes `save` return false and leaves the reason
+# on the record, so branching needs no begin/rescue.
+group = client.group.new(name: '')
+
+if group.save
+  puts "created group:    #{group.id}"
+else
+  puts "rejected save:    #{group.error.status} #{group.error.server_message}"
+  puts "  body            #{group.error.body.inspect}"
+  puts "  operation       #{group.error.operation} on #{group.error.resource_class}"
+end
+
+# `create` and `save!` raise instead, which is what a script wants.
 begin
-  client.group.create({})
+  client.group.create(name: '')
 rescue ZammadAPI::ValidationError => e
-  puts "validation:       #{e.server_message}"
-  puts "  status          #{e.status}"
-  puts "  body            #{e.body.inspect}"
-  puts "  operation       #{e.operation}"
-  puts "  resource        #{e.resource_class}"
+  puts "raised instead:   #{e.class}"
 end
 
-# Rescue by category when the specific class does not matter.
+# Rescue by category where the exact class does not matter.
 begin
   client.ticket.find(0)
 rescue ZammadAPI::ClientError => e     # any 4xx
   puts "client error:     #{e.status}"
 rescue ZammadAPI::ServerError => e     # any 5xx, including an HTML proxy page
   puts "server error:     #{e.status}"
-rescue ZammadAPI::TransportError => e  # never reached the server
+rescue ZammadAPI::TransportError => e  # never reached the server, retries spent
   puts "transport error:  #{e.message}"
 end
 
-# Or catch everything from this gem in one place.
+# Or catch everything this gem raises in one place.
 begin
   client.ticket.find(0)
 rescue ZammadAPI::Error => e
   puts "any gem error:    #{e.class}"
 end
+
+# Where the defaults do not suit the job, change them once on a derived
+# client instead of writing a retry loop around every call.
+patient = client.with(retries: 5, retry_interval: 1)
+
+puts "derived client:   #{patient.config.retries} retries, original still #{client.config.retries}"

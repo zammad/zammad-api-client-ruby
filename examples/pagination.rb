@@ -1,124 +1,60 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Every way to page through a collection, and what each one costs in HTTP
-# requests.
+# Every way to read a collection, and what each one costs.
 #
-# Collections are lazy: no request happens until you iterate, and only as many
-# pages are fetched as you actually consume. The counts printed below are real,
-# measured by counting the requests the client logs.
+# Collections are lazy: nothing is fetched until you iterate, and only the
+# pages you actually consume are fetched. 100 records per request by default.
 #
 #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=... \
 #     ruby examples/pagination.rb
 
 require 'zammad_api'
-require 'logger'
 
-# A logger that counts outgoing requests, to make the cost of each approach
-# visible. Any Logger works here; this one just tallies and discards.
-class RequestCounter < Logger
-  attr_accessor :count
+client  = ZammadAPI::Client.from_env
+tickets = client.ticket.all # no request yet
 
-  def initialize
-    super(IO::NULL, level: Logger::DEBUG)
-    @count = 0
-  end
+# Walk every record. Pages are fetched as the iteration reaches them, so only
+# one page is ever held in memory.
+seen = 0
+tickets.each { seen += 1 }
+puts "each               #{seen} tickets, one request per page"
 
-  def debug(progname = nil)
-    message = block_given? ? yield : progname
-    @count += 1 if message.to_s.start_with?('Zammad API request:')
-    super(message)
-  end
-end
+# The same walk with the page size chosen for the job at hand.
+ids = []
+tickets.find_each(batch_size: 50) { ids << it.id }
+puts "find_each          #{ids.size} tickets, 50 per request"
 
-counter = RequestCounter.new
-client  = ZammadAPI::Client.from_env(logger: counter)
+# One whole page per block call, for work that batches: an import, a bulk
+# insert, a push onto a queue.
+sizes = []
+tickets.in_batches(of: 50) { sizes << it.size }
+puts "in_batches         pages of #{sizes.inspect}"
 
-def measure(counter, label)
-  counter.count = 0
-  result = yield
-  puts format('%<label>-46s %<n>2d request(s)  %<result>s', label: label, n: counter.count, result: result)
-end
+# Stop early and the remaining pages are never fetched.
+puts "first(3)           #{tickets.first(3).map(&:id).inspect}, one request"
+puts "lazy.select        #{tickets.lazy.select { it.state == 'open' }.first(2).map(&:id).inspect}"
+puts "detect             ##{tickets.detect { it.state == 'open' }&.number}, stops at the match"
 
-puts 'Building a collection makes no request at all:'
-measure(counter, 'client.ticket.all') do
-  client.ticket.all.inspect.sub('ZammadAPI::', '')
-end
+# One specific page, when you are driving the paging yourself.
+puts "page(2, of: 10)    #{tickets.page(2, of: 10).map(&:id).inspect}"
 
-# A page shorter than the page size means the end of the list. So when the
-# total divides evenly by the page size, one extra request is needed to
-# discover that there is nothing left: 25 records at 5 per page costs 6
-# requests, not 5.
-puts "\nIterating everything walks every page until one comes back short:"
-measure(counter, '.count — pages of 100, the default') { "#{client.ticket.all.count} tickets" }
-measure(counter, '.find_each(batch_size: 5)') do
-  ids = []
-  client.ticket.all.find_each(batch_size: 5) { ids << it.id }
-  "#{ids.size} tickets"
-end
+# Filters are Zammad query parameters, and compose with all of the above.
+puts "where(state:)      #{client.ticket.where(state: 'open').first(5).size} open tickets"
 
-puts "\nOne whole response per block, for batched work such as an import:"
-measure(counter, '.in_batches(of: 5)') do
-  sizes = []
-  # The final empty page is not yielded, which is why there are five sizes
-  # here but six requests above.
-  client.ticket.all.in_batches(of: 5) { sizes << it.size }
-  "page sizes #{sizes.inspect}"
-end
+# Counting a search is one request, because Zammad answers it with a total.
+# An index endpoint has to be walked page by page.
+puts "search.count       #{client.ticket.search('state.name:open').count}, one request"
+puts "empty?             #{client.ticket.where(state: 'merged').empty?}, asks for a single record"
 
-# `find_each` without a block is an Enumerator, so it is also how you read at
-# a chosen page size: the walk stops as soon as you stop consuming it.
-puts "\nStop early and the remaining pages are never fetched:"
-measure(counter, '.find_each(of 5).first — one record') { client.ticket.all.find_each(batch_size: 5).first.number }
-measure(counter, '.first(3) — fits in one page') { client.ticket.all.find_each(batch_size: 5).first(3).map(&:id).inspect }
-measure(counter, '.first(7) — spills into a second page') { client.ticket.all.find_each(batch_size: 5).first(7).map(&:id).inspect }
-measure(counter, '.lazy.select { … }.first(2)') do
-  client.ticket.all.find_each(batch_size: 5).lazy.select { it.state == 'open' }.first(2).map(&:id).inspect
-end
-measure(counter, '.find { … } — stops at the first match') do
-  client.ticket.all.find_each(batch_size: 5).find { it.state == 'open' }&.number
-end
-
-puts "\nOne specific page, when you are driving the paging yourself:"
-measure(counter, '.page(2, of: 5).to_a') { client.ticket.all.page(2, of: 5).map(&:id).inspect }
-measure(counter, '.page(3, of: 5).to_a') { client.ticket.all.page(3, of: 5).map(&:id).inspect }
-
-puts "\nFilters are query parameters, and stack with the paging:"
-measure(counter, ".where(state: 'open')") do
-  "#{client.ticket.where(state: 'open').find_each(batch_size: 5).first(2).size} of them"
-end
-measure(counter, '.where(...) on an existing collection') do
-  "#{client.ticket.all.where(state: 'open').find_each(batch_size: 5).first(2).size} of them"
-end
-
-# Zammad answers a search with a total count, so counting one costs a single
-# request. Index endpoints have to be walked page by page.
-puts "\nCounting is one request where Zammad can answer it:"
-measure(counter, '.search("a").count') { client.ticket.search('a').count }
-measure(counter, '.all.find_each(batch_size: 5).count') { client.ticket.all.find_each(batch_size: 5).count }
-
-# Zammad caps the page size per endpoint: 100 for /api/v1/tickets, 200 for a
-# search, 1000 for the other index endpoints. Asking for more is reduced to
-# what the endpoint serves, so a walk stays complete instead of stopping at
-# the first capped page.
-puts "\nA page size larger than the endpoint allows is clamped, not truncated:"
-puts "  all.page(1, of: 5000)         #{client.ticket.all.page(1, of: 5000).inspect.sub('ZammadAPI::', '')}"
-puts "  search('a').page(1, of: 5000) #{client.ticket.search('a').page(1, of: 5000).inspect.sub('ZammadAPI::', '')}"
-
-puts "\nCollections are immutable, so scoping one never disturbs the original:"
-base   = client.ticket.all
-paged  = base.page(3, of: 5)
-scoped = base.where(state: 'open')
-
-puts "  base                #{base.inspect.sub('ZammadAPI::', '')}"
-puts "  base.page(3, of: 5) #{paged.inspect.sub('ZammadAPI::', '')}"
-puts "  paged.equal?(base)  #{paged.equal?(base)}"
-puts "  scoped.equal?(base) #{scoped.equal?(base)}"
+# `where` and `page` return a new collection, so scoping one never disturbs
+# the original.
+puts "immutable          #{tickets.page(2).equal?(tickets)}"
 
 puts <<~NOTE
 
-  Note for anyone upgrading from 1.x: `each` used to fetch a single page, so
-  iterating a collection silently stopped at 100 records. It now walks every
-  page. Where you want the old behaviour, ask for one page explicitly with
-  `page(1, of: 100)`.
+  Upgrading from 1.x: `each` used to fetch a single page, so iterating a
+  collection silently stopped at 100 records. It now walks every page. Ask
+  for one page explicitly with `page(1, of: 100)` where that is what you
+  wanted.
 NOTE

@@ -3,54 +3,47 @@
 
 # Exports every ticket to CSV.
 #
-# Demonstrates: automatic pagination, `in_batches` for batching, a derived
-# client with a longer timeout for a long-running job, and `fetch` for
-# attributes that must be present.
+# Shows automatic pagination with `in_batches`, and `fetch` for an attribute
+# that has to be there. The defaults carry a long export on their own: a
+# request times out after 60s, and transient failures are retried with
+# backoff before any error reaches this script.
 #
 #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=... \
 #     ruby examples/ticket_report.rb tickets.csv
 
 require 'zammad_api'
 require 'csv'
-require 'logger'
 
-client = ZammadAPI::Client.from_env(logger: Logger.new($stderr, level: Logger::WARN))
-
-# A bulk export can run for a while, so derive a client with a longer timeout
-# and more patience for transient failures. The original client is untouched.
-export_client = client.with(timeout: 300, retries: 5)
-
+client      = ZammadAPI::Client.from_env
 destination = ARGV.fetch(0, 'tickets.csv')
 exported    = 0
 
-# A ticket title is whatever the customer typed, and a spreadsheet treats a
-# cell starting with =, +, -, @, tab or CR as a formula rather than text. A
-# title of `=1+1` would be evaluated on open, and worse ones can call out to
-# the network, so prefix an apostrophe to force every exported cell to text.
-FORMULA_PREFIX = /\A[=+\-@\t\r]/
-
+# A spreadsheet reads a cell starting with =, +, -, @, tab or CR as a formula,
+# and a ticket title is whatever the customer typed. An apostrophe keeps every
+# exported cell text.
 def csv_safe(value)
   text = value.to_s
-  FORMULA_PREFIX.match?(text) ? "'#{text}" : text
+  text.match?(/\A[=+\-@\t\r]/) ? "'#{text}" : text
 end
 
 CSV.open(destination, 'w') do |csv|
   csv << %w[id number title state priority group customer created_at]
 
-  # Nothing is loaded until it is iterated, and `in_batches` lets us report
-  # progress per batch rather than per record.
-  export_client.ticket.all.in_batches(of: 100) do |tickets|
+  # Nothing is loaded until the block runs, and each call is one page.
+  client.ticket.all.in_batches(of: 100) do |tickets|
     tickets.each do |ticket|
-      csv << [
-        ticket.fetch(:id),        # must exist; raises KeyError otherwise
-        csv_safe(ticket.number),
-        csv_safe(ticket.title),
-        csv_safe(ticket.state),   # present because requests expand by default
-        csv_safe(ticket.priority),
-        csv_safe(ticket.group),
-        csv_safe(ticket.customer),
-        csv_safe(ticket.created_at)
+      row = [
+        ticket.fetch(:id), # raises KeyError if it is missing
+        ticket.number,
+        ticket.title,
+        ticket.state, # present because associations come expanded
+        ticket.priority,
+        ticket.group,
+        ticket.customer,
+        ticket.created_at
       ]
+
+      csv << row.map { csv_safe(it) }
     end
 
     exported += tickets.size

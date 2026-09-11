@@ -1,10 +1,10 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Triages open tickets: escalates the urgent ones, nudges the stale ones.
+# Triages open tickets: flags the urgent ones, nudges the stale ones.
 #
-# Demonstrates: search, pattern matching against records, staged changes so
-# only modified attributes are sent, and adding an article.
+# Shows `search`, pattern matching against records, staged changes so only
+# what was modified is sent, and adding an article.
 #
 #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=... \
 #     ruby examples/triage_tickets.rb
@@ -12,40 +12,26 @@
 require 'zammad_api'
 require 'time'
 
-client = ZammadAPI::Client.from_env
+STALE_AFTER = 7 * 24 * 60 * 60 # a week, in seconds
 
-STALE_AFTER = 7 * 24 * 60 * 60 # seconds
+client  = ZammadAPI::Client.from_env
+flagged = 0
+nudged  = 0
 
-def stale?(ticket)
-  updated = ticket[:updated_at]
-  return false if updated.nil?
-
-  Time.now - Time.parse(updated) > STALE_AFTER
-end
-
-# `lazy` stops fetching as soon as we stop consuming, so a large result set
-# does not have to be downloaded in full.
-candidates = client.ticket.search('state.name:open').lazy.first(200)
-
-escalated = 0
-nudged    = 0
-
-candidates.each do |ticket|
-  # Records implement `deconstruct_keys`, so they work with case/in — including
-  # against nested attributes.
+# `first` stops paginating as soon as it has what it asked for.
+client.ticket.search('state.name:open').first(200).each do |ticket|
+  # Records implement `deconstruct_keys`, so case/in works on them.
   case ticket
-  in { priority: '3 high', owner_id: 1 } # 1 is Zammad's "-" (unassigned)
+  in { priority: '3 high', owner_id: 1 } # 1 is Zammad's "-", i.e. unassigned
     puts "unassigned and high priority: ##{ticket.number} #{ticket.title}"
-    escalated += 1
+    flagged += 1
 
-  in { state: 'open', title: String => title } if stale?(ticket)
-    puts "stale: ##{ticket.number} #{title}"
+  in { updated_at: String => updated } if Time.now - Time.parse(updated) > STALE_AFTER
+    puts "stale: ##{ticket.number} #{ticket.title}"
 
-    # Only the attributes that changed are sent on save.
     ticket.priority = '3 high'
-    raise 'expected a staged change' if !ticket.changed?
+    ticket.save # sends the one changed attribute, nothing else
 
-    ticket.save
     ticket.article(
       subject:  'Automated follow-up',
       body:     "No activity for over #{STALE_AFTER / 86_400} days; priority raised.",
@@ -59,4 +45,4 @@ candidates.each do |ticket|
   end
 end
 
-puts "\n#{escalated} ticket(s) flagged, #{nudged} nudged."
+puts "\n#{flagged} ticket(s) flagged, #{nudged} nudged."
