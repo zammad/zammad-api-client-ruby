@@ -50,6 +50,33 @@ module ZammadAPI
     # @return [String, nil] login of the user requests are performed for
     attr_reader :on_behalf_of
 
+    # The query parameters a request actually carries.
+    #
+    # Zammad expects scalar values; booleans and integers are stringified so
+    # that Faraday does not encode them as unexpected types.
+    #
+    # A nil used to be dropped here, which turned `where(owner_id: nil)` - an
+    # entirely reasonable way to write "unassigned" - into an unfiltered index
+    # answering with every ticket. Wrong results, no error, nothing to see from
+    # the outside. There is no query string that means "this field is null", so
+    # saying so is the only answer that can be acted on.
+    #
+    # Public because {Test} records what a test's client sent, and a stand-in
+    # whose recorded values disagree with the wire makes green tests mean less
+    # than they appear to.
+    #
+    # @api private
+    # @param query [Hash]
+    # @return [Hash{String => String, Array<String>}]
+    # @raise [ArgumentError] for a nil value
+    def self.stringify_query(query)
+      query.each_with_object({}) do |(key, value), result|
+        raise ArgumentError, "query parameter #{key} is nil, and Zammad has no way to read that: pass a value, or leave the parameter out" if value.nil?
+
+        result[key.to_s] = value.is_a?(Array) ? value.map(&:to_s) : value.to_s
+      end
+    end
+
     # @param config [Config]
     def initialize(config)
       @config       = config
@@ -111,7 +138,7 @@ module ZammadAPI
     def perform(method, path, query, body)
       # Built before the request is logged, so a rejected query does not leave
       # a line claiming a request that was never made.
-      params = query && stringify_query(query)
+      params = query && Transport.stringify_query(query)
       log_request(method, path, query, body)
 
       @connection.public_send(method, path) do |request|
@@ -161,22 +188,6 @@ module ZammadAPI
         methods:             RETRIABLE_METHODS,
         exceptions:          RETRIABLE_EXCEPTIONS
       }
-    end
-
-    # Zammad expects scalar query values; booleans and integers are stringified
-    # so that Faraday does not encode them as unexpected types.
-    #
-    # A nil used to be dropped here, which turned `where(owner_id: nil)` - an
-    # entirely reasonable way to write "unassigned" - into an unfiltered index
-    # answering with every ticket. Wrong results, no error, nothing to see from
-    # the outside. There is no query string that means "this field is null", so
-    # saying so is the only answer that can be acted on.
-    def stringify_query(query)
-      query.each_with_object({}) do |(key, value), result|
-        raise ArgumentError, "query parameter #{key} is nil, and Zammad has no way to read that: pass a value, or leave the parameter out" if value.nil?
-
-        result[key.to_s] = value.is_a?(Array) ? value.map(&:to_s) : value.to_s
-      end
     end
 
     def decode(faraday_response)

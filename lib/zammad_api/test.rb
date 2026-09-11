@@ -44,7 +44,8 @@ module ZammadAPI
     # @!attribute [r] path
     #   @return [String] path relative to the instance URL
     # @!attribute [r] query
-    #   @return [Hash] query parameters, as the client sent them
+    #   @return [Hash{String => String, Array<String>}] query parameters as the
+    #     client sent them, stringified the way the real transport sends them
     # @!attribute [r] body
     #   @return [Hash, nil] the request payload
     # @!attribute [r] on_behalf_of
@@ -130,7 +131,11 @@ module ZammadAPI
     # @raise [UnstubbedRequestError] when no stub matches
     def answer(method, path, operation:, query: nil, body: nil, resource_class: nil, on_behalf_of: nil)
       relative = path.to_s.sub(%r{\A/+}, '')
-      params   = (query || {}).to_h { |name, value| [name.to_s, value] }
+      # Through the real transport's own stringification, so that {Request#query}
+      # holds what a request would have carried rather than the raw Ruby values.
+      # A stand-in that records a different shape than the wire makes an
+      # assertion pass here and fail in production, or the other way round.
+      params   = ::ZammadAPI::Transport.stringify_query(query || {})
 
       stub = @monitor.synchronize do
         @requests << Request.new(verb: method, path: relative, query: params, body: body, on_behalf_of: on_behalf_of)

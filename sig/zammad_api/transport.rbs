@@ -11,6 +11,8 @@ module ZammadAPI
 
     @connection: Faraday::Connection
 
+    def self.stringify_query: (Hash[untyped, untyped]) -> Hash[String, untyped]
+
     def initialize: (Config) -> void
     def with_on_behalf_of: ((String | Integer)? identifier) -> Transport
 
@@ -27,7 +29,6 @@ module ZammadAPI
     def build_connection: () -> Faraday::Connection
     def apply_authentication: (Faraday::Connection) -> void
     def retry_options: () -> Hash[Symbol, untyped]
-    def stringify_query: (Hash[Symbol, untyped]) -> Hash[String, untyped]
     def decode: (Faraday::Response) -> Response
     def decode_body: (String?, String) -> untyped
     def log_request: (Symbol, String, Hash[Symbol, untyped]?, untyped) -> void

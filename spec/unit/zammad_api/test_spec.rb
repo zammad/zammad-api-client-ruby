@@ -186,7 +186,20 @@ RSpec.describe ZammadAPI::Test do
     it 'records the query parameters the client sent' do
       client.group.find(1)
 
-      expect(zammad.requests.last.query).to eq({ 'expand' => true })
+      expect(zammad.requests.last.query).to eq({ 'expand' => 'true' })
+    end
+
+    it 'records them stringified, the way the transport sends them' do
+      zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }])
+      client.group.all.page(2, of: 50).to_a
+
+      expect(zammad.requests.last.query)
+        .to eq({ 'expand' => 'true', 'page' => '2', 'per_page' => '50' })
+    end
+
+    it 'rejects a nil query value the way the transport does' do
+      expect { client.group.where(note: nil).to_a }
+        .to raise_error(ArgumentError, /query parameter note is nil/)
     end
 
     it 'records requests oldest first' do
