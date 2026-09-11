@@ -42,6 +42,7 @@ module ZammadAPI
       private
 
       def mark_persisted!: () -> void
+      def replace_attributes!: (Response, operation: String) -> void
       def write_attribute: (Symbol, untyped) -> untyped
       def create_record: () -> Response
       def update_record: () -> Response

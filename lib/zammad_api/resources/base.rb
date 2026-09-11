@@ -215,11 +215,7 @@ module ZammadAPI
       def save!
         response = new_record? ? create_record : update_record
 
-        @attributes = frozen_attributes(response.decoded(:object, operation: 'save object', resource_class: self.class))
-        @changes    = {}
-        @new_record = false
-        @error      = nil
-        @related    = nil
+        replace_attributes!(response, operation: 'save object')
         true
       end
 
@@ -261,11 +257,7 @@ module ZammadAPI
           resource_class: self.class,
           query:          { expand: true }
         )
-        @attributes = frozen_attributes(response.decoded(:object, operation: 'reload object', resource_class: self.class))
-        @changes    = {}
-        @new_record = false
-        @error      = nil
-        @related    = nil
+        replace_attributes!(response, operation: 'reload object')
         self
       end
 
@@ -284,6 +276,19 @@ module ZammadAPI
 
       def mark_persisted!
         @new_record = false
+      end
+
+      # Everything a freshly loaded record has to forget, in the one place that
+      # every load path goes through. Held apart, `save!` and `reload` drifted
+      # the moment a sixth field was added to only one of them, and nothing
+      # would have caught a reloaded record still holding an association proxy
+      # from before the reload.
+      def replace_attributes!(response, operation:)
+        @attributes = frozen_attributes(response.decoded(:object, operation: operation, resource_class: self.class))
+        @changes    = {}
+        @new_record = false
+        @error      = nil
+        @related    = nil
       end
 
       # The baseline is the value this record was loaded with, not the value
