@@ -1,17 +1,17 @@
-require 'zammad_api/list_base'
-require 'zammad_api/list_all'
-require 'zammad_api/list_search'
-require 'zammad_api/resources/base'
-require 'zammad_api/resources/user'
-require 'zammad_api/resources/group'
-require 'zammad_api/resources/organization'
-require 'zammad_api/resources/ticket'
-require 'zammad_api/resources/ticket_article'
-require 'zammad_api/resources/ticket_article_attachment'
-require 'zammad_api/resources/ticket_state'
-require 'zammad_api/resources/ticket_priority'
+# frozen_string_literal: true
+
+require_relative 'resources/base'
+require_relative 'resources/group'
+require_relative 'resources/organization'
+require_relative 'resources/ticket'
+require_relative 'resources/ticket_article'
+require_relative 'resources/ticket_article_attachment'
+require_relative 'resources/ticket_priority'
+require_relative 'resources/ticket_state'
+require_relative 'resources/user'
 
 module ZammadAPI
-  class Resource # rubocop:disable Lint/EmptyClass
+  # Namespace for the Zammad record classes.
+  module Resources
   end
 end

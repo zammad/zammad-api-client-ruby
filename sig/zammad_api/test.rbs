@@ -1,0 +1,67 @@
+module ZammadAPI
+  class Test
+    class UnstubbedRequestError < Error
+    end
+
+    class Request < ::Data
+      attr_reader verb: Symbol
+      attr_reader path: String
+      attr_reader query: Hash[String, untyped]
+      attr_reader body: untyped
+      attr_reader on_behalf_of: (String | Integer)?
+
+      def self.new: (**untyped) -> instance
+    end
+
+    attr_reader config: Config
+    attr_reader client: Client
+
+    @stubs: Hash[[Symbol, String], Array[Hash[Symbol, untyped]]]
+    @requests: Array[Request]
+    @monitor: Thread::Mutex
+    @transport: Test::Transport
+    @client: Client
+
+    def initialize: (**untyped options) -> void
+    def stub: (Symbol method, String path, ?status: Integer, ?body: untyped, ?headers: Hash[untyped, untyped], ?query: Hash[untyped, untyped]?) -> self
+    def requests: () -> Array[Request]
+    def reset: () -> self
+    def stubbed: () -> Array[String]
+    def inspect: () -> String
+
+    def answer: (
+      Symbol method,
+      String path,
+      operation: String,
+      ?query: Hash[untyped, untyped]?,
+      ?body: untyped,
+      ?resource_class: Class?,
+      ?on_behalf_of: (String | Integer)?
+    ) -> Response
+
+    private
+
+    def key: (Symbol method, String path) -> [Symbol, String]
+    def take: (Symbol method, String path, Hash[String, untyped] params) -> Hash[Symbol, untyped]?
+    def matches?: (Hash[untyped, untyped]? expected, Hash[String, untyped] params) -> bool
+    def response_for: (Hash[Symbol, untyped] stub) -> Response
+    def build_response: (Hash[Symbol, untyped] stub, untyped body, String raw_body, json: bool) -> Response
+    def unstubbed_message: (Symbol method, String path) -> String
+
+    class Transport
+      attr_reader test: Test
+      attr_reader on_behalf_of: (String | Integer)?
+
+      def initialize: (Test test, ?on_behalf_of: (String | Integer)?) -> void
+      def config: () -> Config
+      def with_on_behalf_of: ((String | Integer)? identifier) -> Test::Transport
+
+      def get: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
+      def post: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
+      def put: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
+      def delete: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
+
+      def request: (Symbol method, String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
+    end
+  end
+end

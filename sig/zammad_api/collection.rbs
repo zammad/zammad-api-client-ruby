@@ -1,0 +1,54 @@
+module ZammadAPI
+  class Collection
+    include Enumerable[untyped]
+
+    DEFAULT_PER_PAGE: Integer
+    RESERVED_QUERY_KEYS: Array[Symbol]
+
+    @transport: Transport
+    @resource_class: untyped
+    @path: String
+    @operation: String
+    @query: Hash[Symbol, untyped]
+    @max_per_page: Integer
+    @per_page: Integer
+    @page: Integer?
+    @countable: bool
+
+    def initialize: (
+      transport: Transport,
+      resource_class: untyped,
+      path: String,
+      operation: String,
+      max_per_page: Integer,
+      ?query: Hash[Symbol, untyped],
+      ?per_page: Integer,
+      ?page: Integer?,
+      ?countable: bool
+    ) -> void
+
+    def each: () { (untyped) -> void } -> Collection
+            | () -> Enumerator[untyped, Collection]
+    def find_each: (?batch_size: Integer?) { (untyped) -> void } -> Collection
+                 | (?batch_size: Integer?) -> Enumerator[untyped, Collection]
+    def in_batches: (?of: Integer?) { (Array[untyped]) -> void } -> Collection
+                  | (?of: Integer?) -> Enumerator[Array[untyped], Collection]
+    def page: (Integer number, ?of: Integer?) -> Collection
+    def where: (**untyped) -> Collection
+    def pluck: (*(Symbol | String) keys) -> Array[untyped]
+    def count: (*untyped) ?{ (untyped) -> boolish } -> Integer
+    def size: (*untyped) ?{ (untyped) -> boolish } -> Integer
+    def length: (*untyped) ?{ (untyped) -> boolish } -> Integer
+    def empty?: () -> bool
+    def inspect: () -> String
+
+    private
+
+    def positive_integer!: (untyped, String) -> Integer
+    def walk: () { (Array[untyped]) -> void } -> void
+    def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped]) -> Collection
+    def fetch: (Integer, Integer) -> Array[untyped]
+    def total_count: () -> Integer?
+    def clamp_per_page: (untyped) -> Integer
+  end
+end

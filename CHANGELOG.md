@@ -1,3 +1,212 @@
+# Changelog
+
+## [2.0.0] - 2026-08-27
+
+A breaking release that modernises the whole gem. See
+[Migrating from 1.x](README.md#migrating-from-1x) for the complete before/after guide.
+
+### Breaking
+
+- Minimum Ruby version is now 3.4.
+- `Client.new` takes keyword arguments, so a configuration Hash has to be splatted:
+  `Client.new(**config)`. A positional Hash raises `ArgumentError`.
+- An unknown client option raises `ArgumentError: unknown keyword` instead of being
+  ignored, so an option that is misspelled or no longer supported is no longer silent.
+- `logger:` takes a `Logger` rather than a boolean flag. `logger: true` used to turn on
+  debug output to `$stderr`; pass `Logger.new($stderr)` for the same thing. Any object
+  that responds to `debug` is accepted, and anything else raises `ConfigurationError`.
+- `Collection#each` (`client.x.all`, `client.x.search`) now walks every page. Previously it
+  fetched a single page, so iterating stopped silently at 100 records for `all` and at
+  10 for `search`.
+- Collections are built up by chaining instead of by keyword arguments:
+  `all(per_page: 50)` is now `find_each(batch_size: 50)` or `page(1, of: 50)`,
+  `all(active: true)` is `where(active: true)`,
+  `search(query: 'zammad')` is `search('zammad')`,
+  and `search(query: 'z', page: 2, per_page: 50)` is `search('z').page(2, of: 50)`.
+  `all` accepted those keywords and then discarded them, so its page size was always
+  100 and its filters never reached the request; `search` did honour `page` and
+  `per_page`. All of them now raise `ArgumentError` rather than being accepted.
+- `page(number, per_page)` with a block was replaced by `page(number, of: size)`, which
+  returns a new collection. `page_next` and `page_prev` were removed.
+- `Collection#each_page` was renamed to `#in_batches`, which also takes the page size as
+  `in_batches(of: 500)`.
+- `Collection#[]` was removed. It cost a request per index and ignored the page a
+  collection was limited to; use `first`, or `page(n, of: 1).first` for one record at an
+  offset.
+- `Collection#per_page` and `#current_page` are no longer public. `inspect` reports both.
+- There is no `per`. The page size belongs to the call that reads: `find_each(batch_size:)`
+  to walk, `in_batches(of:)` to batch, `page(number, of:)` for one page. Everything else —
+  `each`, `first`, `lazy`, `count` — fetches 100 per request.
+- `where` rejects `page`, `per_page`, `expand` and `only_total_count` with an
+  `ArgumentError`. They used to be accepted and silently overridden.
+- A `nil` query value raises `ArgumentError`. 1.x dropped the parameter, so
+  `where(owner_id: nil)` requested every ticket and the caller iterated all of them
+  believing they were unassigned.
+- `client.on_behalf_of = 'login'` and `client.perform_on_behalf_of` were replaced by
+  `client.on_behalf_of('login')`, which returns a new client and also accepts a block.
+- `ZammadAPI::ResourceNotFoundError` is now `ZammadAPI::UnknownResourceError`, freeing the
+  404 case to be `ZammadAPI::NotFoundError`.
+- `record.save` reports a validation failure as `false` and leaves the error in
+  `record.error`, instead of raising. `record.save!` is the raising form. Every other
+  failure — an expired token, a missing record, an unreachable instance — still raises from
+  both, because no attribute the caller can fix would change the outcome.
+  `client.<resource>.create` uses `save!`, so it keeps raising rather than returning a
+  record that looks created but is not.
+- `record.destroy` marks the record `destroyed?`, and `persisted?` answers false for one.
+  1.x left a destroyed record looking live, so a later `save` went out as a `PUT` to the
+  deleted id and came back a 404 one call after the mistake.
+- `record.attributes` and `record.changes` are deeply frozen, and `record.to_h` returns a
+  deep copy rather than a shallow one. Writing through either reader used to change what a
+  record reported without staging anything, so the next `save` did not send it, and a
+  nested hash from `to_h` was shared with the record.
+- The `record.attributes=` writer was removed. An unknown name is an ordinary attribute
+  now, so `record.attributes = {name: 'Support'}` stages a change called `attributes`
+  that `save` sends to Zammad. Use `assign_attributes` or `update`.
+- `ZammadAPI::Error` descends from `StandardError` instead of `RuntimeError`.
+- `ResponseError#response` returns a `ZammadAPI::Response`, not a Faraday object, and
+  `#body` is the decoded payload rather than a raw JSON string.
+- No Faraday exception escapes any more: an unreachable host or a timeout raises
+  `ZammadAPI::ConnectionError` or `ZammadAPI::TimeoutError`, so a
+  `rescue Faraday::ConnectionFailed` stops matching.
+- `ZammadAPI::ListBase`, `ListAll` and `ListSearch` were replaced by `ZammadAPI::Collection`.
+- `ZammadAPI::Log` and `ZammadAPI::JsonHelper` were removed. Pass any `Logger` via `logger:`.
+- `ZammadAPI::Dispatcher` was replaced by `ZammadAPI::ResourceProxy`.
+- The resources a client exposes are a fixed list. 1.x resolved `client.<name>` to
+  `ZammadAPI::Resources::<Name>` through `const_get`, so a subclass of `Base` defined in
+  application code could be reached that way. `client.role` now raises
+  `UnknownResourceError`; use the raw request methods for endpoints this gem does not
+  model.
+- The internal `new_instance` accessor was replaced by `new_record?` and `persisted?`, and
+  the instance-level `url` accessor by the class-level `resource_path`. Both old names
+  read as unknown attributes and return `nil` rather than raising, because a Zammad
+  record carries administrator-defined attributes and a reader cannot tell a removed
+  method from a custom field — so `if record.new_instance` silently takes the else
+  branch.
+
+### Added
+
+- `client.get`, `client.post`, `client.put` and `client.delete` reach any endpoint of the
+  Zammad API, including the many this gem does not model. They return a
+  `ZammadAPI::Response` and keep authentication, timeouts, retries, credential redaction,
+  JSON decoding and the error classes. Previously the only way past the seven resource
+  classes was to build a Faraday connection by hand.
+- Request and connection timeouts (`timeout`, `open_timeout`), on by default at 60 and
+  10 seconds. 1.x waited as long as the server took, so a call that used to hang now
+  raises `TimeoutError`.
+- Automatic retry with exponential backoff for idempotent requests on connection failures,
+  timeouts and transient statuses. `POST` is never retried, so a failed create cannot
+  produce duplicate records.
+- A specific error class per status: `AuthenticationError` (401), `AuthorizationError`
+  (403), `NotFoundError` (404), `ValidationError` (422) and `RateLimitError` (429, with
+  `#retry_after`). Network failures raise `ConnectionError` or `TimeoutError` instead of
+  leaking Faraday exceptions.
+- `Collection#where`, `#page`, `#in_batches`, `#find_each`, `#count` and lazy
+  enumeration, plus `client.x.where(...)` as a shorthand for `all.where(...)`.
+- A resource proxy is `Enumerable` over `all`, so `client.ticket.each`,
+  `client.ticket.first(5)`, `client.ticket.map`, `#find_each`, `#in_batches`, `#page`,
+  `#pluck` and `#count` all work without naming `all`. `client.x.find(id)` keeps
+  its own meaning rather than becoming `Enumerable#find`; `detect` is the block form.
+- `Collection#count` costs a single request on a search endpoint, which Zammad can count
+  without returning the records.
+- `Collection#pluck(*attributes)`, for reading one or more attributes from every record.
+- `client.<resource>.find_by(**params)` and `#find_by!`, which request a single record
+  rather than the page of 100 that `where(...).first` would have fetched, and
+  `client.<resource>.exists?(id)`.
+- `ResponseError` accepts a `detail:` describing a failure that has no HTTP response of its
+  own, so `find_by!` reads as `no record matched` rather than `no response`.
+- The page size is clamped to what an endpoint serves (100 for `/api/v1/tickets`, 200 for
+  a search, 1000 for the other index endpoints). Asking for more used to end iteration
+  after the first page, because Zammad capped the response and the short page read as the
+  end of the list.
+- `ZammadAPI::PaginationError`, raised when an endpoint answers a page with the page
+  before it, instead of paging forever.
+- `Base#reload`, `#persisted?`, `#[]`, `#fetch`, `#to_h` and a readable `#inspect`.
+- `record.update(attributes)`, `record.update!(attributes)` and
+  `record.assign_attributes(attributes)`. Applying a hash of changes previously meant one
+  writer call per attribute before `save`.
+- `ssl_verify`, `proxy`, `user_agent`, `retries` and `retry_interval` client options.
+  The default `User-Agent` is now `zammad_api-ruby/<version>` rather than
+  `Zammad API Ruby`.
+- `adapter` and `middleware` client options, the seam into the Faraday stack. Swapping in a
+  persistent-connection adapter or adding instrumentation previously meant that the HTTP
+  stack was closed to callers. A Faraday error while building the connection surfaces as
+  `ConfigurationError`, so Faraday stays an implementation detail.
+- RBS signatures in `sig/`, verified by Steep in CI.
+- `require 'zammad_api/test'` ships a stand-in Zammad for testing code that calls this
+  client: `ZammadAPI::Test#stub` declares responses, `#client` hands back a real client
+  wired to them, and `#requests` records what was sent. Responses travel the same decoding,
+  error mapping and record building as real ones, so a stubbed 404 raises `NotFoundError`.
+  An unstubbed request raises rather than answering with something empty. Consumers
+  previously had to intercept HTTP to test against this client at all.
+- `respond_to?` now answers correctly for attribute readers and resource methods.
+- Records implement `deconstruct_keys`, so they can be used with `case/in` pattern
+  matching, including against nested attributes. `Config` and `Response` are `Data`
+  objects and match as well.
+- `Client#with(**options)` derives a new client with changed options. The options are
+  re-validated and any `on_behalf_of` scope is carried over.
+- `Client.from_env` builds a client from `ZAMMAD_URL`, `ZAMMAD_TOKEN`,
+  `ZAMMAD_HTTP_TOKEN`, `ZAMMAD_OAUTH2_TOKEN`, `ZAMMAD_USER` and `ZAMMAD_PASSWORD`, with
+  passed-in options winning. Every example script used to repeat the same `ENV.fetch` pair.
+- `Client#me`, the user the credentials authenticate as, and `Client#version`, the version
+  of the Zammad instance.
+- `Response#decoded(:object | :array)` validates the shape of a response body in one
+  place, so an unexpected payload raises `ParseError` with a consistent message instead of
+  failing further downstream.
+- `record.related` reaches the records a record points at: `ticket.related.customer`,
+  `ticket.related.group`, `ticket.related.articles`, `user.related.organization`, and
+  `created_by` / `updated_by` on everything. Following a foreign key used to mean
+  `client.user.find(ticket.customer_id)` by hand. The readers sit under `related` rather
+  than on the record because Zammad expands an association into a name under the plain
+  attribute, and `ticket.customer` has to keep returning that name rather than turning
+  into a request. `Resource.associations` lists what a resource declares.
+- Records compare as the Zammad records they came from: two records of the same kind with
+  the same id are equal, and `#hash` agrees, so `uniq`, `Set`, `include?` and records as
+  Hash keys all work. They previously compared by object identity, so the same ticket
+  fetched twice was two unequal records. A record with no id stays equal only to itself,
+  which means its first save changes its hash and a record used as a Hash key before that
+  save has to be rehashed after it.
+- `record.to_json` and `record.as_json` render a record's attributes. `to_json` previously
+  fell through to `Object#to_json`, which serialized a record as the string
+  `"#<ZammadAPI::Resources::Ticket:0x...>"`.
+- `Collection#empty?`, and `#size` / `#length` as names for `#count`. `Enumerable` supplies
+  none of the three, so `client.ticket.all.empty?` used to raise `NoMethodError`. `empty?`
+  costs one request and asks for a single record rather than a whole page, except on a
+  collection limited to one page, where the page size decides which records that page holds.
+  A resource proxy forwards all three.
+
+### Fixed
+
+- Credentials are no longer written to the debug log. The old transport logged
+  `user:password` on every client build; payload keys such as `password` and `token` are
+  now redacted, and `Config#inspect` redacts credentials.
+- `on_behalf_of` no longer leaks: the old `perform_on_behalf_of` used `tap` without an
+  `ensure`, so an exception inside the block left the `From` header set on every later
+  request.
+- Zammad installations served from a sub-path (`https://example.com/zammad/`) now work.
+  Request paths are relative, so the prefix is no longer stripped.
+- Query parameters are encoded by the HTTP layer, including arrays and characters that
+  need escaping.
+- Nested attributes inside arrays are symbolized consistently.
+- A malformed or non-JSON response body no longer degrades into an empty hash that
+  callers then iterate as key/value pairs.
+- Unknown resource names no longer resolve to unrelated Ruby classes.
+
+### Changed
+
+- `client.<resource>.destroy(id)` deletes directly instead of fetching the record first.
+- Resource dispatch is explicit rather than `method_missing` plus `const_get`.
+- Unit specs (`rake spec:unit`) run without a Zammad instance; the specs that need a live
+  server live in `spec/integration`.
+- CI runs RuboCop, Steep and the unit specs on every supported stable Ruby, and publishes
+  releases through RubyGems trusted publishing.
+- The integration job now waits for Zammad to answer before running specs, promotes
+  Zammad's generated CI environment into the job so it survives across steps, pins the
+  Zammad ref (overridable via `workflow_dispatch`), carries a timeout, and uploads Zammad's
+  logs on failure. It also runs `script/check_connection.rb` as a preflight, so a broken
+  gem-to-Zammad link fails in seconds with a readable transcript instead of 53 spec errors.
+- The integration suite no longer depends on spec file order to run Zammad's auto wizard,
+  and tolerates an instance that is already set up.
+
 ## [1.4.0] - 2026-08-25
 - Follow up - c3af2a9 - Fixes #29 - [JSON::ParserError on gateway timeout when proxy responds with HTML](https://github.com/zammad/zammad-api-client-ruby/issues/29)
 - Dependencies updated

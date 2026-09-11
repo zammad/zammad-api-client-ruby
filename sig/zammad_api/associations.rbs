@@ -1,0 +1,35 @@
+module ZammadAPI
+  module Associations
+    # The readers are defined by the belongs_to and has_many declarations in
+    # lib/zammad_api/resources, onto a per-resource subclass of this one that
+    # has no name to declare. They are listed here so that callers get types
+    # and completion; every name is declared once and means the same target
+    # wherever it is declared, so the type of a given reader is accurate. The
+    # class is wider than any one resource, so a reader the record does not
+    # declare type-checks here and raises NoMethodError at runtime.
+    class Proxy
+      @record: Resources::Base
+      @cache: Hash[Symbol, untyped]
+
+      def initialize: (Resources::Base record) -> void
+      def inspect: () -> String
+
+      def created_by: () -> Resources::User?
+      def updated_by: () -> Resources::User?
+      def customer: () -> Resources::User?
+      def owner: () -> Resources::User?
+      def organization: () -> Resources::Organization?
+      def group: () -> Resources::Group?
+      def state: () -> Resources::TicketState?
+      def priority: () -> Resources::TicketPriority?
+      def ticket: () -> Resources::Ticket?
+      def articles: () -> Array[Resources::TicketArticle]
+
+      private
+
+      def belongs_to_target: (Symbol name, String class_name, Symbol foreign_key) -> untyped
+      def has_many_target: (Symbol name, String class_name, ^(Resources::Base) -> String path) -> Array[untyped]
+      def resolve: (String class_name) -> untyped
+    end
+  end
+end
