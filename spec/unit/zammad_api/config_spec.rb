@@ -123,6 +123,24 @@ RSpec.describe ZammadAPI::Config do
     end
   end
 
+  describe 'the logger' do
+    it 'keeps the logger it is given' do
+      logger = Logger.new(IO::NULL)
+      expect(build(logger: logger).logger).to be(logger)
+    end
+
+    it 'accepts anything that logs at debug, not only a Logger' do
+      logger = Class.new { def debug(...) = nil }.new
+      expect(build(logger: logger).logger).to be(logger)
+    end
+
+    # 1.x took `logger: true` as "log to $stderr".
+    it 'rejects a boolean, as 1.x accepted' do
+      expect { build(logger: true) }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config logger needs to respond to debug')
+    end
+  end
+
   describe 'numeric validation' do
     it 'rejects a zero timeout' do
       expect { build(timeout: 0) }

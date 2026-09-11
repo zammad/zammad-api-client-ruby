@@ -129,6 +129,7 @@ module ZammadAPI
       validate_credentials!
       validate_numbers!
       validate_middleware!
+      validate_logger!
     end
 
     # @return [Symbol] +:http_token+, +:oauth2_token+ or +:basic+
@@ -188,6 +189,15 @@ module ZammadAPI
       return if middleware.nil? || middleware.respond_to?(:call)
 
       raise ConfigurationError, 'config middleware needs to respond to call'
+    end
+
+    # In 1.x this option was a flag, so `logger: true` is a plausible thing to
+    # carry over. Without this it would be accepted here and raise NoMethodError
+    # at the first request instead.
+    def validate_logger!
+      return if logger.respond_to?(:debug)
+
+      raise ConfigurationError, 'config logger needs to respond to debug'
     end
 
     def presence(value)

@@ -59,6 +59,7 @@ module ZammadAPI
     def validate_credentials!: () -> void
     def validate_numbers!: () -> void
     def validate_middleware!: () -> void
+    def validate_logger!: () -> void
     def presence: (untyped) -> untyped
     def immutable: (untyped) -> untyped
   end
