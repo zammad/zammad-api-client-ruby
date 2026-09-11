@@ -207,9 +207,13 @@ check('attachment metadata and download') do
   )
   attachment = @ticket.articles.last.attachments.first
   raise 'no attachment returned' if attachment.nil?
-  raise "unexpected content: #{attachment.download.inspect}" if attachment.download != 'smoke test 123'
 
-  "#{attachment.filename} (#{attachment.download.bytesize} bytes)"
+  # Once: each call is a full attachment fetch, and this transcript is meant to
+  # be a fast read of a freshly booted Zammad.
+  contents = attachment.download
+  raise "unexpected content: #{contents.inspect}" if contents != 'smoke test 123'
+
+  "#{attachment.filename} (#{contents.bytesize} bytes)"
 end
 
 section 'On behalf of another user'
