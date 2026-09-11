@@ -3,6 +3,29 @@
 [![Gem Version](https://badge.fury.io/rb/zammad_api.svg)](https://badge.fury.io/rb/zammad_api)
 [![CI](https://github.com/zammad/zammad-api-client-ruby/actions/workflows/ci.yml/badge.svg)](https://github.com/zammad/zammad-api-client-ruby/actions/workflows/ci.yml)
 
+---
+
+> [!IMPORTANT]
+> ## 📣 2.0 is taking shape — tell us what you think
+>
+> **Version 2.0 is a breaking release, and it is not finished yet.** This is the moment when
+> your feedback can still change it: names, defaults, what is missing, what reads wrong, and
+> anything that makes upgrading from 1.x harder than it should be.
+>
+> **[→ Open an issue and tell us](https://github.com/zammad/zammad-api-client-ruby/issues/new)**
+>
+> Especially useful to hear:
+>
+> - Which 1.x calls in **your** code the [migration table](#migrating-from-1x) does not cover.
+> - Endpoints you reach with [raw requests](#raw-requests) that should be modelled resources.
+> - Anything the [test kit](#testing-code-that-uses-this-client) cannot stand in for.
+> - Naming that made you look twice, and defaults you had to override every time.
+>
+> Rough notes are welcome — a half-formed "this felt off" is worth more to us now than a
+> polished report after the release.
+
+---
+
 Ruby client for the Zammad API v1.0.
 
 - Requires **Ruby 3.4** or later.
@@ -17,8 +40,8 @@ Ruby client for the Zammad API v1.0.
 - A **test kit** (`zammad_api/test`) stands in for a Zammad, so your own tests need no
   HTTP interception.
 
-> **Upgrading from 1.x?** See [Migrating from 1.x](#migrating-from-1x). Version 2.0 is a
-> breaking release.
+> **Upgrading from 1.x?** See [Migrating from 1.x](#migrating-from-1x), which lists every
+> call that changed.
 
 ## Installation
 
