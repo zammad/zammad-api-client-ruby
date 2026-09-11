@@ -14,14 +14,15 @@ module ZammadAPI
     end
 
     attr_reader config: Config
+    attr_reader client: Client
 
     @stubs: Hash[[Symbol, String], Array[Hash[Symbol, untyped]]]
     @requests: Array[Request]
     @monitor: Thread::Mutex
     @transport: Test::Transport
+    @client: Client
 
     def initialize: (**untyped options) -> void
-    def client: () -> Client
     def stub: (Symbol method, String path, ?status: Integer, ?body: untyped, ?headers: Hash[untyped, untyped], ?query: Hash[untyped, untyped]?) -> self
     def requests: () -> Array[Request]
     def reset: () -> self

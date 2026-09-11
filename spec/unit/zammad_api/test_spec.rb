@@ -26,6 +26,10 @@ RSpec.describe ZammadAPI::Test do
     it 'accepts configuration overrides' do
       expect(described_class.new(url: 'https://other.test/').client.config.url).to eq('https://other.test/')
     end
+
+    it 'is the same client every time, rather than a new HTTP stack per call' do
+      expect(zammad.client).to equal(zammad.client)
+    end
   end
 
   describe '#stub' do

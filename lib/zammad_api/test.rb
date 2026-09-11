@@ -63,12 +63,20 @@ module ZammadAPI
       @requests  = []
       @monitor   = Mutex.new
       @transport = Transport.new(self)
+      # Built once. `Client.new` validates the config and assembles a whole
+      # Faraday stack - auth, JSON, retries, adapter - that `with_transport`
+      # then replaces, and a suite that reaches for `zammad.client` in every
+      # example used to pay for that every time.
+      @client    = Client.new(**@config.to_h.compact).with_transport(@transport)
     end
 
     # A client that talks to this stand-in instead of to a Zammad.
     #
+    # The same client every time; it holds no per-request state, and
+    # {Client#on_behalf_of} and {Client#with} return copies of their own.
+    #
     # @return [Client]
-    def client = Client.new(**@config.to_h.compact).with_transport(@transport)
+    attr_reader :client
 
     # Declares the response for one endpoint.
     #
