@@ -103,6 +103,21 @@ RSpec.describe ZammadAPI::Collection do
       expect { collection.to_a }
         .to raise_error(ZammadAPI::PaginationError, /ignoring the page parameter/)
     end
+
+    it 'keeps walking records that carry no id' do
+      stub_page(1, Array.new(ZammadAPI::Collection::DEFAULT_PER_PAGE) { { name: "a#{it}" } })
+      stub_page(2, [{ name: 'b0' }])
+
+      expect(collection.map(&:name)).to eq(Array.new(100) { "a#{it}" } + ['b0'])
+    end
+
+    it 'raises PaginationError when records without an id repeat' do
+      page = Array.new(ZammadAPI::Collection::DEFAULT_PER_PAGE) { { name: "a#{it}" } }
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response(page))
+
+      expect { collection.to_a }
+        .to raise_error(ZammadAPI::PaginationError, /ignoring the page parameter/)
+    end
   end
 
   describe '#find_each' do
@@ -320,6 +335,15 @@ RSpec.describe ZammadAPI::Collection do
         .to_return(json_response([{ id: 1 }]))
 
       expect(client.user.search('smith').count).to eq(1)
+    end
+
+    it 'walks the pages when a search endpoint ignores only_total_count' do
+      stub_request(:get, search_url).with(query: hash_including('only_total_count' => 'true'))
+        .to_return(json_response([{ id: 1 }, { id: 2 }]))
+      stub_request(:get, search_url).with(query: hash_including('page' => '1'))
+        .to_return(json_response([{ id: 1 }, { id: 2 }]))
+
+      expect(client.user.search('smith').count).to eq(2)
     end
 
     it 'counts one page only when limited to a page' do

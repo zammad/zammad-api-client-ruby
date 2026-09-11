@@ -189,8 +189,8 @@ module ZammadAPI
     end
 
     def walk
-      page          = @page || 1
-      previous_ids  = nil
+      page     = @page || 1
+      previous = nil
       loop do
         records = fetch(page, @per_page)
         yield records if !records.empty?
@@ -203,10 +203,13 @@ module ZammadAPI
         # the server shrank it.
         break if records.size < @per_page
 
-        ids = records.filter_map(&:id)
-        raise PaginationError.build(operation: @operation, page: page, resource_class: @resource_class) if ids == previous_ids
+        # Whole payloads rather than ids: an endpoint that serves records
+        # without an id would compare two empty lists on every page and so
+        # report a perfectly good paginator as stuck.
+        current = records.map(&:attributes)
+        raise PaginationError.build(operation: @operation, page: page, resource_class: @resource_class) if current == previous
 
-        previous_ids = ids
+        previous = current
         page += 1
       end
     end
@@ -244,7 +247,12 @@ module ZammadAPI
         resource_class: @resource_class,
         query:          @query.merge(only_total_count: true)
       )
-      total = response.decoded(:object, operation: @operation, resource_class: @resource_class)[:total_count]
+      # Not every search endpoint honours only_total_count; one that ignores it
+      # answers with the usual array of records, which is a shape to walk
+      # rather than a reason to raise.
+      return nil if !response.body.is_a?(Hash)
+
+      total = response.body[:total_count]
       total.is_a?(Integer) ? total : nil
     end
 
