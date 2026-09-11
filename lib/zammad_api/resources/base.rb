@@ -139,6 +139,7 @@ module ZammadAPI
         @attributes = frozen_attributes(attributes || {})
         @changes    = {}
         @new_record = true
+        @destroyed  = false
         @error      = nil
         @related    = nil
       end
@@ -146,8 +147,21 @@ module ZammadAPI
       # @return [Boolean] whether this record has not been stored yet
       def new_record? = @new_record
 
-      # @return [Boolean] whether this record exists in Zammad
-      def persisted? = !@new_record
+      # Whether this record exists in Zammad.
+      #
+      # False both before the first save and after {#destroy}, so this is not
+      # the inverse of {#new_record?}.
+      #
+      # @return [Boolean]
+      def persisted? = !@new_record && !@destroyed
+
+      # Whether {#destroy} removed this record from Zammad.
+      #
+      # The attributes stay readable, so a destroyed record can still be logged
+      # or reported on; it just no longer stands for anything on the server.
+      #
+      # @return [Boolean]
+      def destroyed? = @destroyed
 
       # @return [Boolean] whether there are unsaved changes
       def changed? = !@changes.empty?
@@ -214,6 +228,8 @@ module ZammadAPI
       # @raise [ResponseError] when Zammad rejected the request
       # @see #save
       def save!
+        raise Error, "#{self.class.name} #{id} was destroyed, there is nothing to save" if destroyed?
+
         # Before the request, not after it. Only the success path and the
         # rescue in `save` used to clear this, so a save that raised anything
         # else left the previous attempt's ValidationError in place and a
@@ -269,14 +285,19 @@ module ZammadAPI
 
       # Deletes the record.
       #
+      # The record is marked {#destroyed?} rather than left looking live, so
+      # that a later {#save} fails here with the reason rather than one call
+      # later as a 404 from Zammad.
+      #
       # @return [true]
       # @raise [ResponseError] when Zammad rejected the request
       def destroy
         transport.delete(member_path, operation: 'destroy object', resource_class: self.class)
+        @destroyed = true
         true
       end
 
-      def inspect = "#<#{self.class.name} id=#{id.inspect} new_record=#{new_record?} attributes=#{attributes.inspect}>"
+      def inspect = "#<#{self.class.name} id=#{id.inspect} new_record=#{new_record?}#{' destroyed=true' if destroyed?} attributes=#{attributes.inspect}>"
 
       private
 
@@ -293,6 +314,7 @@ module ZammadAPI
         @attributes = frozen_attributes(response.decoded(:object, operation: operation, resource_class: self.class))
         @changes    = {}
         @new_record = false
+        @destroyed  = false
         @error      = nil
         @related    = nil
       end

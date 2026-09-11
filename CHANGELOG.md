@@ -52,6 +52,9 @@ A breaking release that modernises the whole gem. See
   both, because no attribute the caller can fix would change the outcome.
   `client.<resource>.create` uses `save!`, so it keeps raising rather than returning a
   record that looks created but is not.
+- `record.destroy` marks the record `destroyed?`, and `persisted?` answers false for one.
+  1.x left a destroyed record looking live, so a later `save` went out as a `PUT` to the
+  deleted id and came back a 404 one call after the mistake.
 - `record.attributes` and `record.changes` are deeply frozen, and `record.to_h` returns a
   deep copy rather than a shallow one. Writing through either reader used to change what a
   record reported without staging anything, so the next `save` did not send it, and a

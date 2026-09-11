@@ -374,6 +374,10 @@ follows its convention.
 group.reload  # re-reads from Zammad, discarding unsaved changes
 group.destroy # => true
 
+group.destroyed?  # => true
+group.persisted?  # => false, so this is not the inverse of new_record?
+group.save        # raises: the record is gone, and a PUT would only 404
+
 client.group.destroy(42) # delete by id, without fetching first
 ```
 

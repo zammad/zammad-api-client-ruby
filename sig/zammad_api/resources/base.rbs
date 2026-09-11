@@ -9,6 +9,7 @@ module ZammadAPI
       attr_reader transport: Transport
 
       @new_record: bool
+      @destroyed: bool
       @error: ValidationError?
       @changes: Hash[Symbol, Array[untyped]]
       @related: Associations::Proxy?
@@ -27,6 +28,7 @@ module ZammadAPI
       def initialize: (Transport, ?Hash[untyped, untyped]? attributes) -> void
       def new_record?: () -> bool
       def persisted?: () -> bool
+      def destroyed?: () -> bool
       def changes: () -> Hash[Symbol, Array[untyped]]
       def changed?: () -> bool
       def related: () -> Associations::Proxy

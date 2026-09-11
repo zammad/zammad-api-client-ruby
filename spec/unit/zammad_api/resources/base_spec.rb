@@ -484,6 +484,31 @@ RSpec.describe ZammadAPI::Resources::Base do
     it 'raises for a record without an id' do
       expect { client.group.new.destroy }.to raise_error(ZammadAPI::Error, /has no id, save it first/)
     end
+
+    context 'when the record is gone' do
+      before do
+        stub_request(:delete, "#{url}/1").to_return(status: 200, body: '')
+        group.destroy
+      end
+
+      it 'reports the record as destroyed' do
+        expect(group).to be_destroyed
+      end
+
+      it 'no longer reports it as persisted' do
+        expect(group).not_to be_persisted
+      end
+
+      it 'says so in inspect' do
+        expect(group.inspect).to include('destroyed=true')
+      end
+
+      it 'refuses a save rather than letting it 404' do
+        group.name = 'Support'
+
+        expect { group.save }.to raise_error(ZammadAPI::Error, /was destroyed/)
+      end
+    end
   end
 
   describe 'equality' do
