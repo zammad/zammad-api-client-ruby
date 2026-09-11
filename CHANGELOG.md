@@ -3,17 +3,29 @@
 ## [2.0.0] - 2026-08-27
 
 A breaking release that modernises the whole gem. See
-[Migrating from 1.x](README.md#migrating-from-1x) for a complete before/after table.
+[Migrating from 1.x](README.md#migrating-from-1x) for the complete before/after guide.
 
 ### Breaking
 
 - Minimum Ruby version is now 3.4.
+- `Client.new` takes keyword arguments, so a configuration Hash has to be splatted:
+  `Client.new(**config)`. A positional Hash raises `ArgumentError`.
+- An unknown client option raises `ArgumentError: unknown keyword` instead of being
+  ignored, so an option that is misspelled or no longer supported is no longer silent.
+- `logger:` takes a `Logger` rather than a boolean flag. `logger: true` used to turn on
+  debug output to `$stderr`; pass `Logger.new($stderr)` for the same thing. Any object
+  that responds to `debug` is accepted, and anything else raises `ConfigurationError`.
 - `Collection#each` (`client.x.all`, `client.x.search`) now walks every page. Previously it
-  fetched a single page, so iterating silently stopped at 100 records.
+  fetched a single page, so iterating stopped silently at 100 records for `all` and at
+  10 for `search`.
 - Collections are built up by chaining instead of by keyword arguments:
   `all(per_page: 50)` is now `find_each(batch_size: 50)` or `page(1, of: 50)`,
   `all(active: true)` is `where(active: true)`,
-  and `search(query: 'zammad')` is `search('zammad')`.
+  `search(query: 'zammad')` is `search('zammad')`,
+  and `search(query: 'z', page: 2, per_page: 50)` is `search('z').page(2, of: 50)`.
+  `all` accepted those keywords and then discarded them, so its page size was always
+  100 and its filters never reached the request; `search` did honour `page` and
+  `per_page`. All of them now raise `ArgumentError` rather than being accepted.
 - `page(number, per_page)` with a block was replaced by `page(number, of: size)`, which
   returns a new collection. `page_next` and `page_prev` were removed.
 - `Collection#each_page` was renamed to `#in_batches`, which also takes the page size as
@@ -41,13 +53,29 @@ A breaking release that modernises the whole gem. See
   deep copy rather than a shallow one. Writing through either reader used to change what a
   record reported without staging anything, so the next `save` did not send it, and a
   nested hash from `to_h` was shared with the record.
+- The `record.attributes=` writer was removed. An unknown name is an ordinary attribute
+  now, so `record.attributes = {name: 'Support'}` stages a change called `attributes`
+  that `save` sends to Zammad. Use `assign_attributes` or `update`.
 - `ZammadAPI::Error` descends from `StandardError` instead of `RuntimeError`.
 - `ResponseError#response` returns a `ZammadAPI::Response`, not a Faraday object, and
   `#body` is the decoded payload rather than a raw JSON string.
+- No Faraday exception escapes any more: an unreachable host or a timeout raises
+  `ZammadAPI::ConnectionError` or `ZammadAPI::TimeoutError`, so a
+  `rescue Faraday::ConnectionFailed` stops matching.
 - `ZammadAPI::ListBase`, `ListAll` and `ListSearch` were replaced by `ZammadAPI::Collection`.
 - `ZammadAPI::Log` and `ZammadAPI::JsonHelper` were removed. Pass any `Logger` via `logger:`.
+- `ZammadAPI::Dispatcher` was replaced by `ZammadAPI::ResourceProxy`.
+- The resources a client exposes are a fixed list. 1.x resolved `client.<name>` to
+  `ZammadAPI::Resources::<Name>` through `const_get`, so a subclass of `Base` defined in
+  application code could be reached that way. `client.role` now raises
+  `UnknownResourceError`; use the raw request methods for endpoints this gem does not
+  model.
 - The internal `new_instance` accessor was replaced by `new_record?` and `persisted?`, and
-  the instance-level `url` accessor by the class-level `resource_path`.
+  the instance-level `url` accessor by the class-level `resource_path`. Both old names
+  read as unknown attributes and return `nil` rather than raising, because a Zammad
+  record carries administrator-defined attributes and a reader cannot tell a removed
+  method from a custom field — so `if record.new_instance` silently takes the else
+  branch.
 
 ### Added
 
@@ -56,7 +84,9 @@ A breaking release that modernises the whole gem. See
   `ZammadAPI::Response` and keep authentication, timeouts, retries, credential redaction,
   JSON decoding and the error classes. Previously the only way past the seven resource
   classes was to build a Faraday connection by hand.
-- Request and connection timeouts (`timeout`, `open_timeout`), on by default.
+- Request and connection timeouts (`timeout`, `open_timeout`), on by default at 60 and
+  10 seconds. 1.x waited as long as the server took, so a call that used to hang now
+  raises `TimeoutError`.
 - Automatic retry with exponential backoff for idempotent requests on connection failures,
   timeouts and transient statuses. `POST` is never retried, so a failed create cannot
   produce duplicate records.
@@ -89,6 +119,8 @@ A breaking release that modernises the whole gem. See
   `record.assign_attributes(attributes)`. Applying a hash of changes previously meant one
   writer call per attribute before `save`.
 - `ssl_verify`, `proxy`, `user_agent`, `retries` and `retry_interval` client options.
+  The default `User-Agent` is now `zammad_api-ruby/<version>` rather than
+  `Zammad API Ruby`.
 - `adapter` and `middleware` client options, the seam into the Faraday stack. Swapping in a
   persistent-connection adapter or adding instrumentation previously meant that the HTTP
   stack was closed to callers. A Faraday error while building the connection surfaces as

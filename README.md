@@ -691,38 +691,104 @@ test against a specific Zammad ref.
 ## Migrating from 1.x
 
 Version 2.0 fixes long-standing behaviour that could not change without breaking
-compatibility. Most calling code needs no edits; the table lists everything that does.
+compatibility. Most calling code needs no edits, and almost everything that does raises
+at the call site. Start with the handful of changes that do not.
 
-| 1.x                                   | 2.0                                              | Why                                                                 |
-| ------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------- |
-| `collection.each` stopped after one page | `each` walks every page                        | Iterating a collection silently truncated at 100 records            |
-| `collection.page(1, 3) { \|r\| ... }`  | `collection.page(1, of: 3).each { ... }`         | `page` now returns a collection instead of mutating and yielding    |
-| `collection.page_next` / `page_prev`   | `collection.page(n)` or `in_batches`             | Removed; they mutated shared state                                  |
-| `client.x.all(per_page: 50)`           | `client.x.all.page(1, of: 50)`, `find_each(batch_size: 50)` | Page size belongs to the call that reads, not to every entry point  |
-| `client.x.all(active: true)`           | `client.x.where(active: true)`                   | Filters no longer share a keyword bag with the paging parameters    |
-| `client.x.search(query: 'zammad')`     | `client.x.search('zammad')`                      | The search term is the argument, not a keyword                      |
-| `collection.each_page { ... }`         | `collection.in_batches { ... }`                  | Ruby already has a name for this                                    |
-| `collection[3]`                        | `collection.page(4, of: 1).first`                | An index that costs a request, and that ignored `page`, was a trap  |
-| `record.save` raised on a rejection    | `save` → `false` with `record.error`; `save!` raises | Branching on a rejected attribute needed a begin/rescue         |
-| `record.attributes[:x] = 1`            | `record.x = 1`, or `record.to_h` for a copy      | Writing through the reader staged no change, so `save` never sent it |
-| `client.user.find(ticket.customer_id)` | `ticket.related.customer`                        | Following a foreign key needed the client threaded through          |
-| `client.on_behalf_of = 'login'`        | `client.on_behalf_of('login')` → new client      | The setter mutated the client and leaked across threads             |
-| `client.perform_on_behalf_of('x') { }` | `client.on_behalf_of('x') { \|scoped\| ... }`    | The old block form left the header set if the block raised          |
-| `ZammadAPI::ResourceNotFoundError`     | `ZammadAPI::UnknownResourceError`                | Renamed so it is not confused with a 404, now `NotFoundError`       |
-| `ZammadAPI::Error < RuntimeError`      | `ZammadAPI::Error < StandardError`               | `RuntimeError` is for `raise "string"`                              |
-| `error.response` was a Faraday object  | `ZammadAPI::Response` with `status`/`body`/`headers` | Faraday is no longer part of the public surface                 |
-| `error.body` was a raw JSON string     | decoded Hash, or the raw body for non-JSON       | Saves every caller from parsing it again                            |
-| `record.new_instance`                  | `record.new_record?` / `record.persisted?`       | Internal flag is no longer public                                   |
-| `resource.url` (instance)              | `Resource.resource_path` (class)                 | Clashed with an attribute named `url`                                |
-| `ZammadAPI::ListBase` / `ListAll` / `ListSearch` | `ZammadAPI::Collection`                | One class instead of three                                          |
-| `ZammadAPI::Log`, `ZammadAPI::JsonHelper` | removed                                       | Pass any `Logger` as `logger:`; decoding moved into the transport   |
-| Ruby >= 3.0                            | Ruby >= 3.4                                      | 3.0 through 3.3 are end-of-life or nearly so                        |
+### Changes that do not announce themselves
 
-Unchanged: `client.<resource>.find/all/create/new`, `record.destroy`, attribute readers
-and writers, `ticket.articles`, `ticket.article`, and `attachment.download`.
+- **`record.attributes = {...}`** was a writer in 1.x. It is now an ordinary attribute
+  assignment, so it stages a change named `attributes` and `save` sends it to Zammad:
+
+  ```ruby
+  group.attributes = {name: 'Support'}
+  group.changes # => {attributes: [nil, {name: "Support"}]}
+  ```
+
+  Use `assign_attributes(name: 'Support')`, or `update` to assign and save.
+
+- **`record.new_instance` and `record.url` return `nil`**, because an unknown attribute
+  reads as `nil` rather than raising — Zammad records carry administrator-defined
+  attributes, so a reader cannot tell a removed method from a custom field. `if
+  record.new_instance` now always takes the else branch. Use `new_record?` /
+  `persisted?`, and `Resource.resource_path` on the class.
+
+- **`rescue Faraday::ConnectionFailed`** (and any other Faraday exception) no longer
+  matches. Transport failures are wrapped, so rescue `ZammadAPI::ConnectionError`,
+  `ZammadAPI::TimeoutError`, or `ZammadAPI::TransportError` for both.
+
+### The client
+
+| 1.x                                    | 2.0                                              | Why                                                                  |
+| -------------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
+| `Client.new(config_hash)`              | `Client.new(**config_hash)`                      | Options are keyword arguments now, so a Hash has to be splatted      |
+| an unknown option was ignored          | raises `ArgumentError: unknown keyword`          | A typo'd option used to be dropped without a word                    |
+| `logger: true`                         | `logger: Logger.new($stderr)`                    | The flag became an object, so you choose the device and level. Anything that answers `debug` is accepted; `true` raises `ConfigurationError` |
+| `client.on_behalf_of = 'login'`        | `client.on_behalf_of('login')` → new client      | The setter mutated the client and leaked across threads              |
+| `client.perform_on_behalf_of('x') { }` | `client.on_behalf_of('x') { \|scoped\| ... }`    | The old block form left the header set if the block raised           |
+| `ZammadAPI::Resources::Role < Base` reached by `client.role` | `client.get('api/v1/roles')`  | Resources are a fixed list; [raw requests](#raw-requests) reach the rest |
+
+### Collections
+
+| 1.x                                      | 2.0                                              | Why                                                                 |
+| ---------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------- |
+| `collection.each` stopped after one page | `each` walks every page                          | Iterating truncated silently at the page size: 100 for `all`, 10 for `search` |
+| `collection.page(1, 3) { \|r\| ... }`    | `collection.page(1, of: 3).each { ... }`         | `page` now returns a collection instead of mutating and yielding    |
+| `collection.page_next` / `page_prev`     | `collection.page(n)` or `in_batches`             | Removed; they mutated shared state                                  |
+| `collection.each_page { ... }`           | `collection.in_batches { ... }`                  | Ruby already has a name for this                                    |
+| `collection[3]`                          | `collection.page(4, of: 1).first`                | An index that costs a request, and that ignored `page`, was a trap  |
+| `client.x.all(per_page: 50)`             | `client.x.all.page(1, of: 50)`, `find_each(batch_size: 50)` | `all` accepted the argument and discarded it; page size belongs to the call that reads |
+| `client.x.all(active: true)`             | `client.x.where(active: true)`                   | Same: the filter never reached the request                          |
+| `client.x.search(query: 'zammad')`       | `client.x.search('zammad')`                      | The search term is the argument, not a keyword                      |
+| `client.x.search(query: 'z', page: 2, per_page: 50)` | `client.x.search('z').page(2, of: 50)` | Search did honour those two; paging is the collection's job now     |
+
+### Records
+
+| 1.x                                 | 2.0                                                  | Why                                                                  |
+| ----------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------- |
+| `record.save` raised on a rejection | `save` → `false` with `record.error`; `save!` raises  | Branching on a rejected attribute needed a begin/rescue              |
+| `record.attributes[:x] = 1`         | `record.x = 1`, or `record.to_h` for a copy          | Writing through the reader staged no change, so `save` never sent it  |
+| `record.attributes = {...}`         | `record.assign_attributes(...)` / `record.update(...)` | The writer is gone, and the name now stages an attribute of its own |
+| `record.new_instance`               | `record.new_record?` / `record.persisted?`           | Internal flag is no longer public                                    |
+| `resource.url` (instance)           | `Resource.resource_path` (class)                     | Clashed with an attribute named `url`                                |
+| `client.user.find(ticket.customer_id)` | `ticket.related.customer`                         | Following a foreign key needed the client threaded through           |
+
+### Errors
+
+| 1.x                                   | 2.0                                                  | Why                                                             |
+| ------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------- |
+| `ZammadAPI::Error < RuntimeError`     | `ZammadAPI::Error < StandardError`                   | `RuntimeError` is for `raise "string"`                          |
+| `ZammadAPI::ResourceNotFoundError`    | `ZammadAPI::UnknownResourceError`                    | Renamed so it is not confused with a 404, now `NotFoundError`   |
+| `ClientError` for every 4xx           | `AuthenticationError`, `NotFoundError`, `ValidationError`, … | All still `ClientError`, so existing rescues keep working |
+| a Faraday exception for a dead host   | `ZammadAPI::ConnectionError` / `TimeoutError`        | Every failure this gem can raise descends from `ZammadAPI::Error` |
+| `error.response` was a Faraday object | `ZammadAPI::Response` with `status`/`body`/`headers` | Faraday is no longer part of the public surface                 |
+| `error.body` was a raw JSON string    | decoded Hash, or the raw body for non-JSON           | Saves every caller from parsing it again                        |
+
+### Removed constants, and the Ruby version
+
+| 1.x                                              | 2.0                        | Why                                                          |
+| ------------------------------------------------ | -------------------------- | ------------------------------------------------------------ |
+| `ZammadAPI::ListBase` / `ListAll` / `ListSearch` | `ZammadAPI::Collection`    | One class instead of three                                   |
+| `ZammadAPI::Dispatcher`                          | `ZammadAPI::ResourceProxy` | Renamed; `client.<resource>` hands you one                   |
+| `ZammadAPI::Log`, `ZammadAPI::JsonHelper`        | removed                    | Pass any `Logger` as `logger:`; decoding moved into the transport |
+| Ruby >= 3.0                                      | Ruby >= 3.4                | 3.0 through 3.3 are end-of-life or nearly so                 |
+
+### Defaults 1.x did not have
+
+A request now times out after 60 seconds (10 to connect) where 1.x waited as long as the
+server took, so a call that used to hang raises `ZammadAPI::TimeoutError`. `GET`, `PUT`
+and `DELETE` are retried twice with exponential backoff on connection failures, timeouts
+and the transient statuses, which means a genuinely broken endpoint takes a little longer
+to report itself; `POST` is never retried. Both are options — see
+[Timeouts and retries](#timeouts-and-retries). The `User-Agent` is now
+`zammad_api-ruby/<version>` rather than `Zammad API Ruby`.
+
+### What did not change
+
+`client.<resource>.find/all/create/new`, `record.destroy`, attribute readers and writers,
+`ticket.articles`, `ticket.article`, and `attachment.download`.
 
 `record.save`, `record.changes` and `record.attributes` still exist and still mean what
-they meant; only the three rows above change how they behave at the edges.
+they meant; the tables above only change how they behave at the edges.
 
 ## License
 
