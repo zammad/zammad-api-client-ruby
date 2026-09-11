@@ -39,6 +39,9 @@ A breaking release that modernises the whole gem. See
   `each`, `first`, `lazy`, `count` — fetches 100 per request.
 - `where` rejects `page`, `per_page`, `expand` and `only_total_count` with an
   `ArgumentError`. They used to be accepted and silently overridden.
+- A `nil` query value raises `ArgumentError`. 1.x dropped the parameter, so
+  `where(owner_id: nil)` requested every ticket and the caller iterated all of them
+  believing they were unassigned.
 - `client.on_behalf_of = 'login'` and `client.perform_on_behalf_of` were replaced by
   `client.on_behalf_of('login')`, which returns a new client and also accepts a block.
 - `ZammadAPI::ResourceNotFoundError` is now `ZammadAPI::UnknownResourceError`, freeing the

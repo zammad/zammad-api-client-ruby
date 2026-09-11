@@ -428,6 +428,9 @@ client.group.all.where(active: true)           # the same, from an existing coll
 Paging is not one of them: that is what `page`, `in_batches` and `find_each` are for, and passing `page:` or
 `per_page:` to `where` raises `ArgumentError` rather than being silently ignored.
 
+A `nil` value raises too. There is no query string that means "this field is null", so
+`where(owner_id: nil)` cannot ask for unassigned tickets — it would ask for all of them.
+
 ### Search
 
 ```ruby

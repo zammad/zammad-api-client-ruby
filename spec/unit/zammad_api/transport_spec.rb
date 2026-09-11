@@ -72,10 +72,17 @@ RSpec.describe ZammadAPI::Transport do
       expect(stub).to have_been_requested
     end
 
-    it 'omits nil values' do
-      stub = stub_request(:get, url).with(query: { 'page' => '1' }).to_return(json_response([]))
-      unit_transport.get('api/v1/groups', operation: 'test', query: { page: 1, note: nil })
-      expect(stub).to have_been_requested
+    it 'raises on a nil value rather than dropping the parameter' do
+      expect { unit_transport.get('api/v1/groups', operation: 'test', query: { page: 1, note: nil }) }
+        .to raise_error(ArgumentError, /query parameter note is nil/)
+    end
+
+    it 'makes no request for a query it rejects' do
+      stub = stub_request(:get, url).with(query: hash_including({})).to_return(json_response([]))
+
+      expect { unit_transport.get('api/v1/groups', operation: 'test', query: { note: nil }) }
+        .to raise_error(ArgumentError)
+      expect(stub).not_to have_been_requested
     end
   end
 

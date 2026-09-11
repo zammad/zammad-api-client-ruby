@@ -109,10 +109,13 @@ module ZammadAPI
     private
 
     def perform(method, path, query, body)
+      # Built before the request is logged, so a rejected query does not leave
+      # a line claiming a request that was never made.
+      params = query && stringify_query(query)
       log_request(method, path, query, body)
 
       @connection.public_send(method, path) do |request|
-        request.params.update(stringify_query(query)) if query
+        request.params.update(params) if params
         request.body = body if body
         request.headers['From'] = on_behalf_of if on_behalf_of
       end
@@ -162,9 +165,15 @@ module ZammadAPI
 
     # Zammad expects scalar query values; booleans and integers are stringified
     # so that Faraday does not encode them as unexpected types.
+    #
+    # A nil used to be dropped here, which turned `where(owner_id: nil)` - an
+    # entirely reasonable way to write "unassigned" - into an unfiltered index
+    # answering with every ticket. Wrong results, no error, nothing to see from
+    # the outside. There is no query string that means "this field is null", so
+    # saying so is the only answer that can be acted on.
     def stringify_query(query)
       query.each_with_object({}) do |(key, value), result|
-        next if value.nil?
+        raise ArgumentError, "query parameter #{key} is nil, and Zammad has no way to read that: pass a value, or leave the parameter out" if value.nil?
 
         result[key.to_s] = value.is_a?(Array) ? value.map(&:to_s) : value.to_s
       end
