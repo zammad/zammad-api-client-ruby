@@ -5,8 +5,9 @@ module ZammadAPI
     attr_reader headers: Hash[String, String]
     attr_reader body: untyped
     attr_reader raw_body: String
+    attr_reader json: bool
 
-    def self.new: (status: Integer, headers: Hash[String, String], body: untyped, raw_body: String) -> instance
+    def self.new: (status: Integer, headers: Hash[String, String], body: untyped, raw_body: String, json: bool) -> instance
     SUCCESS_STATUSES: Range[Integer]
 
     def success?: () -> bool

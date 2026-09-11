@@ -30,7 +30,7 @@ module ZammadAPI
     def apply_authentication: (Faraday::Connection) -> void
     def retry_options: () -> Hash[Symbol, untyped]
     def decode: (Faraday::Response) -> Response
-    def decode_body: (String?, String) -> untyped
+    def decode_body: (String?, String) -> [untyped, bool]
     def log_request: (Symbol, String, Hash[Symbol, untyped]?, untyped) -> void
     def log_response: (Symbol, String, Response, Float) -> void
     def redact: (untyped) -> untyped

@@ -191,27 +191,32 @@ module ZammadAPI
     end
 
     def decode(faraday_response)
-      headers  = faraday_response.headers.to_h.transform_keys { it.to_s.downcase }
-      raw_body = faraday_response.body.to_s
+      headers    = faraday_response.headers.to_h.transform_keys { it.to_s.downcase }
+      raw_body   = faraday_response.body.to_s
+      body, json = decode_body(headers['content-type'], raw_body)
 
       Response.new(
         status:   faraday_response.status,
         headers:  headers,
-        body:     decode_body(headers['content-type'], raw_body),
-        raw_body: raw_body
+        body:     body,
+        raw_body: raw_body,
+        json:     json
       )
     end
 
     # Only JSON responses are decoded. Anything else - a proxy error page, a
     # file download - is handed back untouched so that callers and error
     # messages can still work with it.
+    #
+    # Returns whether it decoded alongside the body, because this is the only
+    # place that knows.
     def decode_body(content_type, raw_body)
-      return raw_body if !content_type.to_s.include?('json')
-      return raw_body if raw_body.empty?
+      return [raw_body, false] if !content_type.to_s.include?('json')
+      return [raw_body, false] if raw_body.empty?
 
-      JSON.parse(raw_body, symbolize_names: true)
+      [JSON.parse(raw_body, symbolize_names: true), true]
     rescue JSON::ParserError
-      raw_body
+      [raw_body, false]
     end
 
     def log_request(method, path, query, body)

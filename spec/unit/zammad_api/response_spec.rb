@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 RSpec.describe ZammadAPI::Response do
-  def build(status: 200, body: { a: 1 }, raw_body: '{"a":1}', headers: {})
-    described_class.new(status: status, headers: headers, body: body, raw_body: raw_body)
+  def build(status: 200, body: { a: 1 }, raw_body: '{"a":1}', headers: {}, json: !body.is_a?(String))
+    described_class.new(status: status, headers: headers, body: body, raw_body: raw_body, json: json)
   end
 
   describe '#success?' do
@@ -27,6 +27,10 @@ RSpec.describe ZammadAPI::Response do
     it 'is false when the body is the untouched raw body' do
       raw = '<html></html>'
       expect(build(body: raw, raw_body: raw)).not_to be_json
+    end
+
+    it 'reports what the decoder recorded, not whether the two bodies differ' do
+      expect(build(body: '"a string"', raw_body: '"a string"', json: true)).to be_json
     end
   end
 

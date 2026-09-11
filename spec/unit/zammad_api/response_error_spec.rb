@@ -6,7 +6,8 @@ RSpec.describe ZammadAPI::ResponseError do
       status:   status,
       headers:  headers,
       body:     body,
-      raw_body: body.is_a?(String) ? body : JSON.generate(body)
+      raw_body: body.is_a?(String) ? body : JSON.generate(body),
+      json:     !body.is_a?(String)
     )
   end
 
@@ -154,7 +155,7 @@ RSpec.describe ZammadAPI::ResponseError do
   describe ZammadAPI::RateLimitError do
     it 'exposes Retry-After as an integer' do
       error = ZammadAPI::ResponseError.build(
-        ZammadAPI::Response.new(status: 429, headers: { 'retry-after' => '30' }, body: {}, raw_body: '{}'),
+        ZammadAPI::Response.new(status: 429, headers: { 'retry-after' => '30' }, body: {}, raw_body: '{}', json: true),
         operation: 'find object'
       )
       expect(error.retry_after).to eq(30)
@@ -162,7 +163,7 @@ RSpec.describe ZammadAPI::ResponseError do
 
     it 'returns nil when the header is absent' do
       error = ZammadAPI::ResponseError.build(
-        ZammadAPI::Response.new(status: 429, headers: {}, body: {}, raw_body: '{}'),
+        ZammadAPI::Response.new(status: 429, headers: {}, body: {}, raw_body: '{}', json: true),
         operation: 'find object'
       )
       expect(error.retry_after).to be_nil
@@ -170,7 +171,7 @@ RSpec.describe ZammadAPI::ResponseError do
 
     it 'returns nil when the header is not a number' do
       error = ZammadAPI::ResponseError.build(
-        ZammadAPI::Response.new(status: 429, headers: { 'retry-after' => 'later' }, body: {}, raw_body: '{}'),
+        ZammadAPI::Response.new(status: 429, headers: { 'retry-after' => 'later' }, body: {}, raw_body: '{}', json: true),
         operation: 'find object'
       )
       expect(error.retry_after).to be_nil

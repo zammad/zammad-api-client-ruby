@@ -176,19 +176,17 @@ module ZammadAPI
       case stub[:body]
       in Hash | Array => structured
         raw = JSON.generate(structured)
-        build_response(stub, JSON.parse(raw, symbolize_names: true), raw)
+        build_response(stub, JSON.parse(raw, symbolize_names: true), raw, json: true)
       in nil
-        build_response(stub, '', '')
+        build_response(stub, '', '', json: false)
       in other
-        # One object for both, so Response#json? reports false the way it does
-        # for a real non-JSON response.
         raw = other.to_s
-        build_response(stub, raw, raw)
+        build_response(stub, raw, raw, json: false)
       end
     end
 
-    def build_response(stub, body, raw_body)
-      Response.new(status: stub[:status], headers: stub[:headers], body: body, raw_body: raw_body)
+    def build_response(stub, body, raw_body, json:)
+      Response.new(status: stub[:status], headers: stub[:headers], body: body, raw_body: raw_body, json: json)
     end
 
     def unstubbed_message(method, path)

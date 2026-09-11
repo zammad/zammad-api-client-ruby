@@ -17,7 +17,9 @@ module ZammadAPI
   #     keys; every other content type is left as the raw body
   # @!attribute [r] raw_body
   #   @return [String] the undecoded response body
-  Response = Data.define(:status, :headers, :body, :raw_body)
+  # @!attribute [r] json
+  #   @return [Boolean] whether {#body} was decoded from JSON
+  Response = Data.define(:status, :headers, :body, :raw_body, :json)
 
   class Response
     SUCCESS_STATUSES = (200..299)
@@ -25,8 +27,14 @@ module ZammadAPI
     # @return [Boolean] whether the status code is in the 2xx range
     def success? = SUCCESS_STATUSES.cover?(status)
 
+    # Recorded at decode time, where the answer is known, rather than derived
+    # from `body` and `raw_body` being the same object. That identity held only
+    # while every producer was careful to hand the same String to both, and any
+    # edit that duped, re-encoded or normalised the raw body would have flipped
+    # this to true with nothing asserting otherwise.
+    #
     # @return [Boolean] whether {#body} was decoded from JSON
-    def json? = !body.equal?(raw_body)
+    def json? = json
 
     # Returns the decoded body once it matches the expected shape.
     #

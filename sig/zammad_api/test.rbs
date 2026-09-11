@@ -44,7 +44,7 @@ module ZammadAPI
     def take: (Symbol method, String path, Hash[String, untyped] params) -> Hash[Symbol, untyped]?
     def matches?: (Hash[untyped, untyped]? expected, Hash[String, untyped] params) -> bool
     def response_for: (Hash[Symbol, untyped] stub) -> Response
-    def build_response: (Hash[Symbol, untyped] stub, untyped body, String raw_body) -> Response
+    def build_response: (Hash[Symbol, untyped] stub, untyped body, String raw_body, json: bool) -> Response
     def unstubbed_message: (Symbol method, String path) -> String
 
     class Transport
