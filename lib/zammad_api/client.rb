@@ -101,6 +101,27 @@ module ZammadAPI
       new(**options)
     end
 
+    # Builds a client from a {Config} that is already validated and a
+    # transport that is already built.
+    #
+    # The public constructor turns options into a Config and a Config into a
+    # Transport, and building a Transport means building a Faraday stack:
+    # authentication, JSON, the retry middleware, adapter resolution. Anything
+    # holding a transport of its own - {Test} - threw all of that away one
+    # line later with {#with_transport}, and paid for it again for every
+    # stand-in a suite builds.
+    #
+    # @api private
+    # @param config [Config] an already validated configuration
+    # @param transport [Transport] anything with a {Transport} interface
+    # @return [Client]
+    def self.build(config, transport)
+      client = allocate
+      client.instance_variable_set(:@config, config)
+      client.instance_variable_set(:@transport, transport)
+      client
+    end
+
     # @param options [Hash] see {Config} for every supported option
     # @option options [String] :url base URL of the Zammad instance
     # @option options [String] :http_token access token

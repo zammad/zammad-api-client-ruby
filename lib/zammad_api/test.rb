@@ -71,11 +71,13 @@ module ZammadAPI
       @requests  = []
       @monitor   = Mutex.new
       @transport = Transport.new(self)
-      # Built once. `Client.new` validates the config and assembles a whole
-      # Faraday stack - auth, JSON, retries, adapter - that `with_transport`
-      # then replaces, and a suite that reaches for `zammad.client` in every
-      # example used to pay for that every time.
-      @client    = Client.new(**@config.to_h.compact).with_transport(@transport)
+      # Built once, and built straight onto the stand-in. Going through
+      # `Client.new` re-validated the config assembled one line above and then
+      # assembled a whole Faraday stack - auth, JSON, retries, adapter - for
+      # `with_transport` to throw away, which is the cost the comment here
+      # used to claim it was avoiding. A suite writing
+      # `let(:zammad) { ZammadAPI::Test.new }` paid it once per example.
+      @client    = Client.build(@config, @transport)
     end
 
     # A client that talks to this stand-in instead of to a Zammad.

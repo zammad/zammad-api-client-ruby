@@ -9,6 +9,7 @@ module ZammadAPI
     @transport: Transport
 
     def self.from_env: (**untyped overrides) -> Client
+    def self.build: (Config config, untyped transport) -> Client
 
     def initialize: (**untyped options) -> void
 

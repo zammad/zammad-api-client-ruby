@@ -23,6 +23,21 @@ RSpec.describe ZammadAPI::Test do
       expect(client.config.url).to eq('https://zammad.test/')
     end
 
+    it 'reports the very configuration the stand-in was built with' do
+      expect(client.config).to be(zammad.config)
+    end
+
+    # Going through Client.new assembled a Faraday stack - auth, JSON,
+    # retries, adapter - for `with_transport` to discard one line later, once
+    # per stand-in.
+    it 'builds no HTTP stack on the way to the stand-in transport' do
+      allow(ZammadAPI::Transport).to receive(:new).and_call_original
+
+      described_class.new
+
+      expect(ZammadAPI::Transport).not_to have_received(:new)
+    end
+
     it 'accepts configuration overrides' do
       expect(described_class.new(url: 'https://other.test/').client.config.url).to eq('https://other.test/')
     end
