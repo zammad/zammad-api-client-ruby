@@ -46,6 +46,7 @@ module ZammadAPI
       ?logger: Logger?
     ) -> void
 
+    def redacted_url: () -> String
     def authentication_scheme: () -> Symbol
     def with: (**untyped) -> Config
     def inspect: () -> String

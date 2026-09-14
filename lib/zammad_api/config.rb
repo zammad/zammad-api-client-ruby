@@ -132,6 +132,16 @@ module ZammadAPI
       validate_logger!
     end
 
+    # The instance URL, with any inline credentials blanked.
+    #
+    # A URL may carry basic-auth credentials in its userinfo, and 1.x users
+    # who put them there rather than in +user:+ and +password:+ still do. The
+    # host has to stay readable for the URL to be worth printing, so the
+    # credentials are replaced rather than the whole value.
+    #
+    # @return [String]
+    def redacted_url = url.sub(USERINFO_PATTERN, REDACTION)
+
     # @return [Symbol] +:http_token+, +:oauth2_token+ or +:basic+
     def authentication_scheme
       return :http_token   if http_token
@@ -155,6 +165,7 @@ module ZammadAPI
       # out the rest of the configuration.
       return "#<#{value.class}>" if key == :logger
       return "#<#{value.class}>" if key == :middleware && value
+      return redacted_url.inspect if key == :url
       return value.sub(USERINFO_PATTERN, REDACTION).inspect if key == :proxy && value
 
       value.inspect

@@ -276,7 +276,7 @@ module ZammadAPI
       yield scoped
     end
 
-    def inspect = "#<#{self.class.name} url=#{config.url.inspect} auth=#{config.authentication_scheme}>"
+    def inspect = "#<#{self.class.name} url=#{config.redacted_url.inspect} auth=#{config.authentication_scheme}>"
 
     def method_missing(name, *args)
       return super if CONVERSION_METHODS.include?(name) || name.to_s.end_with?('=', '!', '?')

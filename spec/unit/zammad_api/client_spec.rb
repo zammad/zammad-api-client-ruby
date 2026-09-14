@@ -499,5 +499,12 @@ RSpec.describe ZammadAPI::Client do
     it 'does not leak the token' do
       expect(unit_client(http_token: 'super-secret').inspect).not_to include('super-secret')
     end
+
+    it 'does not leak credentials carried in the url' do
+      client = unit_client(url: 'https://admin:url-s3cret@zammad.example.com/')
+
+      expect(client.inspect).not_to include('url-s3cret')
+      expect(client.inspect).to include('https://[REDACTED]@zammad.example.com/')
+    end
   end
 end

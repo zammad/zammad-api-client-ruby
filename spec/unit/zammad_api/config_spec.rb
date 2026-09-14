@@ -228,6 +228,42 @@ RSpec.describe ZammadAPI::Config do
     it 'leaves a proxy without credentials alone' do
       expect(build(proxy: 'http://proxy.test:8080').inspect).to include('proxy="http://proxy.test:8080"')
     end
+
+    context 'with credentials in the instance url' do
+      subject(:rendered) { build(url: 'https://admin:url-s3cret@zammad.example.com/').inspect }
+
+      it 'redacts them' do
+        expect(rendered).not_to include('url-s3cret')
+      end
+
+      it 'keeps the host visible' do
+        expect(rendered).to include('zammad.example.com')
+      end
+
+      it 'marks the redacted userinfo' do
+        expect(rendered).to include('url="https://[REDACTED]@zammad.example.com/"')
+      end
+    end
+
+    it 'leaves a url without credentials alone' do
+      expect(build(url: 'https://zammad.example.com/').inspect).to include('url="https://zammad.example.com/"')
+    end
+  end
+
+  describe '#redacted_url' do
+    it 'blanks inline credentials' do
+      expect(build(url: 'https://admin:s3cret@zammad.example.com/').redacted_url)
+        .to eq('https://[REDACTED]@zammad.example.com/')
+    end
+
+    it 'leaves a url without credentials alone' do
+      expect(build(url: 'https://zammad.example.com/').redacted_url).to eq('https://zammad.example.com/')
+    end
+
+    it 'does not change what requests are sent to' do
+      config = build(url: 'https://admin:s3cret@zammad.example.com/')
+      expect(config.url).to eq('https://admin:s3cret@zammad.example.com/')
+    end
   end
 
   describe 'immutability of string members' do
