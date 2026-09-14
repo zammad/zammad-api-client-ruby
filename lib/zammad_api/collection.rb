@@ -227,8 +227,11 @@ module ZammadAPI
         #
         # Whole payloads rather than ids: an endpoint that serves records
         # without an id would compare two empty lists on every page and so
-        # report a perfectly good paginator as stuck.
-        current = records.map(&:attributes)
+        # report a perfectly good paginator as stuck. A digest of them rather
+        # than the payloads themselves, because holding the previous page
+        # across the next fetch doubled a walk's peak memory for a guard that
+        # only ever asks whether two pages are equal.
+        current = records.map(&:attributes).hash
         raise PaginationError.build(operation: @operation, page: page, resource_class: @resource_class) if current == previous
 
         yield records if !records.empty?
