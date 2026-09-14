@@ -24,17 +24,6 @@ module ZammadAPI
     # Transient statuses worth retrying.
     RETRIABLE_STATUSES = [429, 500, 502, 503, 504].freeze
 
-    # Failures worth retrying. Faraday::RetriableResponse is how the retry
-    # middleware signals a retriable status internally and must stay in this
-    # list, otherwise it escapes as an unhandled Faraday error.
-    RETRIABLE_EXCEPTIONS = [
-      Faraday::RetriableResponse,
-      Faraday::ConnectionFailed,
-      Faraday::TimeoutError,
-      Errno::ETIMEDOUT,
-      Timeout::Error
-    ].freeze
-
     # Socket failures that mean the request ran out of time. Most adapters
     # wrap these into a Faraday error, but not all do, and this gem lets a
     # caller choose the adapter.
@@ -51,6 +40,26 @@ module ZammadAPI
       Errno::ENETUNREACH,
       Errno::EPIPE,
       SocketError
+    ].freeze
+
+    # Failures worth retrying. Faraday::RetriableResponse is how the retry
+    # middleware signals a retriable status internally and must stay in this
+    # list, otherwise it escapes as an unhandled Faraday error.
+    #
+    # Composed from the two lists above rather than repeating them. Listed
+    # by hand, CONNECTION_ERRORS was left out: a transient ECONNRESET through
+    # an adapter that wraps it was retried as a Faraday::ConnectionFailed,
+    # while the same failure through an adapter that does not raised on the
+    # first attempt - so how often a request was retried depended on which
+    # adapter a caller picked, and `request` already documents these as
+    # failures this class expects to see. The retry middleware still only
+    # retries RETRIABLE_METHODS, so a POST is not repeated.
+    RETRIABLE_EXCEPTIONS = [
+      Faraday::RetriableResponse,
+      Faraday::ConnectionFailed,
+      Faraday::TimeoutError,
+      *TIMEOUT_ERRORS,
+      *CONNECTION_ERRORS
     ].freeze
 
     # Substrings that mark a request payload key as carrying a credential.

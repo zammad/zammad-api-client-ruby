@@ -333,6 +333,43 @@ RSpec.describe ZammadAPI::Transport do
     end
   end
 
+  # Most adapters wrap a socket failure into Faraday::ConnectionFailed, which
+  # was retried; the same failure raw was not, so how often a request was
+  # retried depended on which adapter the caller picked - through an option
+  # this gem offers.
+  describe 'retries through an adapter that does not wrap socket errors' do
+    before { BareSocketAdapter.attempts = [] }
+
+    def bare_socket_transport(**overrides)
+      unit_transport(adapter: :bare_socket, retry_interval: 0.01, **overrides)
+    end
+
+    it 'retries an unwrapped socket error as often as a wrapped one' do
+      expect { bare_socket_transport(retries: 2).get('api/v1/groups', operation: 'test') }
+        .to raise_error(ZammadAPI::ConnectionError)
+      expect(BareSocketAdapter.attempts.size).to eq(3)
+    end
+
+    it 'still maps it to ConnectionError once the retries are spent' do
+      expect { bare_socket_transport(retries: 1).get('api/v1/groups', operation: 'test') }
+        .to raise_error(ZammadAPI::ConnectionError, /is unreachable/)
+    end
+
+    it 'does not repeat a POST, which could duplicate records' do
+      expect { bare_socket_transport(retries: 2).post('api/v1/groups', operation: 'test', body: { a: 1 }) }
+        .to raise_error(ZammadAPI::ConnectionError)
+      expect(BareSocketAdapter.attempts).to eq([:post])
+    end
+
+    it 'retries every socket failure it maps to ConnectionError' do
+      expect(described_class::RETRIABLE_EXCEPTIONS).to include(*described_class::CONNECTION_ERRORS)
+    end
+
+    it 'retries every socket failure it maps to TimeoutError' do
+      expect(described_class::RETRIABLE_EXCEPTIONS).to include(*described_class::TIMEOUT_ERRORS)
+    end
+  end
+
   describe 'the Faraday seam' do
     it 'calls the middleware with the connection being built' do
       seen = nil
