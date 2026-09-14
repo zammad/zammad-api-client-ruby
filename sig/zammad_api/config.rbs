@@ -1,5 +1,11 @@
 module ZammadAPI
   # Built with Data.define; the generated readers are declared explicitly.
+  #
+  # `middleware` is a block handed a Faraday::Connection, but it is declared
+  # untyped here: these signatures ship with the gem, while the Faraday
+  # declarations they would need live in sig/vendor, which does not. Naming
+  # Faraday here made `rbs validate` fail for every consumer with
+  # `Could not find Faraday::Connection`.
   class Config < ::Data
     DEFAULT_TIMEOUT: Integer
     DEFAULT_OPEN_TIMEOUT: Integer
@@ -25,7 +31,7 @@ module ZammadAPI
     attr_reader ssl_verify: bool
     attr_reader proxy: String?
     attr_reader adapter: Symbol?
-    attr_reader middleware: ^(Faraday::Connection) -> void | nil
+    attr_reader middleware: untyped
     attr_reader logger: Logger
 
     def initialize: (
@@ -42,7 +48,7 @@ module ZammadAPI
       ?ssl_verify: bool,
       ?proxy: String?,
       ?adapter: (Symbol | String)?,
-      ?middleware: (^(Faraday::Connection) -> void)?,
+      ?middleware: untyped,
       ?logger: Logger?
     ) -> void
 
