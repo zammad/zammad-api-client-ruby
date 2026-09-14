@@ -32,8 +32,16 @@ RSpec.configure do |config|
 
   # Specs are grouped by what they need: unit specs run against WebMock stubs
   # and never touch the network, integration specs need a live Zammad.
+  #
+  # The integration specs also walk a record through its lifecycle across
+  # ordered examples, so they are pinned to definition order. Without that a
+  # `--seed` or `--order random` run scrambled the lifecycle and failed on a
+  # record that had not been built yet. Unit specs stay order-independent.
   config.define_derived_metadata(file_path: %r{/spec/unit/}) { it[:unit] = true }
-  config.define_derived_metadata(file_path: %r{/spec/integration/}) { it[:integration] = true }
+  config.define_derived_metadata(file_path: %r{/spec/integration/}) do |metadata|
+    metadata[:integration] = true
+    metadata[:order]       = :defined
+  end
 
   # The instance has to have an admin account before anything can
   # authenticate. Doing this from a hook rather than from one spec file keeps
@@ -41,12 +49,6 @@ RSpec.configure do |config|
   config.before(:each, :integration) do
     Helper.ensure_configured!
   end
-
-  # The integration specs walk a record through its lifecycle across ordered
-  # examples, so they are pinned to definition order. Without this a `--seed`
-  # or `--order random` run scrambled the lifecycle and failed on a record
-  # that had not been built yet. Unit specs stay order-independent.
-  config.define_derived_metadata(file_path: %r{/spec/integration/}) { it[:order] = :defined }
 
   # Integration specs need the real network, so WebMock steps aside for them.
   config.around(:each, :integration) do |example|
