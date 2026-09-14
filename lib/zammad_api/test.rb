@@ -110,12 +110,17 @@ module ZammadAPI
     # @param query [Hash, nil] only answer requests carrying these parameters
     # @return [self]
     def stub(method, path, status: 200, body: nil, headers: {}, query: nil)
+      # Stringified here rather than on each request, so that a query the
+      # transport would refuse - a nil value - is reported against the line
+      # that wrote the stub instead of against whichever request reached it.
+      scope = query && ::ZammadAPI::Transport.stringify_query(query)
+
       @monitor.synchronize do
         (@stubs[key(method, path)] ||= []) << {
           status:  status,
           body:    body,
           headers: headers.to_h { |name, value| [name.to_s.downcase, value] },
-          query:   query
+          query:   scope
         }
       end
       self
@@ -201,10 +206,18 @@ module ZammadAPI
       group.one? ? queued[group.first] : queued.delete_at(group.first)
     end
 
+    # Both sides have been through the transport's own stringification, the
+    # stub's when it was declared. Comparing a raw value against a stringified
+    # one worked for a scalar - `1.to_s` is `"1"` either way - and could never
+    # match for an Array: `[1, 2].to_s` is `"[1, 2]"` while the recorded
+    # `["1", "2"].to_s` is `"[\"1\", \"2\"]"`. `ids`, `role_ids`, `group_ids`
+    # and `permissions` are all array-valued search parameters, so a stub
+    # scoped to any of them silently never answered and the request came back
+    # as unstubbed.
     def matches?(expected, params)
       return true if expected.nil?
 
-      expected.all? { |name, value| params[name.to_s].to_s == value.to_s }
+      expected.all? { |name, value| params[name] == value }
     end
 
     def response_for(stub)

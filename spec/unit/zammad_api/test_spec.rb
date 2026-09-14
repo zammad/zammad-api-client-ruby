@@ -68,7 +68,8 @@ RSpec.describe ZammadAPI::Test do
     end
 
     it 'answers a collection with every page' do
-      zammad.stub(:get, 'api/v1/groups', body: [{ id: 1, name: 'Users' }, { id: 2, name: 'Support' }])
+      zammad.stub(:get, 'api/v1/groups', body: [{ id: 1, name: 'Users' }, { id: 2, name: 'Support' }], query: { page: 1 })
+      zammad.stub(:get, 'api/v1/groups', body: [], query: { page: 2 })
 
       expect(client.group.pluck(:name)).to eq(%w[Users Support])
     end
@@ -170,11 +171,31 @@ RSpec.describe ZammadAPI::Test do
 
       it 'leaves the catch-all answering the requests it does not match' do
         zammad.stub(:get, 'api/v1/groups/search', body: { total_count: 42 }, query: { only_total_count: true })
+        zammad.stub(:get, 'api/v1/groups/search', body: [], query: { page: 2 })
         zammad.stub(:get, 'api/v1/groups/search', body: [{ id: 1 }])
 
         expect(client.group.search('x').count).to eq(42)
         expect(client.group.search('x').map(&:id)).to eq([1])
         expect(client.group.search('x').count).to eq(42)
+      end
+
+      it 'matches an array-valued parameter' do
+        zammad.stub(:get, 'api/v1/users/search', body: [{ id: 1 }], query: { ids: [1, 2], page: 1 })
+        zammad.stub(:get, 'api/v1/users/search', body: [], query: { ids: [1, 2], page: 2 })
+
+        expect(client.user.search('x').where(ids: [1, 2]).map(&:id)).to eq([1])
+      end
+
+      it 'reports a nil query value against the stub that wrote it' do
+        expect { zammad.stub(:get, 'api/v1/users/search', body: [], query: { ids: nil }) }
+          .to raise_error(ArgumentError, /query parameter ids is nil/)
+      end
+
+      it 'does not match an array whose values differ' do
+        zammad.stub(:get, 'api/v1/users/search', body: [{ id: 1 }], query: { ids: [1, 2] })
+
+        expect { client.user.search('x').where(ids: [3]).to_a }
+          .to raise_error(described_class::UnstubbedRequestError)
       end
 
       it 'answers ahead of a catch-all declared before it' do
