@@ -225,6 +225,17 @@ cannot filter — see [Filters](#filters). A record it returns genuinely carries
 attributes you asked for, compared exactly and against the value as Zammad stores it, so
 `find_by(email: 'Someone@Example.com')` does not match a login Zammad downcased.
 
+The search term is built from the string values only, because Zammad matches words: a
+value of another type would go out as the word it prints as, so `find_by(active: true)`
+would look for records containing `"true"` and find none. Give at least one string value
+to search on — the rest are still matched exactly:
+
+```ruby
+client.user.find_by(email: 'someone@example.com', active: true) # searches the email, matches both
+client.user.find_by(active: true)                               # raises ArgumentError
+client.ticket_state.all.detect { it.name == 'open' }            # short list, no search needed
+```
+
 What the search can surface is Zammad's business: a value the instance has not indexed, or
 cannot index, is a record `find_by` will not find. `find_by(...) || create(...)` can
 therefore still create a duplicate — as writing the search out by hand would.
@@ -792,7 +803,7 @@ at the call site. Start with the handful of changes that do not.
 | `collection.each_page { ... }`           | `collection.in_batches { ... }`                  | Ruby already has a name for this                                    |
 | `collection[3]`                          | `collection.page(4, of: 1).first`                | An index that costs a request, and that ignored `page`, was a trap  |
 | `client.x.all(per_page: 50)`             | `client.x.all.page(1, of: 50)`, `find_each(batch_size: 50)` | `all` accepted the argument and discarded it; page size belongs to the call that reads |
-| `client.x.all(active: true)`             | `client.x.find_by(active: true)` or `client.x.search(...)` | The filter never reached the request in 1.x, and could not have: Zammad's index endpoints do not filter. `where` now raises instead of quietly returning everything |
+| `client.x.all(active: true)`             | `client.x.search(...)`, or `client.x.all.detect { ... }`    | The filter never reached the request in 1.x, and could not have: Zammad's index endpoints do not filter. `where` now raises instead of quietly returning everything. `find_by` needs a string value to search on, so it replaces `all(email: '...')` rather than `all(active: true)` |
 | `client.x.search(query: 'zammad')`       | `client.x.search('zammad')`                      | The search term is the argument, not a keyword                      |
 | `client.x.search(query: 'z', page: 2, per_page: 50)` | `client.x.search('z').page(2, of: 50)` | Search did honour those two; paging is the collection's job now     |
 

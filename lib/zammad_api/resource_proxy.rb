@@ -111,6 +111,14 @@ module ZammadAPI
     # +find_by(email: 'Someone@Example.com')+ does not match a login Zammad
     # downcased.
     #
+    # The search term is built from the string values only. Zammad searches by
+    # word, so a value of another type went out as the word it prints as:
+    # +find_by(active: true)+ searched for "true" and matched records carrying
+    # that word, which is essentially none of them, and then reported the miss
+    # as nil. A call with nothing to search for says so instead. The other
+    # values still have to match, so +find_by(email: ..., active: true)+
+    # searches the email and then compares both.
+    #
     # What the search can surface is Zammad's business. A value the instance
     # has not indexed, or cannot index, is a record this does not find, so
     # +find_by(...) || create(...)+ can still create a duplicate - exactly as
@@ -130,12 +138,13 @@ module ZammadAPI
     #
     # @param params [Hash] attribute names and the values to match exactly
     # @return [Resources::Base, nil] nil when nothing matched
-    # @raise [ArgumentError] when no attribute, or no value, was given
+    # @raise [ArgumentError] when no attribute was given, or none of the
+    #   values is a string the search can be run on
     def find_by(**params)
       raise ArgumentError, 'find_by needs at least one attribute to match' if params.empty?
 
-      term = params.values.map(&:to_s).reject(&:empty?).join(' ')
-      raise ArgumentError, 'find_by needs an attribute value to search for' if term.empty?
+      term = params.values.grep(String).reject { it.strip.empty? }.join(' ')
+      raise ArgumentError, unsearchable_values_message(params) if term.empty?
 
       search(term)
         .page(1, of: SEARCH_MAX_PER_PAGE)
@@ -298,6 +307,14 @@ module ZammadAPI
         countable:      countable,
         query:          { expand: true }.merge(query)
       )
+    end
+
+    def unsearchable_values_message(params)
+      given = params.map { |key, value| "#{key}: #{value.inspect}" }.join(', ')
+
+      "find_by has nothing to search for in #{given}. Zammad matches words, so a value of another type goes out as the word it prints as - find_by(active: true) looks for records containing \"true\". " \
+        'Pass at least one string value to search on, and the rest are still matched exactly: find_by(email: \'someone@example.com\', active: true). ' \
+        'For a list short enough to walk, all.detect { ... } needs no search index at all.'
     end
 
     def path = resource_class.resource_path

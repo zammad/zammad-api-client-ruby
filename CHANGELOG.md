@@ -20,7 +20,7 @@ A breaking release that modernises the whole gem. See
   10 for `search`.
 - Collections are built up by chaining instead of by keyword arguments:
   `all(per_page: 50)` is now `find_each(batch_size: 50)` or `page(1, of: 50)`,
-  `all(active: true)` is `find_by(active: true)` or `search(...)`,
+  `all(active: true)` is `search(...)` or `all.detect { ... }`,
   `search(query: 'zammad')` is `search('zammad')`,
   and `search(query: 'z', page: 2, per_page: 50)` is `search('z').page(2, of: 50)`.
   `all` accepted those keywords and then discarded them, so its page size was always

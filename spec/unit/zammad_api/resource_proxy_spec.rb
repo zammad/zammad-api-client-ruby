@@ -187,12 +187,24 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect(proxy.find_by(name: 'Users', active: true).id).to eq(2)
     end
 
-    it 'puts every value in the search term' do
+    it 'puts every string value in the search term' do
       stub = stub_request(:get, search_url)
-        .with(query: hash_including('query' => 'Users true'))
+        .with(query: hash_including('query' => 'Users Support'))
         .to_return(json_response([]))
 
-      proxy.find_by(name: 'Users', active: true)
+      proxy.find_by(name: 'Users', note: 'Support')
+      expect(stub).to have_been_requested
+    end
+
+    # A non-string went to the search engine as the word it prints as, so
+    # `find_by(name: 'Users', active: true)` searched for "Users true" and
+    # matched nothing.
+    it 'keeps a non-string value out of the search term, and still matches on it' do
+      stub = stub_request(:get, search_url)
+        .with(query: hash_including('query' => 'Users'))
+        .to_return(json_response([{ id: 1, name: 'Users', active: false }, { id: 2, name: 'Users', active: true }]))
+
+      expect(proxy.find_by(name: 'Users', active: true).id).to eq(2)
       expect(stub).to have_been_requested
     end
 
@@ -208,7 +220,24 @@ RSpec.describe ZammadAPI::ResourceProxy do
     end
 
     it 'rejects a lookup with nothing to search for' do
-      expect { proxy.find_by(name: '') }.to raise_error(ArgumentError, /value to search for/)
+      expect { proxy.find_by(name: '') }.to raise_error(ArgumentError, /nothing to search for/)
+    end
+
+    it 'rejects a lookup whose only value is not a string' do
+      expect { proxy.find_by(active: true) }.to raise_error(ArgumentError, /nothing to search for in active: true/)
+    end
+
+    it 'says what a rejected lookup should pass instead' do
+      expect { proxy.find_by(active: true) }.to raise_error(ArgumentError, /at least one string value to search on/)
+    end
+
+    it 'makes no request for a lookup with no string value' do
+      expect { proxy.find_by(organization_id: 5) }.to raise_error(ArgumentError)
+      expect(a_request(:get, search_url).with(query: hash_including({}))).not_to have_been_made
+    end
+
+    it 'rejects a lookup whose only string value is blank' do
+      expect { proxy.find_by(name: '   ', active: true) }.to raise_error(ArgumentError, /nothing to search for/)
     end
 
     it 'makes no request for a lookup it rejects' do

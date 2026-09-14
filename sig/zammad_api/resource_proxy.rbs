@@ -40,6 +40,7 @@ module ZammadAPI
     private
 
     def collection: (String, String, ?query: Hash[Symbol, untyped], ?max_per_page: Integer, ?filterable: Array[Symbol], ?filter_hint: String, ?countable: bool) -> Collection
+    def unsearchable_values_message: (Hash[Symbol, untyped]) -> String
     def path: () -> String
     def member_path: (Integer | String id) -> String
   end
