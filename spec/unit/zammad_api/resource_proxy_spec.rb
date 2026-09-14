@@ -58,6 +58,38 @@ RSpec.describe ZammadAPI::ResourceProxy do
     end
   end
 
+  describe 'ids in the request path' do
+    it 'escapes a traversal instead of reaching another endpoint' do
+      stub = stub_request(:get, "#{url}/1%2F..%2F..%2Fapi%2Fv1%2Fusers%2F1")
+        .with(query: { 'expand' => 'true' })
+        .to_return(json_response({ error: 'not found' }, status: 404))
+
+      expect { proxy.find('1/../../api/v1/users/1') }.to raise_error(ZammadAPI::NotFoundError)
+      expect(stub).to have_been_requested
+      expect(a_request(:get, %r{/api/v1/users/1\z})).not_to have_been_made
+    end
+
+    it 'escapes the id on destroy too' do
+      stub = stub_request(:delete, "#{url}/1%2F..%2F..%2Fapi%2Fv1%2Fusers%2F1").to_return(status: 200, body: '')
+
+      proxy.destroy('1/../../api/v1/users/1')
+      expect(stub).to have_been_requested
+    end
+
+    it 'escapes the id a record uses for its own writes' do
+      record = ZammadAPI::Resources::Group.from_response(client.instance_variable_get(:@transport), { id: '1/../../api/v1/users/1' })
+      stub = stub_request(:delete, "#{url}/1%2F..%2F..%2Fapi%2Fv1%2Fusers%2F1").to_return(status: 200, body: '')
+
+      record.destroy
+      expect(stub).to have_been_requested
+    end
+
+    it 'rejects an empty id rather than requesting the index' do
+      expect { proxy.find('') }.to raise_error(ArgumentError, /record id is required/)
+      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+    end
+  end
+
   describe '#create' do
     it 'posts the attributes' do
       stub = stub_request(:post, url)

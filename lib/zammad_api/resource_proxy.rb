@@ -2,6 +2,7 @@
 
 require_relative 'collection'
 require_relative 'errors'
+require_relative 'transport'
 
 module ZammadAPI
   # Entry point for working with one kind of Zammad record.
@@ -73,7 +74,7 @@ module ZammadAPI
     # @raise [NotFoundError] when no such record exists
     def find(id)
       response = @transport.get(
-        "#{path}/#{id}",
+        member_path(id),
         operation:      'find object',
         resource_class: resource_class,
         query:          { expand: true }
@@ -132,7 +133,7 @@ module ZammadAPI
     # @return [true]
     # @raise [ResponseError] when Zammad rejected the request
     def destroy(id)
-      @transport.delete("#{path}/#{id}", operation: 'destroy object', resource_class: resource_class)
+      @transport.delete(member_path(id), operation: 'destroy object', resource_class: resource_class)
       true
     end
 
@@ -245,5 +246,9 @@ module ZammadAPI
     end
 
     def path = resource_class.resource_path
+
+    # The id is escaped rather than interpolated, so that one taken from a
+    # request parameter cannot walk out of the segment into another endpoint.
+    def member_path(id) = "#{path}/#{Transport.escape_path_segment(id)}"
   end
 end

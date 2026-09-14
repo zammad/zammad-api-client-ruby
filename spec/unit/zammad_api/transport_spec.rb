@@ -86,6 +86,29 @@ RSpec.describe ZammadAPI::Transport do
     end
   end
 
+  describe '.escape_path_segment' do
+    it 'leaves an ordinary id alone' do
+      expect(described_class.escape_path_segment(42)).to eq('42')
+    end
+
+    it 'encodes a separator, so an id cannot walk out of its segment' do
+      expect(described_class.escape_path_segment('1/../../api/v1/users/1'))
+        .to eq('1%2F..%2F..%2Fapi%2Fv1%2Fusers%2F1')
+    end
+
+    it 'encodes a query and fragment marker' do
+      expect(described_class.escape_path_segment('1?a=b#c')).to eq('1%3Fa%3Db%23c')
+    end
+
+    it 'encodes a multibyte character one byte at a time' do
+      expect(described_class.escape_path_segment('ä')).to eq('%C3%A4')
+    end
+
+    it 'raises for an id with nothing to send' do
+      expect { described_class.escape_path_segment('') }.to raise_error(ArgumentError, /record id is required/)
+    end
+  end
+
   describe 'request bodies' do
     it 'sends JSON with the matching content type' do
       stub = stub_request(:post, url)

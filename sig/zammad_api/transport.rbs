@@ -5,6 +5,7 @@ module ZammadAPI
     RETRIABLE_EXCEPTIONS: Array[untyped]
     SENSITIVE_KEY_PATTERN: Regexp
     REDACTED: String
+    UNRESERVED_IN_PATH: Regexp
 
     attr_reader config: Config
     attr_reader on_behalf_of: (String | Integer)?
@@ -12,6 +13,7 @@ module ZammadAPI
     @connection: Faraday::Connection
 
     def self.stringify_query: (Hash[untyped, untyped]) -> Hash[String, untyped]
+    def self.escape_path_segment: (untyped) -> String
 
     def initialize: (Config) -> void
     def with_on_behalf_of: ((String | Integer)? identifier) -> Transport

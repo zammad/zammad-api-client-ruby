@@ -3,6 +3,7 @@
 require_relative '../associations'
 require_relative '../attribute_access'
 require_relative '../errors'
+require_relative '../transport'
 
 module ZammadAPI
   module Resources
@@ -364,7 +365,7 @@ module ZammadAPI
       def member_path
         raise Error, "#{self.class.name} has no id, save it first" if id.nil?
 
-        "#{self.class.resource_path}/#{id}"
+        "#{self.class.resource_path}/#{Transport.escape_path_segment(id)}"
       end
     end
   end

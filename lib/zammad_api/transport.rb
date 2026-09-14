@@ -44,6 +44,10 @@ module ZammadAPI
 
     REDACTED = '[REDACTED]'
 
+    # Characters RFC 3986 leaves unreserved. Everything else is percent-encoded
+    # before it goes into a path segment.
+    UNRESERVED_IN_PATH = /[^A-Za-z0-9\-._~]/
+
     # @return [Config]
     attr_reader :config
 
@@ -75,6 +79,30 @@ module ZammadAPI
 
         result[key.to_s] = value.is_a?(Array) ? value.map(&:to_s) : value.to_s
       end
+    end
+
+    # Percent-encodes one segment of a request path.
+    #
+    # Record ids are pasted into the path, and an id taken straight from a
+    # request parameter used to be pasted in whole: `find("1/../../api/v1/
+    # users/1")` resolved to the users endpoint, so the parameter, not the
+    # call, chose which records the verb applied to. Encoding everything
+    # outside the unreserved set keeps a separator inside the segment it was
+    # written in, and a caller that really means a sub-path can spell it out
+    # with the raw request methods.
+    #
+    # Public for the same reason as {.stringify_query}: {Test} builds the
+    # paths it records with it.
+    #
+    # @api private
+    # @param value [Object]
+    # @return [String]
+    # @raise [ArgumentError] when there is nothing to send
+    def self.escape_path_segment(value)
+      segment = value.to_s
+      raise ArgumentError, 'a record id is required, and this one is empty' if segment.empty?
+
+      segment.gsub(UNRESERVED_IN_PATH) { |character| character.bytes.map { format('%%%02X', it) }.join }
     end
 
     # @param config [Config]

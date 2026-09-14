@@ -38,5 +38,6 @@ module ZammadAPI
 
     def collection: (String, String, ?query: Hash[Symbol, untyped], ?max_per_page: Integer, ?countable: bool) -> Collection
     def path: () -> String
+    def member_path: (Integer | String id) -> String
   end
 end
