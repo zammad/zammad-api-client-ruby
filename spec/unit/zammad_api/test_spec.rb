@@ -160,6 +160,38 @@ RSpec.describe ZammadAPI::Test do
 
         expect { client.group.where(active: true).to_a }.not_to raise_error
       end
+
+      it 'keeps answering when a catch-all for the same endpoint follows it' do
+        zammad.stub(:get, 'api/v1/groups/search', body: { total_count: 42 }, query: { only_total_count: true })
+        zammad.stub(:get, 'api/v1/groups/search', body: [{ id: 1 }])
+
+        expect(Array.new(3) { client.group.search('x').count }).to eq([42, 42, 42])
+      end
+
+      it 'leaves the catch-all answering the requests it does not match' do
+        zammad.stub(:get, 'api/v1/groups/search', body: { total_count: 42 }, query: { only_total_count: true })
+        zammad.stub(:get, 'api/v1/groups/search', body: [{ id: 1 }])
+
+        expect(client.group.search('x').count).to eq(42)
+        expect(client.group.search('x').map(&:id)).to eq([1])
+        expect(client.group.search('x').count).to eq(42)
+      end
+
+      it 'answers ahead of a catch-all declared before it' do
+        zammad.stub(:get, 'api/v1/groups/search', body: [{ id: 1 }])
+        zammad.stub(:get, 'api/v1/groups/search', body: { total_count: 42 }, query: { only_total_count: true })
+
+        expect(client.group.search('x').count).to eq(42)
+      end
+
+      it 'still sequences two stubs that share a scope' do
+        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name' })
+        zammad.stub(:get, 'api/v1/groups', body: [{ id: 2 }], query: { sort_by: 'name' })
+
+        expect(client.group.all.where(sort_by: 'name').page(1, of: 1).map(&:id)).to eq([1])
+        expect(client.group.all.where(sort_by: 'name').page(1, of: 1).map(&:id)).to eq([2])
+        expect(client.group.all.where(sort_by: 'name').page(1, of: 1).map(&:id)).to eq([2])
+      end
     end
   end
 

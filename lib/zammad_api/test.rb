@@ -87,6 +87,12 @@ module ZammadAPI
     # the request with that value, so a stub does not have to repeat the
     # +expand+, +page+ and +per_page+ parameters the client adds itself.
     #
+    # A stub that names a +query+ is more specific than one that does not, and
+    # answers ahead of it however they were declared. Queueing applies within
+    # a scope: two stubs carrying the same +query+ describe a sequence, while
+    # a scoped stub and a catch-all are two separate answers, each of which
+    # keeps answering.
+    #
     # @param method [Symbol] +:get+, +:post+, +:put+ or +:delete+
     # @param path [String] path relative to the instance URL, leading slash
     #   optional
@@ -163,16 +169,29 @@ module ZammadAPI
 
     def key(method, path) = [method.to_sym, path.to_s.sub(%r{\A/+}, '')]
 
-    # Keeps the last stub in place, so one stub can answer any number of
-    # requests while two describe a sequence.
+    # Picks the stub that answers this request, and keeps the last one of its
+    # kind in place so that one stub can answer any number of requests while
+    # two describe a sequence.
+    #
+    # Sequencing runs within a query scope, not across the endpoint. Keying it
+    # on the last stub queued meant a query-scoped stub was consumed on its
+    # first use as soon as any other stub for the same verb and path existed
+    # behind it - the pair a `search(...).count` test needs - so the second
+    # count silently fell through to the records stub and walked the pages.
     def take(method, path, params)
       queued = @stubs[key(method, path)]
       return nil if queued.nil?
 
-      index = queued.index { |stub| matches?(stub[:query], params) }
-      return nil if index.nil?
+      matching = queued.each_index.select { matches?(queued[it][:query], params) }
+      return nil if matching.empty?
 
-      index == queued.size - 1 ? queued[index] : queued.delete_at(index)
+      # A stub naming query parameters was written for this request; an
+      # unscoped one is a catch-all for the endpoint. The specific ones answer
+      # first, and only fall back when none of them match.
+      scoped = matching.select { queued[it][:query] }
+      group  = scoped.empty? ? matching : scoped
+
+      group.one? ? queued[group.first] : queued.delete_at(group.first)
     end
 
     def matches?(expected, params)
