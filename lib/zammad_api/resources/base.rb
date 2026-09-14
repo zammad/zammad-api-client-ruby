@@ -35,6 +35,17 @@ module ZammadAPI
       # controller hardcodes the order override this with an empty list.
       INDEX_QUERY_KEYS = %i[sort_by order_by].freeze
 
+      # Whether Zammad routes a +/search+ endpoint for this resource.
+      #
+      # Declared rather than assumed, and false unless a resource says
+      # otherwise: an unrouted `.../search` answers 404, which arrives as a
+      # NotFoundError from inside {ResourceProxy#find_by} - a method
+      # documented to return nil when nothing matched. A new resource that
+      # forgets to declare this is refused at the call site instead, which is
+      # a question about the resource rather than a wrong answer about a
+      # record.
+      SEARCHABLE = false
+
       # Staged changes as +attribute => [old_value, new_value]+.
       #
       # A copy, and frozen: writing to the change set a record hands out would

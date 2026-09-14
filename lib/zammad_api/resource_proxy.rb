@@ -44,6 +44,10 @@ module ZammadAPI
     # Said at the end of the error for a parameter an index endpoint ignores.
     INDEX_FILTER_HINT = 'Zammad filters by attribute value only through a search endpoint, so use find_by for one record or search for many.'
 
+    # The same, for a resource Zammad serves no search endpoint for, where
+    # find_by and search are not an answer either.
+    UNSEARCHABLE_FILTER_HINT = 'Zammad filters by attribute value only through a search endpoint, and routes none for this resource, so walk the records and pick with detect.'
+
     # The same, for a search endpoint.
     SEARCH_FILTER_HINT = 'Put the value in the search term instead.'
 
@@ -141,6 +145,7 @@ module ZammadAPI
     # @raise [ArgumentError] when no attribute was given, or none of the
     #   values is a string the search can be run on
     def find_by(**params)
+      searchable!
       raise ArgumentError, 'find_by needs at least one attribute to match' if params.empty?
 
       term = params.values.grep(String).reject { it.strip.empty? }.join(' ')
@@ -277,7 +282,9 @@ module ZammadAPI
     # @param term [String] the Zammad search term
     # @return [Collection]
     # @raise [ArgumentError] when +term+ is not a non-empty string
+    # @raise [Error] when Zammad routes no search endpoint for this resource
     def search(term)
+      searchable!
       raise ArgumentError, 'search needs a non-empty query string' if !term.is_a?(String) || term.strip.empty?
 
       collection(
@@ -295,7 +302,7 @@ module ZammadAPI
 
     private
 
-    def collection(path, operation, query: {}, max_per_page: resource_class::MAX_PER_PAGE, filterable: resource_class::INDEX_QUERY_KEYS, filter_hint: INDEX_FILTER_HINT, countable: false)
+    def collection(path, operation, query: {}, max_per_page: resource_class::MAX_PER_PAGE, filterable: resource_class::INDEX_QUERY_KEYS, filter_hint: index_filter_hint, countable: false)
       Collection.new(
         transport:      @transport,
         resource_class: resource_class,
@@ -308,6 +315,20 @@ module ZammadAPI
         query:          { expand: true }.merge(query)
       )
     end
+
+    # Zammad routes a search endpoint per model, not for every model: users,
+    # organizations, tickets and groups have one, ticket states, ticket
+    # priorities and ticket articles do not. Asking one of the latter for
+    # `.../search` is a 404, and a 404 out of `find_by` reads as "no such
+    # record" - so `find_by(...) || create(...)`, the shape
+    # examples/onboard_customer.rb is built on, raised instead of creating.
+    def searchable!
+      return if resource_class::SEARCHABLE
+
+      raise Error, "Zammad routes no search endpoint for #{resource_class.name}, so it cannot be searched by term or looked up with find_by: #{path}/search answers 404, which would arrive here as a NotFoundError about a record. Walk the records and pick one instead, with all.detect { ... }."
+    end
+
+    def index_filter_hint = resource_class::SEARCHABLE ? INDEX_FILTER_HINT : UNSEARCHABLE_FILTER_HINT
 
     def unsearchable_values_message(params)
       given = params.map { |key, value| "#{key}: #{value.inspect}" }.join(', ')

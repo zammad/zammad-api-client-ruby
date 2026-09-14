@@ -11,6 +11,8 @@ module ZammadAPI
       # nothing but the paging - not even sort_by.
       INDEX_QUERY_KEYS = [].freeze
 
+      SEARCHABLE = true
+
       belongs_to :organization, class_name: 'Organization'
     end
   end

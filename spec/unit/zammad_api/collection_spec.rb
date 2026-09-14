@@ -362,6 +362,18 @@ RSpec.describe ZammadAPI::Collection do
       expect { collection.where(name: 'Users') }.to raise_error(ArgumentError, /honours sort_by, order_by/)
     end
 
+    it 'points at find_by and search for a resource Zammad searches' do
+      expect { collection.where(name: 'Users') }
+        .to raise_error(ArgumentError, /use find_by for one record or search for many/)
+    end
+
+    # Pointing at find_by would send the caller in a circle: find_by needs the
+    # search endpoint this resource has none of.
+    it 'points at detect for a resource Zammad does not search' do
+      expect { client.ticket_state.all.where(name: 'open') }
+        .to raise_error(ArgumentError, /routes none for this resource, so walk the records and pick with detect/)
+    end
+
     %i[page per_page expand only_total_count].each do |reserved|
       it "rejects #{reserved}, which the collection controls itself" do
         expect { collection.where(reserved => 1) }.to raise_error(ArgumentError, /cannot be passed to where/)

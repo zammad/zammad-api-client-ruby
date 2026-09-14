@@ -219,6 +219,24 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect { proxy.find_by }.to raise_error(ArgumentError, /at least one attribute/)
     end
 
+    # /api/v1/ticket_states/search is not routed, so the 404 arrived here as a
+    # NotFoundError from a method documented to answer nil.
+    it 'refuses a resource Zammad routes no search endpoint for' do
+      expect { client.ticket_state.find_by(name: 'open') }
+        .to raise_error(ZammadAPI::Error, /routes no search endpoint for ZammadAPI::Resources::TicketState/)
+    end
+
+    it 'points a refused lookup at walking the records' do
+      expect { client.ticket_priority.find_by(name: '2 normal') }
+        .to raise_error(ZammadAPI::Error, /all\.detect/)
+    end
+
+    it 'makes no request for a resource that cannot be searched' do
+      expect { client.ticket_state.find_by(name: 'open') }.to raise_error(ZammadAPI::Error)
+      expect(a_request(:get, "#{ClientHelper::BASE_URL}api/v1/ticket_states/search").with(query: hash_including({})))
+        .not_to have_been_made
+    end
+
     it 'rejects a lookup with nothing to search for' do
       expect { proxy.find_by(name: '') }.to raise_error(ArgumentError, /nothing to search for/)
     end
@@ -512,6 +530,16 @@ RSpec.describe ZammadAPI::ResourceProxy do
   end
 
   describe '#search' do
+    it 'refuses a resource Zammad routes no search endpoint for' do
+      expect { client.ticket_state.search('open') }
+        .to raise_error(ZammadAPI::Error, /routes no search endpoint for ZammadAPI::Resources::TicketState/)
+    end
+
+    it 'refuses a search of ticket articles, which Zammad indexes but does not route' do
+      expect { client.ticket_article.search('hello') }
+        .to raise_error(ZammadAPI::Error, /routes no search endpoint/)
+    end
+
     it 'requests the search endpoint' do
       stub = stub_request(:get, "#{url}/search")
         .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => '100', 'query' => 'support' })

@@ -5,6 +5,7 @@ module ZammadAPI
 
       MAX_PER_PAGE: Integer
       INDEX_QUERY_KEYS: Array[Symbol]
+      SEARCHABLE: bool
 
       attr_reader error: ValidationError?
       attr_reader transport: Transport

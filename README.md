@@ -474,6 +474,15 @@ client.user.find_by(email: 'someone@example.com')
 client.ticket.search('state.name:open').first(10)
 ```
 
+Zammad routes a search endpoint per model, not for every model. `user`, `organization`,
+`ticket` and `group` have one; `ticket_state`, `ticket_priority` and `ticket_article` do
+not, and `search` and `find_by` on those raise `ZammadAPI::Error` rather than reaching a
+404 that would read as a missing record. Those lists are short, so walk them:
+
+```ruby
+client.ticket_state.all.detect { it.name == 'open' }
+```
+
 Paging is not a filter either: that is what `page`, `in_batches` and `find_each` are for,
 and passing `page:` or `per_page:` to `where` raises `ArgumentError` rather than being
 silently ignored. So does `query:`, which is the term `search` set.

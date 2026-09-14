@@ -16,6 +16,8 @@ module ZammadAPI
       # endpoints, see TicketsController#index.
       MAX_PER_PAGE = 100
 
+      SEARCHABLE = true
+
       belongs_to :customer,     class_name: 'User'
       belongs_to :owner,        class_name: 'User'
       belongs_to :organization, class_name: 'Organization'

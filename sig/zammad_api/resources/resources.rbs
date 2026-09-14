@@ -1,9 +1,11 @@
 module ZammadAPI
   module Resources
     class Group < Base
+      SEARCHABLE: bool
     end
 
     class Organization < Base
+      SEARCHABLE: bool
     end
 
     class TicketPriority < Base
@@ -14,6 +16,7 @@ module ZammadAPI
 
     class User < Base
       INDEX_QUERY_KEYS: Array[Symbol]
+      SEARCHABLE: bool
 
       # Narrowed from Base so Client#me returns the concrete user type.
       def self.from_response: (Transport, Hash[untyped, untyped] attributes) -> User
@@ -22,6 +25,7 @@ module ZammadAPI
     class Ticket < Base
       MAX_PER_PAGE: Integer
       INDEX_QUERY_KEYS: Array[Symbol]
+      SEARCHABLE: bool
 
       def articles: () -> Array[TicketArticle]
       def article: (?Hash[untyped, untyped] attributes) -> TicketArticle
