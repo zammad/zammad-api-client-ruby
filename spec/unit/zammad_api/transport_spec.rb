@@ -72,9 +72,39 @@ RSpec.describe ZammadAPI::Transport do
       expect(stub).to have_been_requested
     end
 
+    # `condition` is what Zammad's search endpoints narrow by, and it is
+    # nested. Rendered with to_s it went out as a Ruby inspect string, which
+    # Zammad dropped, answering an unnarrowed search.
+    it 'encodes a nested hash the way Rails reads it back' do
+      stub = stub_request(:get, "#{url}/search")
+        .with(query: { 'condition' => { 'ticket.state_id' => { 'operator' => 'is', 'value' => %w[1 2] } } })
+        .to_return(json_response([]))
+      unit_transport.get(
+        'api/v1/groups/search',
+        operation: 'test',
+        query:     { condition: { 'ticket.state_id' => { operator: 'is', value: [1, 2] } } }
+      )
+      expect(stub).to have_been_requested
+    end
+
+    it 'stringifies the scalars inside a nested hash' do
+      expect(described_class.stringify_query(condition: { open: { active: true, limit: 5 } }))
+        .to eq({ 'condition' => { 'open' => { 'active' => 'true', 'limit' => '5' } } })
+    end
+
     it 'raises on a nil value rather than dropping the parameter' do
       expect { unit_transport.get('api/v1/groups', operation: 'test', query: { page: 1, note: nil }) }
         .to raise_error(ArgumentError, /query parameter note is nil/)
+    end
+
+    it 'names the path to a nil buried in a nested value' do
+      expect { described_class.stringify_query(condition: { state: { value: nil } }) }
+        .to raise_error(ArgumentError, /query parameter condition\[state\]\[value\] is nil/)
+    end
+
+    it 'names the index of a nil inside an array' do
+      expect { described_class.stringify_query(ids: [1, nil]) }
+        .to raise_error(ArgumentError, /query parameter ids\[1\] is nil/)
     end
 
     it 'makes no request for a query it rejects' do

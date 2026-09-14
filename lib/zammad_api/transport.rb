@@ -95,13 +95,36 @@ module ZammadAPI
     #
     # @api private
     # @param query [Hash]
-    # @return [Hash{String => String, Array<String>}]
-    # @raise [ArgumentError] for a nil value
+    # @return [Hash{String => String, Array<String>, Hash}]
+    # @raise [ArgumentError] for a nil value, at any depth
     def self.stringify_query(query)
       query.each_with_object({}) do |(key, value), result|
-        raise ArgumentError, "query parameter #{key} is nil, and Zammad has no way to read that: pass a value, or leave the parameter out" if value.nil?
+        result[key.to_s] = stringify_query_value(key.to_s, value)
+      end
+    end
 
-        result[key.to_s] = value.is_a?(Array) ? value.map(&:to_s) : value.to_s
+    # Stringifies the scalars and leaves the structure to Faraday.
+    #
+    # A nested value used to be rendered with to_s, so the `condition` that
+    # Zammad's search endpoints read - and that {ResourceProxy::SEARCH_QUERY_KEYS}
+    # lists, so {Collection#where} accepts it - went on the wire as a Ruby
+    # inspect string. Zammad could not parse that, dropped the parameter, and
+    # answered with an unnarrowed search that nothing marked as unnarrowed.
+    # Faraday's default encoder renders a Hash as
+    # `condition[ticket.state_id][operator]=is`, which is the shape Rails reads
+    # back, so the structure is handed over intact.
+    #
+    # @api private
+    # @param key [String] the parameter path, for the error message
+    # @param value [Object]
+    # @return [String, Array, Hash]
+    # @raise [ArgumentError] for a nil value
+    def self.stringify_query_value(key, value)
+      case value
+      when nil   then raise ArgumentError, "query parameter #{key} is nil, and Zammad has no way to read that: pass a value, or leave the parameter out"
+      when Hash  then value.to_h { |nested, inner| [nested.to_s, stringify_query_value("#{key}[#{nested}]", inner)] }
+      when Array then value.each_with_index.map { |inner, index| stringify_query_value("#{key}[#{index}]", inner) }
+      else value.to_s
       end
     end
 

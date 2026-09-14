@@ -16,6 +16,7 @@ module ZammadAPI
     @connection: Faraday::Connection
 
     def self.stringify_query: (Hash[untyped, untyped]) -> Hash[String, untyped]
+    def self.stringify_query_value: (String, untyped) -> untyped
     def self.escape_path_segment: (untyped) -> String
 
     def initialize: (Config) -> void
