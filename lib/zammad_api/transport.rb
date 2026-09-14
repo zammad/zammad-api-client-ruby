@@ -51,7 +51,8 @@ module ZammadAPI
     # @return [Config]
     attr_reader :config
 
-    # @return [String, nil] login of the user requests are performed for
+    # @return [String, nil] login of the user requests are performed for,
+    #   already stringified the way the +From+ header carries it
     attr_reader :on_behalf_of
 
     # The query parameters a request actually carries.
@@ -114,11 +115,18 @@ module ZammadAPI
 
     # Returns a copy of this transport that sends the +From+ header.
     #
-    # @param identifier [String, nil] login, email or user id
+    # A user id is a documented way to name the user, and arrives here as an
+    # Integer. Header values are stringified here rather than at the point the
+    # header is set, so that {Test} records the value the wire would carry -
+    # an Integer used to reach Net::HTTP intact and die there with
+    # `undefined method 'strip' for an instance of Integer`, while the test
+    # kit accepted it happily.
+    #
+    # @param identifier [String, Integer, nil] login, email or user id
     # @return [Transport]
     def with_on_behalf_of(identifier)
       copy = dup
-      copy.instance_variable_set(:@on_behalf_of, identifier)
+      copy.instance_variable_set(:@on_behalf_of, identifier&.to_s)
       copy
     end
 

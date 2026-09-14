@@ -302,6 +302,20 @@ RSpec.describe ZammadAPI::Transport do
       expect(stub).to have_been_requested
     end
 
+    it 'sends an integer user id, which Net::HTTP will not stringify itself' do
+      stub = stub_request(:get, url).with(headers: { 'From' => '42' }).to_return(json_response([]))
+      unit_transport.with_on_behalf_of(42).get('api/v1/groups', operation: 'test')
+      expect(stub).to have_been_requested
+    end
+
+    it 'records the scope as the string the header carries' do
+      expect(unit_transport.with_on_behalf_of(42).on_behalf_of).to eq('42')
+    end
+
+    it 'keeps an unscoped transport unscoped' do
+      expect(unit_transport.with_on_behalf_of(nil).on_behalf_of).to be_nil
+    end
+
     it 'returns a different transport' do
       transport = unit_transport
       expect(transport.with_on_behalf_of('someone')).not_to be(transport)

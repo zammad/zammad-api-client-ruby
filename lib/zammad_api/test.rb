@@ -49,7 +49,8 @@ module ZammadAPI
     # @!attribute [r] body
     #   @return [Hash, nil] the request payload
     # @!attribute [r] on_behalf_of
-    #   @return [String, Integer, nil] the +From+ scope in effect
+    #   @return [String, nil] the +From+ scope in effect, stringified the way
+    #     the +From+ header carries it
     Request = Data.define(:verb, :path, :query, :body, :on_behalf_of)
 
     # @return [Config] the configuration the stand-in client reports
@@ -216,7 +217,9 @@ module ZammadAPI
 
       def config = test.config
 
-      def with_on_behalf_of(identifier) = self.class.new(test, on_behalf_of: identifier)
+      # Stringified like the real transport's, so that a recorded scope is what
+      # a request would have carried.
+      def with_on_behalf_of(identifier) = self.class.new(test, on_behalf_of: identifier&.to_s)
 
       %i[get post put delete].each do |verb|
         define_method(verb) do |path, **options|

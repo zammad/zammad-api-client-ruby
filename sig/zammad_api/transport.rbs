@@ -8,7 +8,7 @@ module ZammadAPI
     UNRESERVED_IN_PATH: Regexp
 
     attr_reader config: Config
-    attr_reader on_behalf_of: (String | Integer)?
+    attr_reader on_behalf_of: String?
 
     @connection: Faraday::Connection
 

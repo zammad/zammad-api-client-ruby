@@ -218,6 +218,12 @@ RSpec.describe ZammadAPI::Test do
       expect(zammad.requests.last.on_behalf_of).to eq('agent@example.com')
     end
 
+    it 'records an integer user id the way the wire carries it' do
+      client.on_behalf_of(42).group.find(1)
+
+      expect(zammad.requests.last.on_behalf_of).to eq('42')
+    end
+
     it 'leaves on_behalf_of nil for an unscoped client' do
       client.group.find(1)
 
