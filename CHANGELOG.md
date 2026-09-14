@@ -82,6 +82,26 @@ A breaking release that modernises the whole gem. See
   record carries administrator-defined attributes and a reader cannot tell a removed
   method from a custom field — so `if record.new_instance` silently takes the else
   branch.
+- `page(number, of: size)` raises `ArgumentError` when `size` is larger than the endpoint
+  serves, instead of quietly reducing it. A reduced page size moves the page:
+  `page(3, of: 500)` against `/api/v1/tickets` went out as `page=3&per_page=100` and
+  answered with records 201–300 rather than 1001–1500, so a job checkpointing a page
+  number re-read what it had already handled. `find_each(batch_size:)` and
+  `in_batches(of:)` are still reduced, because a batch size names how much to fetch per
+  request, not which records the call is about.
+- `find_by` builds its search term from the string values only, and raises `ArgumentError`
+  when none of the values is a string. Zammad matches words, so `find_by(active: true)`
+  searched for `"true"` and found nothing. Non-string values are still matched exactly, so
+  `find_by(email: '…', active: true)` searches the email and compares both.
+- `search` and `find_by` raise `ZammadAPI::Error` on a resource Zammad routes no search
+  endpoint for — `ticket_state`, `ticket_priority` and `ticket_article`. Those endpoints
+  answered 404, which reached `find_by` as a `NotFoundError` from a method documented to
+  return `nil`, so `find_by(…) || create(…)` raised instead of creating. Walk those short
+  lists with `all.detect { … }` instead.
+- A record id of `.` or `..` raises `ArgumentError`. Both are made entirely of unreserved
+  characters, so escaping carried them through and `find('..')` resolved one path level
+  up — onto the index endpoint, or through a `has_many` path onto every article on the
+  instance offered as one ticket's.
 
 ### Added
 
@@ -216,6 +236,33 @@ A breaking release that modernises the whole gem. See
   `Transport` subclass survives `client.with(...)` instead of reverting to a real HTTP one.
 - `save` on a persisted record with nothing staged sends no request. The empty `PUT` it
   used to issue was applied by Zammad, bumping `updated_at` and `updated_by`.
+- A nested query parameter is sent as a structure rather than as its Ruby `inspect`.
+  `condition`, which the search endpoints narrow by and which `where` accepts, went out as
+  `condition=%7B%22ticket.state_id%22…`; Zammad could not parse it, dropped it, and
+  answered with an unnarrowed search. A `nil` is now refused at any depth, and the message
+  names the path to it.
+- Bare socket failures are retried. `Errno::ECONNRESET` and the rest were mapped to
+  `ConnectionError` but were missing from the retriable list, so a transient failure
+  through an adapter that wraps it (net_http) was retried while the same failure through
+  an adapter that does not raised on the first attempt.
+- `where` reads a String key as the parameter it names. Both guards compared against
+  Symbols, so `where('sort_by' => 'name')` was refused with a message saying the endpoint
+  both ignores and honours `sort_by`, and `where('page' => 2)` slipped past the
+  reserved-key check entirely.
+- A list body that is not made of objects raises `ParseError` instead of failing later. An
+  unexpanded search answering `[1, 2, 3]` stored an Integer as a record's attributes, and
+  the first reader died with `TypeError: no implicit conversion of Symbol into Integer`.
+- `destroy` clears the staged changes, the last validation error and the association
+  readers. A destroyed record went on reporting `changed?` and a change set that can never
+  be sent, and `record.related` went on requesting a record that no longer exists.
+- `Config#redacted_url` no longer mangles a URL whose query string contains an `@`.
+  `https://host?a=b@c` was rendered as `https://[REDACTED]@c`, a host that does not exist,
+  in every `ConnectionError` and `TimeoutError` message.
+- The RBS signatures the gem ships validate on their own. They named Faraday types that
+  are declared only in `sig/vendor`, which is deliberately not published, so `rbs validate`
+  failed for every consumer with `Could not find Faraday::Connection`.
+- `ZammadAPI::Test.new` no longer builds a Faraday stack it immediately discards, which a
+  suite using `let(:zammad) { ZammadAPI::Test.new }` paid for once per example.
 
 ### Changed
 
