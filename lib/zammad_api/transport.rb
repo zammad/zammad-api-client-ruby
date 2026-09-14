@@ -158,7 +158,7 @@ module ZammadAPI
     #
     # @param config [Config]
     # @return [Transport]
-    def with_config(config) = Transport.new(config).with_on_behalf_of(on_behalf_of)
+    def with_config(config) = self.class.new(config).with_on_behalf_of(on_behalf_of)
 
     # @!method get(path, operation:, query: nil, resource_class: nil)
     # @!method post(path, operation:, query: nil, body: nil, resource_class: nil)

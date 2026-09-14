@@ -399,6 +399,15 @@ RSpec.describe ZammadAPI::Transport do
       expect(derived.on_behalf_of).to eq('agent@example.com')
     end
 
+    it 'keeps a subclass on its own kind, rather than reverting to a real one' do
+      recording = Class.new(described_class)
+      stub_const('RecordingTransport', recording)
+
+      derived = recording.new(ZammadAPI::Config.new(**unit_config)).with_config(ZammadAPI::Config.new(**unit_config(timeout: 7)))
+
+      expect(derived).to be_a(recording)
+    end
+
     it 'returns a different transport' do
       transport = unit_transport
       expect(transport.with_config(transport.config)).not_to be(transport)
