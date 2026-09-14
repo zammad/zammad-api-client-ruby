@@ -86,7 +86,12 @@ module ZammadAPI
 
     # The +user:password@+ part of a URL. A proxy URL carries its credentials
     # inline, so {#inspect} has to blank them while keeping the host visible.
-    USERINFO_PATTERN = %r{(?<=://)[^/@]+(?=@)}
+    #
+    # Anchored on the last +@+ before the path rather than the first, because
+    # a password may carry an unencoded one: +pa@ss+ used to leave +@ss+ in
+    # the rendered URL, and a partly redacted credential still reaches every
+    # log and exception report the whole one was kept out of.
+    USERINFO_PATTERN = %r{(?<=://)[^/]+(?=@)}
 
     def initialize(
       url:,

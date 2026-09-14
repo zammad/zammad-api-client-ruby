@@ -225,6 +225,13 @@ RSpec.describe ZammadAPI::Config do
       end
     end
 
+    it 'redacts a proxy password carrying an unencoded @' do
+      rendered = build(proxy: 'http://puser:pa@ss-s3cret@proxy.test:8080').inspect
+
+      expect(rendered).to include('proxy="http://[REDACTED]@proxy.test:8080"')
+      expect(rendered).not_to include('ss-s3cret')
+    end
+
     it 'leaves a proxy without credentials alone' do
       expect(build(proxy: 'http://proxy.test:8080').inspect).to include('proxy="http://proxy.test:8080"')
     end
@@ -254,6 +261,18 @@ RSpec.describe ZammadAPI::Config do
     it 'blanks inline credentials' do
       expect(build(url: 'https://admin:s3cret@zammad.example.com/').redacted_url)
         .to eq('https://[REDACTED]@zammad.example.com/')
+    end
+
+    # Anchoring on the first @ left the tail of the password in the rendered
+    # URL, which is interpolated into every ConnectionError message.
+    it 'blanks a password carrying an unencoded @' do
+      expect(build(url: 'https://admin:pa@ss-s3cret@zammad.example.com/').redacted_url)
+        .to eq('https://[REDACTED]@zammad.example.com/')
+    end
+
+    it 'leaves an @ in the path alone' do
+      expect(build(url: 'https://zammad.example.com/tenant@acme/').redacted_url)
+        .to eq('https://zammad.example.com/tenant@acme/')
     end
 
     it 'leaves a url without credentials alone' do
