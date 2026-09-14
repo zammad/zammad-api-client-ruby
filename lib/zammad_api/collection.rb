@@ -33,7 +33,12 @@ module ZammadAPI
 
     # Query parameters this collection owns. Passing them to {#where} would be
     # silently overridden, so they are rejected instead.
-    RESERVED_QUERY_KEYS = %i[page per_page expand only_total_count].freeze
+    #
+    # +query+ is in the list because it is the search term {ResourceProxy#search}
+    # set: merging another one replaced it, so
+    # +search('login failure').where(query: 'anything')+ searched for
+    # "anything" and said nothing about it.
+    RESERVED_QUERY_KEYS = %i[page per_page expand only_total_count query].freeze
     private_constant :RESERVED_QUERY_KEYS
 
     # @api private
@@ -114,7 +119,7 @@ module ZammadAPI
     # @raise [ArgumentError] for a parameter this collection controls itself
     def where(**params)
       reserved = params.keys & RESERVED_QUERY_KEYS
-      raise ArgumentError, "#{reserved.join(', ')} cannot be passed to where: use page, in_batches or find_each for paging, and leave expand and only_total_count to the collection" if !reserved.empty?
+      raise ArgumentError, "#{reserved.join(', ')} cannot be passed to where: use page, in_batches or find_each for paging, pass a search term to search, and leave expand and only_total_count to the collection" if !reserved.empty?
 
       with(query: @query.merge(params))
     end

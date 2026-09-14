@@ -359,6 +359,21 @@ RSpec.describe ZammadAPI::ResourceProxy do
     end
   end
 
+  describe 'narrowing a search' do
+    it 'refuses to replace the search term' do
+      expect { proxy.search('login failure').where(query: 'anything') }
+        .to raise_error(ArgumentError, /cannot be passed to where/)
+    end
+
+    it 'still narrows a search by a parameter it does not own' do
+      stub_request(:get, "#{url}/search")
+        .with(query: hash_including({ 'query' => 'login failure', 'sort_by' => 'created_at' }))
+        .to_return(json_response([{ id: 1 }]))
+
+      expect(proxy.search('login failure').where(sort_by: 'created_at').map(&:id)).to eq([1])
+    end
+  end
+
   describe '#search' do
     it 'requests the search endpoint' do
       stub = stub_request(:get, "#{url}/search")

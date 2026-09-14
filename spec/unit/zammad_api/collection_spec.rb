@@ -286,10 +286,14 @@ RSpec.describe ZammadAPI::Collection do
       expect(collection.where(active: true)).not_to be(collection)
     end
 
-    it 'rejects parameters the collection controls itself' do
-      expect { collection.where(page: 2) }.to raise_error(ArgumentError, /cannot be passed to where/)
-      expect { collection.where(per_page: 2) }.to raise_error(ArgumentError, /cannot be passed to where/)
-      expect { collection.where(expand: false) }.to raise_error(ArgumentError, /cannot be passed to where/)
+    %i[page per_page expand only_total_count].each do |reserved|
+      it "rejects #{reserved}, which the collection controls itself" do
+        expect { collection.where(reserved => 1) }.to raise_error(ArgumentError, /cannot be passed to where/)
+      end
+    end
+
+    it 'rejects a search term rather than replacing the one search set' do
+      expect { collection.where(query: 'anything') }.to raise_error(ArgumentError, /cannot be passed to where/)
     end
   end
 
