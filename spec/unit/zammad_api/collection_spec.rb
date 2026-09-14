@@ -18,6 +18,14 @@ RSpec.describe ZammadAPI::Collection do
     Array.new(ZammadAPI::Collection::DEFAULT_PER_PAGE) { { id: first_id + it } }
   end
 
+  # A short page cannot be told apart from one the server shrank, so the walk
+  # confirms the end with one more request. Stubbing that empty page is what a
+  # collection that fits in a single page looks like from out here.
+  def stub_last_page(page, records, per_page: ZammadAPI::Collection::DEFAULT_PER_PAGE)
+    stub_page(page, records, per_page: per_page)
+    stub_page(page + 1, [], per_page: per_page)
+  end
+
   # Mirrors Zammad's CanPaginate::Pagination: the endpoint reduces per_page to
   # its own maximum and pages by that reduced size.
   def stub_capped_endpoint(url, total:, max:)
@@ -41,11 +49,25 @@ RSpec.describe ZammadAPI::Collection do
       expect(collection.map(&:id)).to eq((1..101).to_a)
     end
 
-    it 'stops on a page that is shorter than the page size' do
-      stub_page(1, [{ id: 1 }])
+    it 'confirms the end of a short first page rather than assuming it' do
+      stub_last_page(1, [{ id: 1 }])
 
       expect(collection.map(&:id)).to eq([1])
-      expect(a_request(:get, url).with(query: hash_including('page' => '2'))).not_to have_been_made
+      expect(a_request(:get, url).with(query: hash_including('page' => '2'))).to have_been_made
+    end
+
+    it 'stops on a page shorter than the one the endpoint has been serving' do
+      stub_page(1, full_page)
+      stub_page(2, [{ id: 101 }])
+
+      expect(collection.map(&:id)).to eq((1..101).to_a)
+      expect(a_request(:get, url).with(query: hash_including('page' => '3'))).not_to have_been_made
+    end
+
+    it 'walks an endpoint that serves a smaller page than it was asked for' do
+      stub_capped_endpoint(url, total: 120, max: 50)
+
+      expect(collection.map(&:id)).to eq((1..120).to_a)
     end
 
     it 'stops on an empty page' do
@@ -151,7 +173,7 @@ RSpec.describe ZammadAPI::Collection do
     end
 
     it 'walks at the default page size without one' do
-      stub_page(1, [{ id: 1 }])
+      stub_last_page(1, [{ id: 1 }])
 
       ids = []
       collection.find_each { ids << it.id }
@@ -159,7 +181,7 @@ RSpec.describe ZammadAPI::Collection do
     end
 
     it 'takes the page size inline' do
-      stub_page(1, [{ id: 1 }], per_page: 50)
+      stub_last_page(1, [{ id: 1 }], per_page: 50)
 
       expect(collection.find_each(batch_size: 50).map(&:id)).to eq([1])
     end
@@ -185,7 +207,7 @@ RSpec.describe ZammadAPI::Collection do
     end
 
     it 'yields a whole page at the default size without one' do
-      stub_page(1, [{ id: 1 }, { id: 2 }])
+      stub_last_page(1, [{ id: 1 }, { id: 2 }])
 
       batches = []
       collection.in_batches { batches << it.map(&:id) }
@@ -230,7 +252,7 @@ RSpec.describe ZammadAPI::Collection do
     end
 
     it 'returns a new collection and leaves the original unpaged' do
-      stub_page(1, [{ id: 1 }])
+      stub_last_page(1, [{ id: 1 }])
 
       expect(collection.page(2)).not_to be(collection)
       expect(collection.map(&:id)).to eq([1])
@@ -278,6 +300,9 @@ RSpec.describe ZammadAPI::Collection do
       stub_request(:get, url)
         .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => '100', 'sort_by' => 'name' })
         .to_return(json_response([{ id: 1 }]))
+      stub_request(:get, url)
+        .with(query: { 'expand' => 'true', 'page' => '2', 'per_page' => '100', 'sort_by' => 'name' })
+        .to_return(json_response([]))
 
       expect(collection.where(sort_by: 'name').map(&:id)).to eq([1])
     end
@@ -308,25 +333,25 @@ RSpec.describe ZammadAPI::Collection do
 
   describe '#pluck' do
     it 'returns one value per record for a single attribute' do
-      stub_page(1, [{ id: 1, name: 'Users' }, { id: 2, name: 'Support' }])
+      stub_last_page(1, [{ id: 1, name: 'Users' }, { id: 2, name: 'Support' }])
 
       expect(collection.pluck(:name)).to eq(%w[Users Support])
     end
 
     it 'returns one array per record for several attributes' do
-      stub_page(1, [{ id: 1, name: 'Users' }, { id: 2, name: 'Support' }])
+      stub_last_page(1, [{ id: 1, name: 'Users' }, { id: 2, name: 'Support' }])
 
       expect(collection.pluck(:id, :name)).to eq([[1, 'Users'], [2, 'Support']])
     end
 
     it 'accepts string keys' do
-      stub_page(1, [{ id: 1, name: 'Users' }])
+      stub_last_page(1, [{ id: 1, name: 'Users' }])
 
       expect(collection.pluck('name')).to eq(['Users'])
     end
 
     it 'yields nil for an attribute a record does not carry' do
-      stub_page(1, [{ id: 1 }])
+      stub_last_page(1, [{ id: 1 }])
 
       expect(collection.pluck(:name)).to eq([nil])
     end
@@ -366,6 +391,8 @@ RSpec.describe ZammadAPI::Collection do
         .to_return(json_response({}))
       stub_request(:get, search_url).with(query: hash_including('page' => '1'))
         .to_return(json_response([{ id: 1 }]))
+      stub_request(:get, search_url).with(query: hash_including('page' => '2'))
+        .to_return(json_response([]))
 
       expect(client.user.search('smith').count).to eq(1)
     end
@@ -375,6 +402,8 @@ RSpec.describe ZammadAPI::Collection do
         .to_return(json_response([{ id: 1 }, { id: 2 }]))
       stub_request(:get, search_url).with(query: hash_including('page' => '1'))
         .to_return(json_response([{ id: 1 }, { id: 2 }]))
+      stub_request(:get, search_url).with(query: hash_including('page' => '2'))
+        .to_return(json_response([]))
 
       expect(client.user.search('smith').count).to eq(2)
     end
@@ -386,7 +415,7 @@ RSpec.describe ZammadAPI::Collection do
     end
 
     it 'counts matches when given a block' do
-      stub_page(1, [{ id: 1 }, { id: 2 }, { id: 3 }])
+      stub_last_page(1, [{ id: 1 }, { id: 2 }, { id: 3 }])
 
       expect(collection.count { it.id > 1 }).to eq(2)
     end
@@ -409,7 +438,7 @@ RSpec.describe ZammadAPI::Collection do
     end
 
     it 'is also spelled #length' do
-      stub_page(1, [{ id: 1 }])
+      stub_last_page(1, [{ id: 1 }])
 
       expect(collection.length).to eq(1)
     end

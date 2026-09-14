@@ -215,8 +215,9 @@ module ZammadAPI
     end
 
     def walk
-      page     = @page || 1
-      previous = nil
+      page      = @page || 1
+      previous  = nil
+      page_size = 0
       loop do
         records = fetch(page, @per_page)
 
@@ -238,11 +239,17 @@ module ZammadAPI
 
         # A collection limited to a single page never advances.
         break if @page
+        break if records.empty?
 
-        # A short page means the server has no more records. The page size is
-        # clamped to what the endpoint serves, so it cannot be short because
-        # the server shrank it.
-        break if records.size < @per_page
+        # How big a page this endpoint actually serves, learned from the first
+        # one rather than assumed. The requested size is clamped to a per-
+        # resource MAX_PER_PAGE, and where that guess was higher than the
+        # server's real cap - a lowered setting, a custom deployment, an
+        # endpoint whose cap was never this generous - every page came back
+        # short and the walk stopped on page one with a truncated result and
+        # nothing to show for it.
+        page_size = records.size if page_size.zero?
+        break if records.size < page_size
 
         previous = current
         page += 1
