@@ -80,6 +80,15 @@ module ZammadAPI
             .inject({}) { |result, ancestor| result.merge(ancestor.send(:declared_associations)) }
         end
 
+        # The attributes a +belongs_to+ reader resolves through, so that
+        # writing one can drop the record it had already resolved to.
+        #
+        # @api private
+        # @return [Array<Symbol>]
+        def belongs_to_foreign_keys
+          @belongs_to_foreign_keys ||= associations.filter_map { |_, spec| spec[:foreign_key] if spec[:type] == :belongs_to }
+        end
+
         # The class carrying this resource's association readers, reached
         # through {Base#related}.
         #
@@ -339,6 +348,14 @@ module ZammadAPI
         # Copy on write, because @attributes is frozen for the benefit of
         # every reader that hands it out.
         @attributes = @attributes.merge(key => staged).freeze
+        # A resolved association is only correct for the id it was resolved
+        # from. `replace_attributes!` drops the proxy on save and reload, but
+        # the write that actually changes a foreign key did not, so
+        # `ticket.customer_id = 9` left `ticket.related.customer` answering
+        # with user 3 and no request to show for it. The whole proxy goes:
+        # evicting one reader means reaching into its cache for a saving that
+        # is one request at most.
+        @related = nil if self.class.belongs_to_foreign_keys.include?(key)
         staged
       end
 

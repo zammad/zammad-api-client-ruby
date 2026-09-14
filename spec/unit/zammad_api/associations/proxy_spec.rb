@@ -181,6 +181,49 @@ RSpec.describe ZammadAPI::Associations::Proxy do
 
       expect(a_request(:get, "#{users_url}/7").with(query: hash_including({}))).to have_been_made.twice
     end
+
+    it 'is dropped when the foreign key it resolved from is written' do
+      stub_request(:get, "#{users_url}/9").with(query: hash_including({}))
+        .to_return(json_response({ id: 9, email: 'nine@example.com' }))
+
+      held = ticket
+      expect(held.related.customer.id).to eq(7)
+
+      held.customer_id = 9
+
+      expect(held.related.customer.id).to eq(9)
+    end
+
+    it 'survives a write to an attribute no association resolves through' do
+      held = ticket
+      held.related.customer
+      held.title = 'Renamed'
+      held.related.customer
+
+      expect(a_request(:get, "#{users_url}/7").with(query: hash_including({}))).to have_been_made.once
+    end
+
+    it 'is dropped by assign_attributes touching a foreign key' do
+      stub_request(:get, "#{users_url}/9").with(query: hash_including({}))
+        .to_return(json_response({ id: 9 }))
+
+      held = ticket
+      held.related.customer
+      held.assign_attributes(title: 'Renamed', customer_id: 9)
+
+      expect(held.related.customer.id).to eq(9)
+    end
+  end
+
+  describe '.belongs_to_foreign_keys' do
+    it 'lists the keys a resource resolves associations through' do
+      expect(ZammadAPI::Resources::Ticket.belongs_to_foreign_keys)
+        .to include(:customer_id, :owner_id, :group_id, :state_id, :priority_id, :organization_id)
+    end
+
+    it 'includes the ones inherited from Base' do
+      expect(ZammadAPI::Resources::Group.belongs_to_foreign_keys).to eq(%i[created_by_id updated_by_id])
+    end
   end
 
   describe '#inspect' do

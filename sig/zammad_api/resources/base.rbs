@@ -14,12 +14,14 @@ module ZammadAPI
       @changes: Hash[Symbol, Array[untyped]]
       @related: Associations::Proxy?
       self.@related_class: untyped
+      self.@belongs_to_foreign_keys: Array[Symbol]?
       self.@declared_associations: Hash[Symbol, Hash[Symbol, untyped]]?
 
       def self.path: (String) -> void
       def self.resource_path: () -> String
       def self.from_response: (Transport, Hash[untyped, untyped] attributes) -> Base
       def self.associations: () -> Hash[Symbol, Hash[Symbol, untyped]]
+      def self.belongs_to_foreign_keys: () -> Array[Symbol]
       def self.related_class: () -> untyped
       def self.declared_associations: () -> Hash[Symbol, Hash[Symbol, untyped]]
       def self.belongs_to: (Symbol name, class_name: String, ?foreign_key: Symbol) -> void
