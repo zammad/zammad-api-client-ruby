@@ -75,3 +75,20 @@ class Helper
 
   private_class_method :verify_setup_done!, :connection, :parse
 end
+
+# Each integration spec file walks one record through its lifecycle - new,
+# save, find, destroy - and every step asserts on what the previous one left
+# behind, so the record is shared across ordered examples.
+#
+# That coupling is fine as long as the whole file runs in definition order,
+# and silent nonsense as soon as it does not: `--only-failures`, `-e 'save'`
+# or a `--seed` reordering used to fail as `NoMethodError: undefined method
+# 'save' for nil`, which says nothing about the actual cause. This says it.
+module LifecycleState
+  def established!(record, example)
+    return record if record
+
+    raise "this example continues the record built by '#{example}', which did not run in this process. " \
+          'These examples share one record and have to run as a whole file, in definition order.'
+  end
+end

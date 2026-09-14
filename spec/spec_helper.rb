@@ -19,6 +19,7 @@ Dir[File.expand_path('support/**/*.rb', __dir__)].each { require it }
 
 RSpec.configure do |config|
   config.include ClientHelper
+  config.include LifecycleState, :integration
 
   config.expect_with(:rspec) { it.syntax = :expect }
   config.mock_with(:rspec) { it.verify_partial_doubles = true }
@@ -40,6 +41,12 @@ RSpec.configure do |config|
   config.before(:each, :integration) do
     Helper.ensure_configured!
   end
+
+  # The integration specs walk a record through its lifecycle across ordered
+  # examples, so they are pinned to definition order. Without this a `--seed`
+  # or `--order random` run scrambled the lifecycle and failed on a record
+  # that had not been built yet. Unit specs stay order-independent.
+  config.define_derived_metadata(file_path: %r{/spec/integration/}) { it[:order] = :defined }
 
   # Integration specs need the real network, so WebMock steps aside for them.
   config.around(:each, :integration) do |example|

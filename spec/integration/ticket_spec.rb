@@ -42,6 +42,7 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
   end
 
   it 'save' do
+    ticket = established!(ticket, 'new with valid attributes')
     result = ticket.save
 
     expect(result).to be(true)
@@ -121,6 +122,7 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
   end
 
   it 'find' do
+    ticket = established!(ticket, 'new with valid attributes')
     ticket_lookup = client.ticket.find(ticket.id)
 
     expect(ticket_lookup.class).to eq(ZammadAPI::Resources::Ticket)
@@ -135,6 +137,7 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
   end
 
   it 'all' do
+    ticket = established!(ticket, 'new with valid attributes')
     tickets = client.ticket.all
 
     ticket_exists = nil
@@ -169,6 +172,7 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
   end
 
   it 'pagination with all' do
+    ticket = established!(ticket, 'new with valid attributes')
     (1..10).each do |local_count|
       client.ticket.create(
         title:    "test count ticket #{local_count}",
@@ -216,6 +220,7 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
   end
 
   it 'destroy' do
+    ticket = established!(ticket, 'new with valid attributes')
     result = ticket.destroy
 
     expect(result).to be(true)

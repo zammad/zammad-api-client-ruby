@@ -33,6 +33,7 @@ RSpec.describe ZammadAPI, 'organization object basics' do
   end
 
   it 'save' do
+    organization = established!(organization, 'new with valid attributes')
     result = organization.save
 
     expect(result).to be(true)
@@ -72,6 +73,7 @@ RSpec.describe ZammadAPI, 'organization object basics' do
   end
 
   it 'find' do
+    organization = established!(organization, 'new with valid attributes')
     organization_lookup = client.organization.find(organization.id)
 
     expect(organization_lookup.class).to eq(ZammadAPI::Resources::Organization)
@@ -85,6 +87,7 @@ RSpec.describe ZammadAPI, 'organization object basics' do
   end
 
   it 'all' do
+    organization = established!(organization, 'new with valid attributes')
     organizations = client.organization.all
 
     organization_exists = nil
@@ -141,6 +144,7 @@ RSpec.describe ZammadAPI, 'organization object basics' do
   end
 
   it 'search' do
+    organization = established!(organization, 'new with valid attributes')
     organizations = client.organization.search(name)
 
     organization_exists = nil
@@ -171,6 +175,7 @@ RSpec.describe ZammadAPI, 'organization object basics' do
   end
 
   it 'pagination with search' do
+    organization = established!(organization, 'new with valid attributes')
     organizations = client.organization.search("#{name}-2")
 
     expect(organizations.first.class).to eq(ZammadAPI::Resources::Organization)
@@ -208,6 +213,7 @@ RSpec.describe ZammadAPI, 'organization object basics' do
   end
 
   it 'destroy' do
+    organization = established!(organization, 'new with valid attributes')
     result = organization.destroy
 
     expect(result).to be(true)

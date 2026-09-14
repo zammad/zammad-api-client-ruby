@@ -37,6 +37,7 @@ RSpec.describe ZammadAPI, 'group object basics' do
   end
 
   it 'save' do
+    group = established!(group, 'new with valid attributes')
     result = group.save
 
     expect(result).to be(true)
@@ -76,6 +77,7 @@ RSpec.describe ZammadAPI, 'group object basics' do
   end
 
   it 'find' do
+    group = established!(group, 'new with valid attributes')
     group_lookup = client.group.find(group.id)
 
     expect(group_lookup.class).to eq(ZammadAPI::Resources::Group)
@@ -89,6 +91,7 @@ RSpec.describe ZammadAPI, 'group object basics' do
   end
 
   it 'all' do
+    group = established!(group, 'new with valid attributes')
     groups = client.group.all
 
     group_exists = nil
@@ -147,6 +150,7 @@ RSpec.describe ZammadAPI, 'group object basics' do
   end
 
   it 'destroy' do
+    group = established!(group, 'new with valid attributes')
     result = group.destroy
 
     expect(result).to be(true)

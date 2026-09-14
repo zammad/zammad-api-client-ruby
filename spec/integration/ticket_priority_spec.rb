@@ -31,6 +31,7 @@ RSpec.describe ZammadAPI, 'ticket priority object basics' do
   end
 
   it 'save' do
+    ticket_priority = established!(ticket_priority, 'new with valid attributes')
     result = ticket_priority.save
 
     expect(result).to be(true)
@@ -61,6 +62,7 @@ RSpec.describe ZammadAPI, 'ticket priority object basics' do
   end
 
   it 'find' do
+    ticket_priority = established!(ticket_priority, 'new with valid attributes')
     ticket_priority_lookup = client.ticket_priority.find(ticket_priority.id)
 
     expect(ticket_priority_lookup.class).to eq(ZammadAPI::Resources::TicketPriority)
@@ -71,6 +73,7 @@ RSpec.describe ZammadAPI, 'ticket priority object basics' do
   end
 
   it 'all' do
+    ticket_priority = established!(ticket_priority, 'new with valid attributes')
     ticket_priorities = client.ticket_priority.all
 
     ticket_priority_exists = nil
@@ -128,6 +131,7 @@ RSpec.describe ZammadAPI, 'ticket priority object basics' do
   end
 
   it 'destroy' do
+    ticket_priority = established!(ticket_priority, 'new with valid attributes')
     result = ticket_priority.destroy
 
     expect(result).to be(true)

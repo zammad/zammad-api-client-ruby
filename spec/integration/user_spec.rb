@@ -44,6 +44,7 @@ RSpec.describe ZammadAPI, 'user object basics' do
   end
 
   it 'save' do
+    user = established!(user, 'new with valid attributes')
     result = user.save
 
     expect(result).to be(true)
@@ -88,6 +89,7 @@ RSpec.describe ZammadAPI, 'user object basics' do
   end
 
   it 'find' do
+    user = established!(user, 'new with valid attributes')
     user_lookup = client.user.find(user.id)
 
     expect(user_lookup.class).to eq(ZammadAPI::Resources::User)
@@ -105,6 +107,7 @@ RSpec.describe ZammadAPI, 'user object basics' do
   end
 
   it 'all' do
+    user = established!(user, 'new with valid attributes')
     users = client.user.all
 
     user_exists = nil
@@ -188,6 +191,7 @@ RSpec.describe ZammadAPI, 'user object basics' do
   end
 
   it 'search' do
+    user = established!(user, 'new with valid attributes')
     users = client.user.search(firstname)
 
     user_exists = nil
@@ -224,6 +228,7 @@ RSpec.describe ZammadAPI, 'user object basics' do
   end
 
   it 'pagination with search' do
+    user = established!(user, 'new with valid attributes')
     users = client.user.search(firstname)
 
     expect(users.first.class).to eq(ZammadAPI::Resources::User)
@@ -264,6 +269,7 @@ RSpec.describe ZammadAPI, 'user object basics' do
   end
 
   it 'destroy' do
+    user = established!(user, 'new with valid attributes')
     # wait until zammad scheduler wrote some entries to activity stream
     # to have some references and not allow users to delete
     sleep 12

@@ -38,6 +38,7 @@ RSpec.describe ZammadAPI, 'ticket state object basics' do
   end
 
   it 'save' do
+    ticket_state = established!(ticket_state, 'new with valid attributes')
     result = ticket_state.save
 
     expect(result).to be(true)
@@ -91,6 +92,7 @@ RSpec.describe ZammadAPI, 'ticket state object basics' do
   end
 
   it 'find' do
+    ticket_state = established!(ticket_state, 'new with valid attributes')
     ticket_state_lookup = client.ticket_state.find(ticket_state.id)
 
     expect(ticket_state_lookup.class).to eq(ZammadAPI::Resources::TicketState)
@@ -108,6 +110,7 @@ RSpec.describe ZammadAPI, 'ticket state object basics' do
   end
 
   it 'all' do
+    ticket_state = established!(ticket_state, 'new with valid attributes')
     ticket_states = client.ticket_state.all
 
     ticket_state_exists = nil
@@ -178,6 +181,7 @@ RSpec.describe ZammadAPI, 'ticket state object basics' do
   end
 
   it 'destroy' do
+    ticket_state = established!(ticket_state, 'new with valid attributes')
     result = ticket_state.destroy
 
     expect(result).to be(true)

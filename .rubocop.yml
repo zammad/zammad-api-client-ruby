@@ -152,7 +152,11 @@ RSpec/BeforeAfterAll:
     - 'spec/integration/**/*'
 
 RSpec/LeakyLocalVariable:
-  # The integration specs deliberately share a record across ordered examples.
+  # The integration specs deliberately share a record across ordered examples:
+  # each one asserts on what the previous step left behind. The coupling is
+  # pinned by `config.order = :defined` and every example that reads the record
+  # goes through `established!`, so a partial run says what is missing rather
+  # than failing on nil.
   Exclude:
     - 'spec/integration/**/*'
 
