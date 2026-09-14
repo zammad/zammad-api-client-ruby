@@ -138,13 +138,21 @@ module ZammadAPI
     #   or one the endpoint would ignore
     # @see ResourceProxy#find_by for looking a record up by attribute value
     def where(**params)
-      reserved = params.keys & RESERVED_QUERY_KEYS
+      # Both lists below hold Symbols, while `**params` collects a String key
+      # just as happily. Unnormalised, `where('sort_by' => 'name')` failed the
+      # second check and reported that the endpoint "ignores sort_by ... That
+      # endpoint honours sort_by" in one breath, and `where('page' => 2)`
+      # missed the reserved-key check entirely and was refused with a message
+      # that never mentioned paging.
+      filters = params.transform_keys { it.to_s.to_sym }
+
+      reserved = filters.keys & RESERVED_QUERY_KEYS
       raise ArgumentError, "#{reserved.join(', ')} cannot be passed to where: use page, in_batches or find_each for paging, pass a search term to search, and leave expand and only_total_count to the collection" if !reserved.empty?
 
-      ignored = params.keys - @filterable
+      ignored = filters.keys - @filterable
       raise ArgumentError, ignored_message(ignored) if !ignored.empty?
 
-      with(query: @query.merge(params))
+      with(query: @query.merge(filters))
     end
 
     # Reads one or more attributes from every record.

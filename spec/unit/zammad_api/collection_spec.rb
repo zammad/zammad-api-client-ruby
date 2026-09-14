@@ -374,6 +374,31 @@ RSpec.describe ZammadAPI::Collection do
         .to raise_error(ArgumentError, /routes none for this resource, so walk the records and pick with detect/)
     end
 
+    # Both guards compare against Symbol lists, while `**params` collects a
+    # String key just as happily.
+    it 'accepts a string key for a parameter the endpoint honours' do
+      stub_request(:get, url)
+        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => '100', 'sort_by' => 'name' })
+        .to_return(json_response([]))
+
+      collection.where('sort_by' => 'name').to_a
+      expect(a_request(:get, url).with(query: hash_including('sort_by' => 'name'))).to have_been_made
+    end
+
+    it 'rejects a string key the endpoint would drop' do
+      expect { collection.where('name' => 'Users') }
+        .to raise_error(ArgumentError, /ignores name, so where would hand back unfiltered records/)
+    end
+
+    it 'does not name a string key as both ignored and honoured' do
+      expect { collection.where('sort_by' => 'name') }.not_to raise_error
+    end
+
+    it 'rejects a string key for a parameter the collection owns' do
+      expect { collection.where('page' => 2) }
+        .to raise_error(ArgumentError, /page cannot be passed to where/)
+    end
+
     %i[page per_page expand only_total_count].each do |reserved|
       it "rejects #{reserved}, which the collection controls itself" do
         expect { collection.where(reserved => 1) }.to raise_error(ArgumentError, /cannot be passed to where/)
