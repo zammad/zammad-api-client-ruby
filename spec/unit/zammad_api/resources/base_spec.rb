@@ -194,12 +194,23 @@ RSpec.describe ZammadAPI::Resources::Base do
         expect(group.save).to be(true)
       end
 
-      it 'sends an empty payload when nothing changed' do
-        stub = stub_request(:put, "#{url}/1").with(query: hash_including({}), body: '{}')
+      it 'sends nothing at all when nothing changed' do
+        stub = stub_request(:put, "#{url}/1").with(query: hash_including({}))
           .to_return(json_response({ id: 1 }))
 
+        expect(group.save).to be(true)
+        expect(stub).not_to have_been_requested
+      end
+
+      it 'saves again once something changes' do
+        stub_request(:put, "#{url}/1").with(query: hash_including({}), body: '{"note":"new"}')
+          .to_return(json_response({ id: 1, note: 'new' }))
+
         group.save
-        expect(stub).to have_been_requested
+        group.note = 'new'
+
+        expect(group.save).to be(true)
+        expect(group.note).to eq('new')
       end
     end
 

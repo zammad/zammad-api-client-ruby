@@ -255,7 +255,15 @@ module ZammadAPI
         # rescue in `save` used to clear this, so a save that raised anything
         # else left the previous attempt's ValidationError in place and a
         # caller reading #error to report the failure read the wrong cause.
-        @error   = nil
+        @error = nil
+
+        # An unchanged record has nothing to send. The empty PUT this used to
+        # issue was not just a wasted round trip: Zammad applies it, bumping
+        # updated_at and updated_by, so re-saving a record that nobody touched
+        # rewrote its audit trail and moved the timestamp that other callers
+        # use to tell whether it changed under them.
+        return true if !new_record? && !changed?
+
         response = new_record? ? create_record : update_record
 
         replace_attributes!(response, operation: 'save object')
