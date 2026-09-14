@@ -99,8 +99,12 @@ module ZammadAPI
     # Returns a new collection limited to a single page.
     #
     # +of+ decides how big that page is, and so which records it holds:
-    # +page(2, of: 50)+ is records 51 to 100. Zammad caps the page size per
-    # endpoint, so a larger size is reduced to what the endpoint serves.
+    # +page(2, of: 50)+ is records 51 to 100. A size larger than the endpoint
+    # serves is refused rather than reduced, because reducing it moves the
+    # page: +page(3, of: 500)+ against an endpoint capping at 100 was sent as
+    # +page=3&per_page=100+ and answered with records 201 to 300 instead of
+    # 1001 to 1500. A job that checkpoints a page number then re-read what it
+    # had already handled and never reached the rest.
     #
     # @example
     #   client.ticket.all.page(2, of: 50).to_a
@@ -108,10 +112,15 @@ module ZammadAPI
     # @param number [Integer] one-based page number
     # @param of [Integer, nil] records on the page, {DEFAULT_PER_PAGE} by default
     # @return [Collection]
+    # @raise [ArgumentError] for a page size the endpoint does not serve
     def page(number, of: nil)
       raise ArgumentError, 'page needs to be a positive integer' if !number.is_a?(Integer) || !number.positive?
+      return with(page: number) if of.nil?
 
-      with(page: number, per_page: of ? positive_integer!(of, 'of') : @per_page)
+      size = positive_integer!(of, 'of')
+      raise ArgumentError, "#{@path} serves at most #{@max_per_page} records per page, so page(#{number}, of: #{size}) would be sent as page #{number} of #{@max_per_page} and hold different records. Ask for page(#{number}, of: #{@max_per_page}) or fewer, or walk the records with find_each." if size > @max_per_page
+
+      with(page: number, per_page: size)
     end
 
     # Returns a new collection with additional query parameters applied.

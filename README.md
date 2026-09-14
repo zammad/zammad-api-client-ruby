@@ -498,7 +498,7 @@ kind of work:
 ```ruby
 client.ticket.all.find_each(batch_size: 500) { |ticket| archive(ticket) }  # walking
 client.ticket.all.in_batches(of: 500) { |tickets| import(tickets) }        # batching
-client.ticket.all.page(2, of: 500)                                         # one page
+client.ticket.all.page(2, of: 100)                                         # one page
 ```
 
 `find_each` without a block is an Enumerator, so it is also how you read at a chosen page
@@ -509,7 +509,10 @@ size: `client.ticket.all.find_each(batch_size: 500).first(7)`.
 quietly hand back different ones. Size the page itself, or slice with `each_slice`.
 
 Zammad caps the page size per endpoint — 100 for `/api/v1/tickets`, 200 for a search, 1000
-for the other index endpoints — and a larger size is reduced to what the endpoint serves.
+for the other index endpoints. `find_each` and `in_batches` are reduced to that cap, which
+costs them nothing but an extra request; `page` raises instead, because a smaller page is a
+different set of records — `page(3, of: 500)` reduced to 100 hands back records 201 to 300
+rather than 1001 to 1500.
 A walk learns the size the endpoint actually serves from the first page rather than trusting
 that cap, so an instance that pages smaller than expected is walked to the end rather than
 truncated at the first short page.

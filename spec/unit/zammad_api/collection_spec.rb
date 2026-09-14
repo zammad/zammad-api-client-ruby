@@ -294,16 +294,40 @@ RSpec.describe ZammadAPI::Collection do
   end
 
   describe 'page size caps' do
-    it 'clamps to what a generic index endpoint serves' do
-      expect(client.group.all.page(1, of: 5000).inspect).to include('per_page=1000')
+    it 'clamps a walk to what a generic index endpoint serves' do
+      stub_page(1, [], per_page: 1000)
+
+      client.group.all.find_each(batch_size: 5000).to_a
+      expect(a_request(:get, url).with(query: hash_including('per_page' => '1000'))).to have_been_made
     end
 
-    it 'clamps to what the ticket index endpoint serves' do
-      expect(client.ticket.all.page(1, of: 5000).inspect).to include('per_page=100')
+    it 'refuses a page larger than a generic index endpoint serves' do
+      expect { client.group.all.page(1, of: 5000) }
+        .to raise_error(ArgumentError, /serves at most 1000 records per page/)
     end
 
-    it 'clamps to what a search endpoint serves' do
-      expect(client.user.search('smith').page(1, of: 5000).inspect).to include('per_page=200')
+    it 'refuses a page larger than the ticket index endpoint serves' do
+      expect { client.ticket.all.page(1, of: 5000) }
+        .to raise_error(ArgumentError, /serves at most 100 records per page/)
+    end
+
+    it 'refuses a page larger than a search endpoint serves' do
+      expect { client.user.search('smith').page(1, of: 5000) }
+        .to raise_error(ArgumentError, /serves at most 200 records per page/)
+    end
+
+    it 'names the page that would have been served instead' do
+      expect { client.ticket.all.page(3, of: 500) }
+        .to raise_error(ArgumentError, /page\(3, of: 500\) would be sent as page 3 of 100/)
+    end
+
+    it 'names a page size the endpoint does serve' do
+      expect { client.ticket.all.page(3, of: 500) }
+        .to raise_error(ArgumentError, /Ask for page\(3, of: 100\) or fewer/)
+    end
+
+    it 'accepts a page exactly the size the endpoint serves' do
+      expect(client.ticket.all.page(2, of: 100).inspect).to include('per_page=100')
     end
 
     it 'walks the whole list when asked for more per page than the endpoint serves' do
