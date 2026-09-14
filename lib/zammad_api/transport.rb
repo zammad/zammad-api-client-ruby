@@ -164,9 +164,9 @@ module ZammadAPI
     rescue Faraday::TimeoutError => e
       raise TimeoutError, "Can't #{operation}: request to #{path} timed out (#{e.message})"
     rescue Faraday::SSLError => e
-      raise ConnectionError, "Can't #{operation}: TLS handshake with #{config.url} failed (#{e.message})"
+      raise ConnectionError, "Can't #{operation}: TLS handshake with #{config.redacted_url} failed (#{e.message})"
     rescue Faraday::ConnectionFailed => e
-      raise ConnectionError, "Can't #{operation}: #{config.url} is unreachable (#{e.message})"
+      raise ConnectionError, "Can't #{operation}: #{config.redacted_url} is unreachable (#{e.message})"
     end
 
     private

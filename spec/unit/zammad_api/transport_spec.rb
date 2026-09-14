@@ -202,6 +202,14 @@ RSpec.describe ZammadAPI::Transport do
         .to raise_error(ZammadAPI::ConnectionError, /TLS handshake/)
     end
 
+    it 'does not leak credentials from the url into the message' do
+      transport = unit_transport(url: 'https://admin:url-s3cret@zammad.test/')
+      stub_request(:get, /zammad\.test/).to_raise(Faraday::ConnectionFailed.new('down'))
+
+      expect { transport.get('api/v1/groups', operation: 'test') }
+        .to raise_error(ZammadAPI::ConnectionError) { |error| expect(error.message).not_to include('url-s3cret') }
+    end
+
     it 'raises a TransportError subclass so both can be rescued together' do
       stub_request(:get, url).to_raise(Errno::ECONNREFUSED)
       expect { unit_transport.get('api/v1/groups', operation: 'find object') }
