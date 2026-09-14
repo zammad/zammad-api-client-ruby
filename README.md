@@ -229,6 +229,10 @@ What the search can surface is Zammad's business: a value the instance has not i
 cannot index, is a record `find_by` will not find. `find_by(...) || create(...)` can
 therefore still create a duplicate — as writing the search out by hand would.
 
+`find_by` examines only the first page of hits, so it costs one request whether it matches
+or not. Search hits come back by relevance, so a record carrying the value is at the top of
+them or not among them at all; to look further, page through `search` yourself.
+
 Zammad records can carry administrator-defined custom attributes, so an unknown reader
 returns `nil` rather than raising. Use `fetch` when a missing attribute should be an error.
 
@@ -278,6 +282,10 @@ group.changes  # => {name: ["Support", "Support 2"]}
 
 group.save     # sends only the changed attributes
 ```
+
+A `save` on a persisted record with nothing staged sends no request at all and returns
+`true`. Zammad applies an empty update, bumping `updated_at` and `updated_by`, so a no-op
+save would otherwise rewrite the record's audit trail.
 
 Or in one call:
 
@@ -496,8 +504,15 @@ client.ticket.all.page(2, of: 500)                                         # one
 `find_each` without a block is an Enumerator, so it is also how you read at a chosen page
 size: `client.ticket.all.find_each(batch_size: 500).first(7)`.
 
+`page` and a batch size are two ways of naming the same thing, so combining them raises:
+`page(3, of: 50)` already says which records the collection holds, and re-sizing it would
+quietly hand back different ones. Size the page itself, or slice with `each_slice`.
+
 Zammad caps the page size per endpoint — 100 for `/api/v1/tickets`, 200 for a search, 1000
 for the other index endpoints — and a larger size is reduced to what the endpoint serves.
+A walk learns the size the endpoint actually serves from the first page rather than trusting
+that cap, so an instance that pages smaller than expected is walked to the end rather than
+truncated at the first short page.
 That keeps a walk complete: a page size the server silently shrank would otherwise end the
 iteration at the first page.
 
@@ -668,7 +683,10 @@ raises `NotFoundError`, and one with `status: 422` makes `save` return `false`.
 | `reset` | Forgets the stubs and the recorded requests. |
 
 A request that was not stubbed raises `ZammadAPI::Test::UnstubbedRequestError`, listing
-what is stubbed, rather than answering with something empty.
+what is stubbed, rather than answering with something empty. It is deliberately not a
+`ZammadAPI::Error`: a forgotten stub means the test is wrong, not that Zammad refused
+something, so a `rescue ZammadAPI::Error` in the code under test lets it through instead of
+reporting it as an API failure.
 
 ## Type signatures
 

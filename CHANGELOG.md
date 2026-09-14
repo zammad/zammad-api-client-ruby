@@ -119,13 +119,21 @@ A breaking release that modernises the whole gem. See
   checks the hits itself, because Zammad's index endpoints cannot filter: it returns a
   record that genuinely carries the attributes asked for, or nil. What the search can
   surface is Zammad's business, so `find_by(...) || create(...)` can still create a
-  duplicate — as writing the search out by hand would.
+  duplicate — as writing the search out by hand would. Only the first page of hits is
+  examined, so a lookup costs one request whether it matches or not.
 - `ResponseError` accepts a `detail:` describing a failure that has no HTTP response of its
-  own, so `find_by!` reads as `no record matched` rather than `no response`.
+  own, so `find_by!` reads as `no record matched` rather than `no response`. Such an error
+  still reports the status its class is the name for, so a `NotFoundError` raised without a
+  request answers `404` like every other one.
 - The page size is clamped to what an endpoint serves (100 for `/api/v1/tickets`, 200 for
   a search, 1000 for the other index endpoints). Asking for more used to end iteration
   after the first page, because Zammad capped the response and the short page read as the
-  end of the list.
+  end of the list. A walk also learns the size the endpoint actually serves from its first
+  page, so an instance that pages smaller than those figures is still walked to the end
+  rather than truncated.
+- `find_each(batch_size:)` and `in_batches(of:)` raise when the collection is already
+  limited to a page. `page(3, of: 50)` and a batch size are two ways of naming the same
+  thing, and re-sizing the page behind the caller would hand back different records.
 - `ZammadAPI::PaginationError`, raised when an endpoint answers a page with the page
   before it, instead of paging forever.
 - `Base#reload`, `#persisted?`, `#[]`, `#fetch`, `#to_h` and a readable `#inspect`.
@@ -198,6 +206,16 @@ A breaking release that modernises the whole gem. See
 - A malformed or non-JSON response body no longer degrades into an empty hash that
   callers then iterate as key/value pairs.
 - Unknown resource names no longer resolve to unrelated Ruby classes.
+- Record ids are escaped everywhere they reach a path, including the attachment download
+  endpoint and `has_many` association paths, so an id carrying a traversal cannot redirect
+  a request onto another endpoint.
+- A credential carrying an unencoded `@` is redacted whole. Redaction stopped at the first
+  `@`, so the tail of such a password survived into `Config#inspect` and into every
+  `ConnectionError` message.
+- `Transport#with_config` keeps the transport's own class, so a stand-in written as a
+  `Transport` subclass survives `client.with(...)` instead of reverting to a real HTTP one.
+- `save` on a persisted record with nothing staged sends no request. The empty `PUT` it
+  used to issue was applied by Zammad, bumping `updated_at` and `updated_by`.
 
 ### Changed
 
@@ -213,7 +231,12 @@ A breaking release that modernises the whole gem. See
   logs on failure. It also runs `script/check_connection.rb` as a preflight, so a broken
   gem-to-Zammad link fails in seconds with a readable transcript instead of 53 spec errors.
 - The integration suite no longer depends on spec file order to run Zammad's auto wizard,
-  and tolerates an instance that is already set up.
+  and tolerates an instance that is already set up. Its lifecycle examples are pinned to
+  definition order and say what is missing when only part of a file is run.
+- `Test::UnstubbedRequestError` is a `StandardError` rather than a `ZammadAPI::Error`, so
+  a forgotten stub is not caught by the `rescue ZammadAPI::Error` in the code under test.
+- The test kit matches array-valued query stubs, such as `query: {ids: [1, 2]}`, which
+  could never match before.
 
 ## [1.4.0] - 2026-08-25
 - Follow up - c3af2a9 - Fixes #29 - [JSON::ParserError on gateway timeout when proxy responds with HTML](https://github.com/zammad/zammad-api-client-ruby/issues/29)
