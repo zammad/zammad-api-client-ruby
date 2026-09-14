@@ -193,6 +193,18 @@ module ZammadAPI
       previous = nil
       loop do
         records = fetch(page, @per_page)
+
+        # Before the records are handed over, not after. Yielding first meant
+        # an endpoint that ignores `page` had its repeated page imported,
+        # queued or written by the block, and only then did the guard that
+        # exists to prevent that get to look at it.
+        #
+        # Whole payloads rather than ids: an endpoint that serves records
+        # without an id would compare two empty lists on every page and so
+        # report a perfectly good paginator as stuck.
+        current = records.map(&:attributes)
+        raise PaginationError.build(operation: @operation, page: page, resource_class: @resource_class) if current == previous
+
         yield records if !records.empty?
 
         # A collection limited to a single page never advances.
@@ -202,12 +214,6 @@ module ZammadAPI
         # clamped to what the endpoint serves, so it cannot be short because
         # the server shrank it.
         break if records.size < @per_page
-
-        # Whole payloads rather than ids: an endpoint that serves records
-        # without an id would compare two empty lists on every page and so
-        # report a perfectly good paginator as stuck.
-        current = records.map(&:attributes)
-        raise PaginationError.build(operation: @operation, page: page, resource_class: @resource_class) if current == previous
 
         previous = current
         page += 1

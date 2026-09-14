@@ -111,6 +111,26 @@ RSpec.describe ZammadAPI::Collection do
       expect(collection.map(&:name)).to eq(Array.new(100) { "a#{it}" } + ['b0'])
     end
 
+    it 'does not hand the repeated page to the block before raising' do
+      stub_request(:get, url).with(query: hash_including({}))
+        .to_return(json_response(full_page))
+
+      batches = []
+
+      expect { collection.in_batches { batches << it } }.to raise_error(ZammadAPI::PaginationError)
+      expect(batches.size).to eq(1)
+    end
+
+    it 'does not yield the repeated records to each either' do
+      stub_request(:get, url).with(query: hash_including({}))
+        .to_return(json_response(full_page))
+
+      seen = 0
+
+      expect { collection.each { seen += 1 } }.to raise_error(ZammadAPI::PaginationError)
+      expect(seen).to eq(ZammadAPI::Collection::DEFAULT_PER_PAGE)
+    end
+
     it 'raises PaginationError when records without an id repeat' do
       page = Array.new(ZammadAPI::Collection::DEFAULT_PER_PAGE) { { name: "a#{it}" } }
       stub_request(:get, url).with(query: hash_including({})).to_return(json_response(page))
