@@ -220,6 +220,9 @@ module ZammadAPI
     # The options are re-validated, and any {#on_behalf_of} scope is carried
     # over. The original client keeps its own connection and settings.
     #
+    # The transport derives from the current one rather than being built from
+    # scratch, so a client wired to a stand-in stays wired to it.
+    #
     # @example A longer timeout for one bulk job
     #   bulk = client.with(timeout: 300, retries: 5)
     #   bulk.ticket.all.each { |ticket| archive(ticket) }
@@ -231,10 +234,7 @@ module ZammadAPI
       derived_config = config.with(**options)
       derived        = dup
       derived.instance_variable_set(:@config, derived_config)
-      derived.instance_variable_set(
-        :@transport,
-        Transport.new(derived_config).with_on_behalf_of(@transport.on_behalf_of)
-      )
+      derived.instance_variable_set(:@transport, @transport.with_config(derived_config))
       derived
     end
 

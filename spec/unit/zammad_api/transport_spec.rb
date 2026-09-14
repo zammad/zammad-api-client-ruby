@@ -387,6 +387,24 @@ RSpec.describe ZammadAPI::Transport do
     end
   end
 
+  describe '#with_config' do
+    it 'applies the new configuration' do
+      expect(unit_transport.with_config(ZammadAPI::Config.new(**unit_config(timeout: 7))).config.timeout).to eq(7)
+    end
+
+    it 'carries the on_behalf_of scope over' do
+      derived = unit_transport.with_on_behalf_of('agent@example.com')
+        .with_config(ZammadAPI::Config.new(**unit_config(timeout: 7)))
+
+      expect(derived.on_behalf_of).to eq('agent@example.com')
+    end
+
+    it 'returns a different transport' do
+      transport = unit_transport
+      expect(transport.with_config(transport.config)).not_to be(transport)
+    end
+  end
+
   describe 'logging' do
     subject(:log) { log_device.string }
 

@@ -148,6 +148,18 @@ module ZammadAPI
       copy
     end
 
+    # Returns a transport of this kind configured with +config+, keeping any
+    # {#with_on_behalf_of} scope.
+    #
+    # {Client#with} goes through here rather than building a Transport itself,
+    # so that a client whose transport was replaced - the test kit's stand-in,
+    # say - derives another of the same kind instead of silently reverting to
+    # a real HTTP one.
+    #
+    # @param config [Config]
+    # @return [Transport]
+    def with_config(config) = Transport.new(config).with_on_behalf_of(on_behalf_of)
+
     # @!method get(path, operation:, query: nil, resource_class: nil)
     # @!method post(path, operation:, query: nil, body: nil, resource_class: nil)
     # @!method put(path, operation:, query: nil, body: nil, resource_class: nil)

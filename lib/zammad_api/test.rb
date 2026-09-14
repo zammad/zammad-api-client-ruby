@@ -221,6 +221,11 @@ module ZammadAPI
       # a request would have carried.
       def with_on_behalf_of(identifier) = self.class.new(test, on_behalf_of: identifier&.to_s)
 
+      # {Client#with} re-validates the options and hands them here. There is
+      # no connection to rebuild, and the derived client reports the derived
+      # config itself, so the stand-in keeps answering.
+      def with_config(_config) = self
+
       %i[get post put delete].each do |verb|
         define_method(verb) do |path, **options|
           request(verb, path, **options) # steep:ignore NoMethod

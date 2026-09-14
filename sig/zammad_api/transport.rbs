@@ -19,6 +19,7 @@ module ZammadAPI
 
     def initialize: (Config) -> void
     def with_on_behalf_of: ((String | Integer)? identifier) -> Transport
+    def with_config: (Config) -> Transport
 
     def get: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
     def post: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response

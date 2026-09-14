@@ -30,6 +30,26 @@ RSpec.describe ZammadAPI::Test do
     it 'is the same client every time, rather than a new HTTP stack per call' do
       expect(zammad.client).to equal(zammad.client)
     end
+
+    describe 'a client derived with #with' do
+      it 'still answers from the stand-in instead of opening a connection' do
+        zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'Support' })
+
+        expect(zammad.client.with(timeout: 5).group.find(1).name).to eq('Support')
+        expect(a_request(:any, //)).not_to have_been_made
+      end
+
+      it 'reports the derived option' do
+        expect(zammad.client.with(timeout: 5).config.timeout).to eq(5)
+      end
+
+      it 'keeps an on_behalf_of scope' do
+        zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
+        zammad.client.on_behalf_of('agent@example.com').with(timeout: 5).group.find(1)
+
+        expect(zammad.requests.last.on_behalf_of).to eq('agent@example.com')
+      end
+    end
   end
 
   describe '#stub' do
