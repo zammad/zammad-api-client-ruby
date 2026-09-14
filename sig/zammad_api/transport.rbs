@@ -8,6 +8,7 @@ module ZammadAPI
     SENSITIVE_KEY_PATTERN: Regexp
     REDACTED: String
     UNRESERVED_IN_PATH: Regexp
+    DOT_SEGMENTS: Array[String]
 
     attr_reader config: Config
     attr_reader on_behalf_of: String?

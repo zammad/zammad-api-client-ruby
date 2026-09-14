@@ -66,6 +66,11 @@ module ZammadAPI
     # before it goes into a path segment.
     UNRESERVED_IN_PATH = /[^A-Za-z0-9\-._~]/
 
+    # Path segments that name a position rather than a record. Built entirely
+    # from unreserved characters, so the encoding above carries them through
+    # untouched.
+    DOT_SEGMENTS = ['.', '..'].freeze
+
     # @return [Config]
     attr_reader :config
 
@@ -110,16 +115,26 @@ module ZammadAPI
     # written in, and a caller that really means a sub-path can spell it out
     # with the raw request methods.
     #
+    # A dot segment is refused rather than encoded. `.` and `..` are unreserved
+    # all the way through, so the encoding below returns them exactly as they
+    # arrived and `find('..')` still resolved one path level up - onto the
+    # index endpoint, and through a has_many path onto every article on the
+    # instance offered as one ticket's. Percent-encoding the dots would hold
+    # them inside the segment here, but a proxy that normalises a path before
+    # routing it would undo that, and no Zammad record is named for one.
+    #
     # Public for the same reason as {.stringify_query}: {Test} builds the
     # paths it records with it.
     #
     # @api private
     # @param value [Object]
     # @return [String]
-    # @raise [ArgumentError] when there is nothing to send
+    # @raise [ArgumentError] when there is nothing to send, or when the id
+    #   navigates instead of naming a record
     def self.escape_path_segment(value)
       segment = value.to_s
       raise ArgumentError, 'a record id is required, and this one is empty' if segment.empty?
+      raise ArgumentError, "#{segment.inspect} points at another endpoint rather than naming a record" if DOT_SEGMENTS.include?(segment)
 
       segment.gsub(UNRESERVED_IN_PATH) { |character| character.bytes.map { format('%%%02X', it) }.join }
     end

@@ -107,6 +107,22 @@ RSpec.describe ZammadAPI::Transport do
     it 'raises for an id with nothing to send' do
       expect { described_class.escape_path_segment('') }.to raise_error(ArgumentError, /record id is required/)
     end
+
+    it 'raises for a parent dot segment, which the unreserved set would carry through' do
+      expect { described_class.escape_path_segment('..') }.to raise_error(ArgumentError, /points at another endpoint/)
+    end
+
+    it 'raises for a current-directory dot segment' do
+      expect { described_class.escape_path_segment('.') }.to raise_error(ArgumentError, /points at another endpoint/)
+    end
+
+    it 'leaves an id that merely starts with dots alone' do
+      expect(described_class.escape_path_segment('..1')).to eq('..1')
+    end
+
+    it 'encodes an already-encoded dot segment rather than passing it on' do
+      expect(described_class.escape_path_segment('%2e%2e')).to eq('%252e%252e')
+    end
   end
 
   describe 'request bodies' do
