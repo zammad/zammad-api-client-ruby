@@ -23,7 +23,7 @@ module ZammadAPI
       belongs_to :state,        class_name: 'TicketState'
       belongs_to :priority,     class_name: 'TicketPriority'
 
-      has_many :articles, class_name: 'TicketArticle', path: ->(ticket) { "api/v1/ticket_articles/by_ticket/#{ticket.id}" }
+      has_many :articles, class_name: 'TicketArticle', path: ->(id) { "api/v1/ticket_articles/by_ticket/#{id}" }
 
       # Every article of this ticket, refetched on each call.
       #

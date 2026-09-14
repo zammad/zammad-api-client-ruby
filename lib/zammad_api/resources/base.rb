@@ -139,7 +139,8 @@ module ZammadAPI
         #
         # @param name [Symbol] name of the reader on {Base#related}
         # @param class_name [String] the target resource
-        # @param path [Proc] called with the record, returns the API path
+        # @param path [Proc] called with the record id, already escaped for
+        #   a path segment, and returns the API path
         # @return [void]
         def has_many(name, class_name:, path:)
           declared_associations[name] = { type: :has_many, class_name: class_name, path: path }

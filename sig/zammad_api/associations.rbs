@@ -28,7 +28,7 @@ module ZammadAPI
       private
 
       def belongs_to_target: (Symbol name, String class_name, Symbol foreign_key) -> untyped
-      def has_many_target: (Symbol name, String class_name, ^(Resources::Base) -> String path) -> Array[untyped]
+      def has_many_target: (Symbol name, String class_name, ^(String) -> String path) -> Array[untyped]
       def resolve: (String class_name) -> untyped
     end
   end

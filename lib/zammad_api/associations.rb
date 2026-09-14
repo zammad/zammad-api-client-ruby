@@ -2,6 +2,7 @@
 
 require_relative 'errors'
 require_relative 'resource_proxy'
+require_relative 'transport'
 
 module ZammadAPI
   # Readers for the records a record points at.
@@ -50,12 +51,20 @@ module ZammadAPI
       # Deliberately not memoized: a list can grow while the record is held,
       # and +ticket.related.articles+ after +ticket.article(...)+ has to show
       # the article that was just added.
+      #
+      # The path proc is handed the escaped id rather than the record, so that
+      # a declaration cannot paste a raw id into a path. One that did resolved
+      # `related.articles` on a record carrying `id: "1/../../users"` onto the
+      # users endpoint, the same way an unescaped {Resources::Base#member_path}
+      # used to - and a proc is exactly where that is easy to forget.
       def has_many_target(name, class_name, path)
+        raise Error, "#{@record.class.name} has no id, so it has no #{name} to read; save it first" if @record.id.nil?
+
         target_class = resolve(class_name)
         operation    = "get #{name}"
 
         response = @record.transport.get(
-          path.call(@record),
+          path.call(Transport.escape_path_segment(@record.id)),
           operation:      operation,
           resource_class: target_class,
           query:          { expand: true }

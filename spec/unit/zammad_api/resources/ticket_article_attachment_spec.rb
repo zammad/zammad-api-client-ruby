@@ -73,6 +73,26 @@ RSpec.describe ZammadAPI::Resources::TicketArticleAttachment do
     it 'raises a helpful error when the metadata is incomplete' do
       expect { described_class.new(transport, id: 3).download }.to raise_error(KeyError)
     end
+
+    it 'escapes a traversal in an id instead of reaching another endpoint' do
+      stub = stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/ticket_attachment/1%2F..%2F..%2F..%2Fapi%2Fv1%2Fusers/9/3")
+        .to_return(status: 200, body: 'contents')
+      escaping = described_class.new(transport, id: 3, ticket_id: '1/../../../api/v1/users', article_id: 9)
+
+      escaping.download
+
+      expect(stub).to have_been_requested
+      expect(a_request(:get, "#{ClientHelper::BASE_URL}api/v1/users/9/3")).not_to have_been_made
+    end
+
+    it 'escapes the article id and the attachment id too' do
+      stub = stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/ticket_attachment/42/9%2F..%2Fx/3%2F..%2Fy")
+        .to_return(status: 200, body: 'contents')
+
+      described_class.new(transport, id: '3/../y', ticket_id: 42, article_id: '9/../x').download
+
+      expect(stub).to have_been_requested
+    end
   end
 
   it 'is read-only' do
