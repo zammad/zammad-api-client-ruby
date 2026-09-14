@@ -19,7 +19,7 @@ module ZammadAPI
   end
 
   class ParseError < Error
-    def self.build: (operation: String, expected: Symbol, actual: Class, ?resource_class: Class?) -> ParseError
+    def self.build: (operation: String, expected: (Symbol | String), actual: (Class | String), ?resource_class: Class?) -> ParseError
   end
 
   class PaginationError < Error

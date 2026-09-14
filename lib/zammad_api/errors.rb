@@ -37,8 +37,10 @@ module ZammadAPI
   # Raised when a response did not have the shape the caller expected.
   class ParseError < Error
     # @param operation [String]
-    # @param expected [Symbol] +:object+ or +:array+
-    # @param actual [Class] the class that was decoded instead
+    # @param expected [Symbol, String] +:object+, +:array+, or a longer
+    #   description of the shape that was wanted
+    # @param actual [Class, String] the class that was decoded instead, or a
+    #   description of it
     # @param resource_class [Class, nil]
     # @return [ParseError]
     def self.build(operation:, expected:, actual:, resource_class: nil)

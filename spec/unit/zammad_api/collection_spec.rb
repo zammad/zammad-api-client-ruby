@@ -337,6 +337,13 @@ RSpec.describe ZammadAPI::Collection do
     end
   end
 
+  it 'raises rather than building records out of a list of ids' do
+    stub_page(1, [1, 2, 3])
+
+    expect { collection.to_a }
+      .to raise_error(ZammadAPI::ParseError, /expected a JSON array of objects, got an array holding Integer/)
+  end
+
   describe '#where' do
     it 'adds query parameters' do
       stub_request(:get, url)

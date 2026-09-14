@@ -62,6 +62,28 @@ RSpec.describe ZammadAPI::Response do
       expect { build(body: []).decoded(:object, operation: 'find object', resource_class: ZammadAPI::Resources::User) }
         .to raise_error(/\(ZammadAPI::Resources::User\)/)
     end
+
+    it 'accepts an empty list' do
+      expect(build(body: []).decoded(:array, operation: 'get list')).to eq([])
+    end
+
+    # An unexpanded search answers with ids. Passing them on stored an Integer
+    # as a record's attributes, and the first reader died with a TypeError
+    # from deep inside the gem.
+    it 'raises for a list of scalars rather than building records from them' do
+      expect { build(body: [1, 2, 3]).decoded(:array, operation: 'get list') }
+        .to raise_error(ZammadAPI::ParseError, "Can't get list: expected a JSON array of objects, got an array holding Integer")
+    end
+
+    it 'raises for a list that is only partly objects' do
+      expect { build(body: [{ id: 1 }, 'nope']).decoded(:array, operation: 'get list') }
+        .to raise_error(ZammadAPI::ParseError, /an array holding String/)
+    end
+
+    it 'names the resource class when a list element has the wrong shape' do
+      expect { build(body: [1]).decoded(:array, operation: 'get list', resource_class: ZammadAPI::Resources::User) }
+        .to raise_error(/\(ZammadAPI::Resources::User\)/)
+    end
   end
 
   it 'is immutable' do

@@ -50,7 +50,7 @@ module ZammadAPI
     def decoded(shape, operation:, resource_class: nil)
       case [shape, body]
       in [:object, Hash => object] then object
-      in [:array, Array => array] then array
+      in [:array, Array => array] then array_of_objects!(array, operation: operation, resource_class: resource_class)
       else
         raise ParseError.build(
           operation:      operation,
@@ -59,6 +59,27 @@ module ZammadAPI
           resource_class: resource_class
         )
       end
+    end
+
+    private
+
+    # Only the top-level shape used to be checked, which is not what the
+    # promise above says. A search answering `[1, 2, 3]` - what an unexpanded
+    # one looks like - passed as an array, and every element went to
+    # `from_response`, which stored the Integer as a record's attributes. The
+    # first `record.id` then died with `TypeError: no implicit conversion of
+    # Symbol into Integer` from deep inside the gem: precisely the confusing
+    # failure further downstream.
+    def array_of_objects!(array, operation:, resource_class:)
+      offender = array.find { !it.is_a?(Hash) }
+      return array if offender.nil?
+
+      raise ParseError.build(
+        operation:      operation,
+        expected:       'array of objects',
+        actual:         "an array holding #{offender.class}",
+        resource_class: resource_class
+      )
     end
   end
 end

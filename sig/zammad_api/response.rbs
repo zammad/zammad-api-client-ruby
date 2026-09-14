@@ -13,5 +13,9 @@ module ZammadAPI
     def success?: () -> bool
     def json?: () -> bool
     def decoded: (Symbol shape, operation: String, ?resource_class: Class?) -> untyped
+
+    private
+
+    def array_of_objects!: (Array[untyped], operation: String, resource_class: Class?) -> Array[untyped]
   end
 end
