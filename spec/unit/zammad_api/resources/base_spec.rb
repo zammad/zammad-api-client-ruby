@@ -483,6 +483,22 @@ RSpec.describe ZammadAPI::Resources::Base do
     end
   end
 
+  describe '.member_path' do
+    it 'builds the path of one record' do
+      expect(ZammadAPI::Resources::Group.member_path(1)).to eq('api/v1/groups/1')
+    end
+
+    # ResourceProxy#find, #destroy and every instance method that reaches an
+    # endpoint go through here, so the escaping rule is applied once.
+    it 'escapes an id that would otherwise leave its segment' do
+      expect(ZammadAPI::Resources::Group.member_path('1/../users')).to eq('api/v1/groups/1%2F..%2Fusers')
+    end
+
+    it 'refuses an id that navigates' do
+      expect { ZammadAPI::Resources::Group.member_path('..') }.to raise_error(ArgumentError)
+    end
+  end
+
   describe '#destroy' do
     subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1) }
 

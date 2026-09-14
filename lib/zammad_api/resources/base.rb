@@ -78,6 +78,20 @@ module ZammadAPI
           @path || raise(Error, "#{name} does not declare an API path")
         end
 
+        # The API path of one record of this kind.
+        #
+        # The id is escaped rather than interpolated, so that one taken from a
+        # request parameter cannot walk out of its segment into another
+        # endpoint. Held here because {ResourceProxy} builds this path too,
+        # from an id a caller handed it, and an escaping rule kept in two
+        # places is one that gets changed in one of them.
+        #
+        # @api private
+        # @param id [Integer, String]
+        # @return [String]
+        # @raise [ArgumentError] when the id cannot go into a path segment
+        def member_path(id) = "#{resource_path}/#{Transport.escape_path_segment(id)}"
+
         # Builds a record that is already stored in Zammad.
         #
         # @api private
@@ -424,9 +438,13 @@ module ZammadAPI
       end
 
       def member_path
-        raise Error, "#{self.class.name} has no id, save it first" if id.nil?
+        # Read once into a local, so that the guard below narrows what is
+        # handed on - `id` is an attribute reader, and the type checker cannot
+        # tell that two calls to one answer the same thing.
+        record_id = id
+        raise Error, "#{self.class.name} has no id, save it first" if record_id.nil?
 
-        "#{self.class.resource_path}/#{Transport.escape_path_segment(id)}"
+        self.class.member_path(record_id)
       end
     end
   end

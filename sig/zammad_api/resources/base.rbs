@@ -21,6 +21,7 @@ module ZammadAPI
 
       def self.path: (String) -> void
       def self.resource_path: () -> String
+      def self.member_path: ((Integer | String) id) -> String
       def self.from_response: (Transport, Hash[untyped, untyped] attributes) -> Base
       def self.associations: () -> Hash[Symbol, Hash[Symbol, untyped]]
       def self.belongs_to_foreign_keys: () -> Array[Symbol]
