@@ -194,6 +194,19 @@ RSpec.describe ZammadAPI::Collection do
       expect { collection.find_each(batch_size: 0) { nil } }
         .to raise_error(ArgumentError, 'batch_size needs a positive integer')
     end
+
+    # Re-sizing the page silently changed which records the collection held:
+    # page(3, of: 50) names records 101 to 150, and a batch_size of 10 turned
+    # that into records 21 to 30 with nothing said about it.
+    it 'refuses to re-size a collection already limited to a page' do
+      expect { collection.page(3, of: 50).find_each(batch_size: 10) { nil } }
+        .to raise_error(ArgumentError, /batch_size cannot be combined with page/)
+    end
+
+    it 'says how to name the page it would have served' do
+      expect { collection.page(3, of: 50).find_each(batch_size: 10) { nil } }
+        .to raise_error(ArgumentError, /page\(3, of: 10\)/)
+    end
   end
 
   describe '#in_batches' do
@@ -216,6 +229,11 @@ RSpec.describe ZammadAPI::Collection do
 
     it 'returns an Enumerator without a block' do
       expect(collection.in_batches).to be_a(Enumerator)
+    end
+
+    it 'refuses to re-size a collection already limited to a page' do
+      expect { collection.page(3, of: 50).in_batches(of: 10) { nil } }
+        .to raise_error(ArgumentError, /of cannot be combined with page/)
     end
 
     it 'pulls one page per Enumerator#next' do

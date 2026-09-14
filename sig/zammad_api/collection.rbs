@@ -50,6 +50,7 @@ module ZammadAPI
 
     def ignored_message: (Array[Symbol]) -> String
     def positive_integer!: (untyped, String) -> Integer
+    def page_size!: (untyped, String) -> Integer
     def walk: () { (Array[untyped]) -> void } -> void
     def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped]) -> Collection
     def fetch: (Integer, Integer) -> Array[untyped]

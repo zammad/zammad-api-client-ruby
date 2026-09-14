@@ -74,7 +74,7 @@ module ZammadAPI
     # @return [Enumerator] when no block is given
     def find_each(batch_size: nil, &block)
       return to_enum(:find_each, batch_size: batch_size) if !block
-      return with(per_page: positive_integer!(batch_size, 'batch_size')).find_each(&block) if batch_size
+      return with(per_page: page_size!(batch_size, 'batch_size')).find_each(&block) if batch_size
 
       each(&block)
     end
@@ -90,7 +90,7 @@ module ZammadAPI
     # @return [Enumerator] when no block is given
     def in_batches(of: nil, &block)
       return to_enum(:in_batches, of: of) if !block
-      return with(per_page: positive_integer!(of, 'of')).in_batches(&block) if of
+      return with(per_page: page_size!(of, 'of')).in_batches(&block) if of
 
       walk(&block)
       self
@@ -214,6 +214,19 @@ module ZammadAPI
       value
     end
 
+    # Re-sizing the page of a collection that {#page} already limited would
+    # change which records it holds: `page(3, of: 50)` names records 101 to
+    # 150, and re-sizing to 10 behind the caller's back served records 21 to
+    # 30 instead - a different answer to the same question, with nothing said
+    # about it. The two ways of naming a page cannot both be honoured, so this
+    # says so rather than picking one, the way {#where} does.
+    def page_size!(value, name)
+      size = positive_integer!(value, name)
+      raise ArgumentError, "#{name} cannot be combined with page: page(#{@page}, of: #{@per_page}) already named which records this collection holds. Size that page with page(#{@page}, of: #{size}), or slice the records with each_slice(#{size})." if @page
+
+      size
+    end
+
     def walk
       page      = @page || 1
       previous  = nil
@@ -228,10 +241,10 @@ module ZammadAPI
         #
         # Whole payloads rather than ids: an endpoint that serves records
         # without an id would compare two empty lists on every page and so
-        # report a perfectly good paginator as stuck. A digest of them rather
-        # than the payloads themselves, because holding the previous page
-        # across the next fetch doubled a walk's peak memory for a guard that
-        # only ever asks whether two pages are equal.
+        # report a perfectly good paginator as stuck. A digest rather than the
+        # payloads themselves, because holding the previous page across the
+        # next fetch doubled a walk's peak memory for a guard that only ever
+        # asks whether two pages are equal.
         current = records.map(&:attributes).hash
         raise PaginationError.build(operation: @operation, page: page, resource_class: @resource_class) if current == previous
 
