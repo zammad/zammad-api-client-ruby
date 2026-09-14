@@ -35,6 +35,24 @@ module ZammadAPI
       Timeout::Error
     ].freeze
 
+    # Socket failures that mean the request ran out of time. Most adapters
+    # wrap these into a Faraday error, but not all do, and this gem lets a
+    # caller choose the adapter.
+    TIMEOUT_ERRORS = [Errno::ETIMEDOUT, Timeout::Error].freeze
+
+    # Socket failures that mean the instance could not be reached. Listed
+    # rather than caught as SystemCallError, so that an unrelated Errno - a
+    # logger writing to a full disk, say - is not relabelled as a network
+    # problem.
+    CONNECTION_ERRORS = [
+      Errno::ECONNREFUSED,
+      Errno::ECONNRESET,
+      Errno::EHOSTUNREACH,
+      Errno::ENETUNREACH,
+      Errno::EPIPE,
+      SocketError
+    ].freeze
+
     # Substrings that mark a request payload key as carrying a credential.
     # Matching on a substring rather than the whole key covers the variants
     # Zammad and OAuth actually send - password_confirm, access_token,
@@ -153,6 +171,12 @@ module ZammadAPI
     # @raise [ResponseError] for non-2xx responses
     # @raise [TimeoutError] when the request timed out
     # @raise [ConnectionError] when the instance was unreachable
+    #
+    # Every failure leaves here as a {ZammadAPI::Error}. The bare socket
+    # errors are caught alongside the Faraday ones because they are already
+    # in {RETRIABLE_EXCEPTIONS}, which is this class saying it expects to see
+    # them: an adapter that does not wrap them used to let them out raw once
+    # the retries were spent, past every rescue a caller had written.
     def request(method, path, operation:, query: nil, body: nil, resource_class: nil)
       started  = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       response = decode(perform(method, path, query, body))
@@ -161,11 +185,11 @@ module ZammadAPI
       return response if response.success?
 
       raise ResponseError.build(response, operation: operation, resource_class: resource_class)
-    rescue Faraday::TimeoutError => e
+    rescue Faraday::TimeoutError, *TIMEOUT_ERRORS => e
       raise TimeoutError, "Can't #{operation}: request to #{path} timed out (#{e.message})"
     rescue Faraday::SSLError => e
       raise ConnectionError, "Can't #{operation}: TLS handshake with #{config.redacted_url} failed (#{e.message})"
-    rescue Faraday::ConnectionFailed => e
+    rescue Faraday::ConnectionFailed, *CONNECTION_ERRORS => e
       raise ConnectionError, "Can't #{operation}: #{config.redacted_url} is unreachable (#{e.message})"
     end
 

@@ -210,6 +210,41 @@ RSpec.describe ZammadAPI::Transport do
         .to raise_error(ZammadAPI::ConnectionError) { |error| expect(error.message).not_to include('url-s3cret') }
     end
 
+    context 'with an adapter that does not wrap socket errors' do
+      # The middleware seam raises from inside the stack, past the point where
+      # an adapter would normally translate the error into a Faraday one.
+      def raising(error)
+        unit_transport(middleware: lambda { |faraday|
+          faraday.use(Class.new(Faraday::Middleware) { define_method(:call) { |_env| raise error } })
+        })
+      end
+
+      it 'wraps a bare Errno::ETIMEDOUT' do
+        expect { raising(Errno::ETIMEDOUT).get('api/v1/groups', operation: 'find object') }
+          .to raise_error(ZammadAPI::TimeoutError, /timed out/)
+      end
+
+      it 'wraps a bare Timeout::Error' do
+        expect { raising(Timeout::Error).get('api/v1/groups', operation: 'find object') }
+          .to raise_error(ZammadAPI::TimeoutError)
+      end
+
+      it 'wraps a bare Errno::ECONNREFUSED' do
+        expect { raising(Errno::ECONNREFUSED).get('api/v1/groups', operation: 'find object') }
+          .to raise_error(ZammadAPI::ConnectionError, /is unreachable/)
+      end
+
+      it 'wraps a SocketError' do
+        expect { raising(SocketError).get('api/v1/groups', operation: 'find object') }
+          .to raise_error(ZammadAPI::ConnectionError)
+      end
+
+      it 'leaves an unrelated Errno alone rather than calling it a network problem' do
+        expect { raising(Errno::ENOSPC).get('api/v1/groups', operation: 'find object') }
+          .to raise_error(Errno::ENOSPC)
+      end
+    end
+
     it 'raises a TransportError subclass so both can be rescued together' do
       stub_request(:get, url).to_raise(Errno::ECONNREFUSED)
       expect { unit_transport.get('api/v1/groups', operation: 'find object') }
