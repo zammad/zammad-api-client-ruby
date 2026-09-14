@@ -32,7 +32,14 @@ module ZammadAPI
     #
     # The message lists what is stubbed, because the usual cause is a path that
     # differs from the expected one.
-    class UnstubbedRequestError < Error; end
+    #
+    # Deliberately outside {ZammadAPI::Error}: this says the test is wrong, not
+    # that Zammad refused something, and code under test is written to handle
+    # the latter. Inside the hierarchy, the `rescue ZammadAPI::Error` that this
+    # gem's own examples recommend swallowed a forgotten stub and reported it
+    # as an API failure - so a test asserting the error path passed green over
+    # a request it had never declared.
+    class UnstubbedRequestError < StandardError; end
 
     # One request the code under test made.
     #

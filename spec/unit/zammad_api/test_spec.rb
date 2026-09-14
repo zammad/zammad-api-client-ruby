@@ -215,8 +215,21 @@ RSpec.describe ZammadAPI::Test do
       expect { client.group.find(1) }.to raise_error(%r{stubbed: GET api/v1/groups/2})
     end
 
-    it 'is a ZammadAPI::Error, so a suite can rescue it with the rest' do
-      expect(described_class::UnstubbedRequestError.ancestors).to include(ZammadAPI::Error)
+    it 'is outside ZammadAPI::Error, so code under test cannot rescue it as an API failure' do
+      expect(described_class::UnstubbedRequestError.ancestors).not_to include(ZammadAPI::Error)
+      expect(described_class::UnstubbedRequestError.ancestors).to include(StandardError)
+    end
+
+    it 'escapes a rescue of the gem\'s errors, the way the examples write one' do
+      zammad.stub(:get, 'api/v1/groups/2', body: { id: 2 })
+
+      caller_with_a_rescue = lambda do
+        client.group.find(1)
+      rescue ZammadAPI::Error
+        :handled_as_an_api_failure
+      end
+
+      expect { caller_with_a_rescue.call }.to raise_error(described_class::UnstubbedRequestError)
     end
   end
 
