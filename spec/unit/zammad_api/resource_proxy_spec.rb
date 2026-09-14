@@ -115,65 +115,122 @@ RSpec.describe ZammadAPI::ResourceProxy do
   end
 
   describe '#find_by' do
-    it 'asks for a single record rather than a whole page' do
-      stub = stub_request(:get, url)
-        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => '1', 'name' => 'Users' })
+    let(:search_url) { "#{url}/search" }
+
+    it 'searches instead of filtering an index that cannot filter' do
+      stub = stub_request(:get, search_url)
+        .with(query: hash_including('query' => 'Users'))
         .to_return(json_response([{ id: 1, name: 'Users' }]))
 
       proxy.find_by(name: 'Users')
+
       expect(stub).to have_been_requested
+      expect(a_request(:get, url).with(query: hash_including({}))).not_to have_been_made
     end
 
     it 'returns the matching record' do
-      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([{ id: 1, name: 'Users' }]))
+      stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response([{ id: 1, name: 'Users' }]))
 
       expect(proxy.find_by(name: 'Users').id).to eq(1)
     end
 
     it 'returns a persisted record' do
-      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([{ id: 1 }]))
+      stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response([{ id: 1, name: 'Users' }]))
 
       expect(proxy.find_by(name: 'Users')).to be_persisted
     end
 
+    it 'skips a hit the search returned that does not actually match' do
+      stub_request(:get, search_url).with(query: hash_including({}))
+        .to_return(json_response([{ id: 1, name: 'Users Archive' }, { id: 2, name: 'Users' }]))
+
+      expect(proxy.find_by(name: 'Users').id).to eq(2)
+    end
+
+    it 'returns nil when the search matched nothing this record carries' do
+      stub_request(:get, search_url).with(query: hash_including({}))
+        .to_return(json_response([{ id: 1, name: 'Users Archive' }]))
+
+      expect(proxy.find_by(name: 'Users')).to be_nil
+    end
+
     it 'returns nil when nothing matched' do
-      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([]))
+      stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response([]))
 
       expect(proxy.find_by(name: 'Nope')).to be_nil
     end
 
-    it 'costs a single request' do
-      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([{ id: 1 }]))
+    it 'matches on every attribute given, not just one' do
+      stub_request(:get, search_url).with(query: hash_including({}))
+        .to_return(json_response([{ id: 1, name: 'Users', active: false }, { id: 2, name: 'Users', active: true }]))
+
+      expect(proxy.find_by(name: 'Users', active: true).id).to eq(2)
+    end
+
+    it 'puts every value in the search term' do
+      stub = stub_request(:get, search_url)
+        .with(query: hash_including('query' => 'Users true'))
+        .to_return(json_response([]))
+
+      proxy.find_by(name: 'Users', active: true)
+      expect(stub).to have_been_requested
+    end
+
+    it 'stops at the first match rather than walking the rest of the search' do
+      stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response([{ id: 1, name: 'Users' }]))
 
       proxy.find_by(name: 'Users')
-      expect(a_request(:get, url).with(query: hash_including({}))).to have_been_made.once
+      expect(a_request(:get, search_url).with(query: hash_including({}))).to have_been_made.once
+    end
+
+    it 'rejects a lookup with no attribute at all' do
+      expect { proxy.find_by }.to raise_error(ArgumentError, /at least one attribute/)
+    end
+
+    it 'rejects a lookup with nothing to search for' do
+      expect { proxy.find_by(name: '') }.to raise_error(ArgumentError, /value to search for/)
+    end
+
+    it 'makes no request for a lookup it rejects' do
+      expect { proxy.find_by(name: nil) }.to raise_error(ArgumentError)
+      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
     end
   end
 
   describe '#find_by!' do
+    let(:search_url) { "#{url}/search" }
+
     it 'returns the matching record' do
-      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([{ id: 1 }]))
+      stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response([{ id: 1, name: 'Users' }]))
 
       expect(proxy.find_by!(name: 'Users').id).to eq(1)
     end
 
     it 'raises NotFoundError when nothing matched' do
-      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([]))
+      stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response([]))
 
       expect { proxy.find_by!(name: 'Nope') }.to raise_error(ZammadAPI::NotFoundError)
     end
 
+    it 'raises when the search answered with a record that does not match' do
+      stub_request(:get, search_url).with(query: hash_including({}))
+        .to_return(json_response([{ id: 1, name: 'Users Archive' }]))
+
+      expect { proxy.find_by!(name: 'Users') }.to raise_error(ZammadAPI::NotFoundError)
+    end
+
     it 'names the query and the resource in the message' do
-      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([]))
+      stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response([]))
 
       expect { proxy.find_by!(name: 'Nope', active: true) }
         .to raise_error("Can't find object by name and active (ZammadAPI::Resources::Group): no record matched")
     end
 
     it 'does not put the values it searched for in the message' do
-      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([]))
+      stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response([]))
 
-      expect { proxy.find_by!(name: 'secret-ish') }.to raise_error(/^(?!.*secret-ish)/)
+      expect { proxy.find_by!(name: 'secret-group') }
+        .to raise_error(ZammadAPI::NotFoundError) { |error| expect(error.message).not_to include('secret-group') }
     end
   end
 
@@ -237,11 +294,32 @@ RSpec.describe ZammadAPI::ResourceProxy do
   describe '#where' do
     it 'returns a collection carrying the query parameters' do
       stub = stub_request(:get, url)
-        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => '100', 'active' => 'true' })
+        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => '100', 'sort_by' => 'name' })
         .to_return(json_response([]))
 
-      proxy.where(active: true).to_a
+      proxy.where(sort_by: 'name').to_a
       expect(stub).to have_been_requested
+    end
+
+    it 'refuses an attribute filter the index endpoint would ignore' do
+      expect { proxy.where(active: true) }
+        .to raise_error(ArgumentError, %r{api/v1/groups ignores active})
+    end
+
+    it 'points at the call that can narrow by a value' do
+      expect { proxy.where(active: true) }.to raise_error(ArgumentError, /use find_by for one record or search for many/)
+    end
+
+    it 'makes no request for a filter it rejects' do
+      expect { proxy.where(active: true) }.to raise_error(ArgumentError)
+      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+    end
+
+    context 'with an endpoint that does not even sort' do
+      it 'says so, naming what it does honour' do
+        expect { unit_client.ticket.where(sort_by: 'created_at') }
+          .to raise_error(ArgumentError, /honours nothing beyond paging/)
+      end
     end
   end
 
@@ -386,11 +464,16 @@ RSpec.describe ZammadAPI::ResourceProxy do
 
     it 'takes extra query parameters through where' do
       stub = stub_request(:get, "#{url}/search")
-        .with(query: hash_including('query' => 'support', 'limit' => '5'))
+        .with(query: hash_including('query' => 'support', 'sort_by' => 'name'))
         .to_return(json_response([]))
 
-      proxy.search('support').where(limit: 5).to_a
+      proxy.search('support').where(sort_by: 'name').to_a
       expect(stub).to have_been_requested
+    end
+
+    it 'refuses a parameter the search endpoint would ignore' do
+      expect { proxy.search('support').where(name: 'Users') }
+        .to raise_error(ArgumentError, /Put the value in the search term instead/)
     end
 
     it 'requires a term' do

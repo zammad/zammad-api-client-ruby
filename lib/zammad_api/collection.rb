@@ -17,8 +17,8 @@ module ZammadAPI
   # @example Iterate every ticket
   #   client.ticket.all.each { |ticket| puts ticket.title }
   #
-  # @example Filter, then stop after the first five matches
-  #   client.ticket.where(state: 'open').first(5)
+  # @example Narrow to matches, then stop after the first five
+  #   client.ticket.search('state.name:open').first(5)
   #
   # @example Work in batches, e.g. for an import
   #   client.ticket.all.in_batches(of: 500) { |tickets| import(tickets) }
@@ -42,13 +42,15 @@ module ZammadAPI
     private_constant :RESERVED_QUERY_KEYS
 
     # @api private
-    def initialize(transport:, resource_class:, path:, operation:, max_per_page:, query: {}, per_page: DEFAULT_PER_PAGE, page: nil, countable: false)
+    def initialize(transport:, resource_class:, path:, operation:, max_per_page:, filterable:, filter_hint:, query: {}, per_page: DEFAULT_PER_PAGE, page: nil, countable: false)
       @transport      = transport
       @resource_class = resource_class
       @path           = path
       @operation      = operation
       @query          = query
       @max_per_page   = max_per_page
+      @filterable     = filterable
+      @filter_hint    = filter_hint
       @per_page       = clamp_per_page(per_page)
       @page           = page
       @countable      = countable
@@ -114,12 +116,24 @@ module ZammadAPI
 
     # Returns a new collection with additional query parameters applied.
     #
-    # @param params [Hash] Zammad query parameters, e.g. +state:+ or +sort_by:+
+    # Only parameters the endpoint actually reads are accepted. Zammad drops
+    # the ones it does not know rather than refusing them, so
+    # +client.user.where(email: 'someone@example.com')+ used to come back as
+    # the whole user index and nothing said otherwise - the caller iterated
+    # every user believing they had matched one. An endpoint that cannot
+    # answer the question has to say so.
+    #
+    # @param params [Hash] query parameters the endpoint honours
     # @return [Collection]
-    # @raise [ArgumentError] for a parameter this collection controls itself
+    # @raise [ArgumentError] for a parameter this collection controls itself,
+    #   or one the endpoint would ignore
+    # @see ResourceProxy#find_by for looking a record up by attribute value
     def where(**params)
       reserved = params.keys & RESERVED_QUERY_KEYS
       raise ArgumentError, "#{reserved.join(', ')} cannot be passed to where: use page, in_batches or find_each for paging, pass a search term to search, and leave expand and only_total_count to the collection" if !reserved.empty?
+
+      ignored = params.keys - @filterable
+      raise ArgumentError, ignored_message(ignored) if !ignored.empty?
 
       with(query: @query.merge(params))
     end
@@ -176,7 +190,7 @@ module ZammadAPI
     # decides which records that page holds and so cannot be narrowed.
     #
     # @example
-    #   client.ticket.where(state: 'merged').empty?
+    #   client.ticket.search('state.name:merged').empty?
     #
     # @return [Boolean]
     def empty? = (@page ? self : page(1, of: 1)).first.nil?
@@ -186,6 +200,13 @@ module ZammadAPI
     end
 
     private
+
+    def ignored_message(ignored)
+      honoured = @filterable.empty? ? 'nothing beyond paging' : @filterable.join(', ')
+
+      "#{@path} ignores #{ignored.join(', ')}, so where would hand back unfiltered records. " \
+        "That endpoint honours #{honoured}. #{@filter_hint}"
+    end
 
     def positive_integer!(value, name)
       raise ArgumentError, "#{name} needs a positive integer" if !value.is_a?(Integer) || !value.positive?
@@ -232,6 +253,8 @@ module ZammadAPI
         path:           @path,
         operation:      @operation,
         max_per_page:   @max_per_page,
+        filterable:     @filterable,
+        filter_hint:    @filter_hint,
         query:          query,
         per_page:       per_page,
         page:           page,

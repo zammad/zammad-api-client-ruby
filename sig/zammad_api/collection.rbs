@@ -11,6 +11,8 @@ module ZammadAPI
     @operation: String
     @query: Hash[Symbol, untyped]
     @max_per_page: Integer
+    @filterable: Array[Symbol]
+    @filter_hint: String
     @per_page: Integer
     @page: Integer?
     @countable: bool
@@ -21,6 +23,8 @@ module ZammadAPI
       path: String,
       operation: String,
       max_per_page: Integer,
+      filterable: Array[Symbol],
+      filter_hint: String,
       ?query: Hash[Symbol, untyped],
       ?per_page: Integer,
       ?page: Integer?,
@@ -44,6 +48,7 @@ module ZammadAPI
 
     private
 
+    def ignored_message: (Array[Symbol]) -> String
     def positive_integer!: (untyped, String) -> Integer
     def walk: () { (Array[untyped]) -> void } -> void
     def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped]) -> Collection

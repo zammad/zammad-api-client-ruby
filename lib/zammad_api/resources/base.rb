@@ -25,6 +25,16 @@ module ZammadAPI
       # whose endpoint caps lower override this.
       MAX_PER_PAGE = 1000
 
+      # Query parameters this resource's index endpoint honours, beyond the
+      # paging {Collection} owns.
+      #
+      # ApplicationController#model_index_render builds its query as
+      # `reorder(order_sql).offset(...).limit(...)` - it sorts and pages and
+      # drops every other parameter. There is no attribute filtering on an
+      # index endpoint at all; that is what /search is for. Resources whose
+      # controller hardcodes the order override this with an empty list.
+      INDEX_QUERY_KEYS = %i[sort_by order_by].freeze
+
       # Staged changes as +attribute => [old_value, new_value]+.
       #
       # A copy, and frozen: writing to the change set a record hands out would

@@ -17,8 +17,13 @@ client = ZammadAPI::Client.from_env
 company, email, firstname, lastname = ARGV
 abort "usage: #{$PROGRAM_NAME} COMPANY EMAIL FIRSTNAME LASTNAME" if [company, email, firstname, lastname].any?(&:nil?)
 
-# `find_by` asks for a single record rather than a page, and returns nil when
-# there is none.
+# `find_by` searches and then checks the hits itself, because Zammad's index
+# endpoints cannot filter. It returns a record that genuinely carries the
+# attribute, or nil - never an unrelated one.
+#
+# What the search surfaces is Zammad's business, so a value it has not indexed
+# is a record this will not find, and the `|| create` below would then make a
+# second organization. Searching by hand has the same gap.
 organization = client.organization.find_by(name: company) ||
                client.organization.create(name: company)
 

@@ -144,21 +144,21 @@ RSpec.describe ZammadAPI::Test do
 
     describe 'query matching' do
       it 'matches a stub that names a subset of the parameters' do
-        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { active: true })
+        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name' })
 
-        expect(client.group.where(active: true).first.id).to eq(1)
+        expect(client.group.where(sort_by: 'name').first.id).to eq(1)
       end
 
       it 'does not answer a request without those parameters' do
-        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { active: true })
+        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name' })
 
         expect { client.group.all.to_a }.to raise_error(described_class::UnstubbedRequestError)
       end
 
       it 'ignores the parameters the client adds itself' do
-        zammad.stub(:get, 'api/v1/groups', body: [], query: { active: true })
+        zammad.stub(:get, 'api/v1/groups', body: [], query: { sort_by: 'name' })
 
-        expect { client.group.where(active: true).to_a }.not_to raise_error
+        expect { client.group.where(sort_by: 'name').to_a }.not_to raise_error
       end
 
       it 'keeps answering when a catch-all for the same endpoint follows it' do
@@ -254,8 +254,8 @@ RSpec.describe ZammadAPI::Test do
     end
 
     it 'rejects a nil query value the way the transport does' do
-      expect { client.group.where(note: nil).to_a }
-        .to raise_error(ArgumentError, /query parameter note is nil/)
+      expect { client.group.where(sort_by: nil).to_a }
+        .to raise_error(ArgumentError, /query parameter sort_by is nil/)
     end
 
     it 'records requests oldest first' do

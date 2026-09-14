@@ -20,7 +20,7 @@ A breaking release that modernises the whole gem. See
   10 for `search`.
 - Collections are built up by chaining instead of by keyword arguments:
   `all(per_page: 50)` is now `find_each(batch_size: 50)` or `page(1, of: 50)`,
-  `all(active: true)` is `where(active: true)`,
+  `all(active: true)` is `find_by(active: true)` or `search(...)`,
   `search(query: 'zammad')` is `search('zammad')`,
   and `search(query: 'z', page: 2, per_page: 50)` is `search('z').page(2, of: 50)`.
   `all` accepted those keywords and then discarded them, so its page size was always
@@ -37,7 +37,7 @@ A breaking release that modernises the whole gem. See
 - There is no `per`. The page size belongs to the call that reads: `find_each(batch_size:)`
   to walk, `in_batches(of:)` to batch, `page(number, of:)` for one page. Everything else —
   `each`, `first`, `lazy`, `count` — fetches 100 per request.
-- `where` rejects `page`, `per_page`, `expand` and `only_total_count` with an
+- `where` rejects `page`, `per_page`, `expand`, `only_total_count` and `query` with an
   `ArgumentError`. They used to be accepted and silently overridden.
 - A `nil` query value raises `ArgumentError`. 1.x dropped the parameter, so
   `where(owner_id: nil)` requested every ticket and the caller iterated all of them
@@ -101,7 +101,12 @@ A breaking release that modernises the whole gem. See
   `#retry_after`). Network failures raise `ConnectionError` or `TimeoutError` instead of
   leaking Faraday exceptions.
 - `Collection#where`, `#page`, `#in_batches`, `#find_each`, `#count` and lazy
-  enumeration, plus `client.x.where(...)` as a shorthand for `all.where(...)`.
+  enumeration, plus `client.x.where(...)` as a shorthand for `all.where(...)`. `where`
+  accepts only parameters the endpoint reads — `sort_by` and `order_by` on a generic
+  index, nothing beyond paging on `/api/v1/tickets` and `/api/v1/users`, and the search
+  parameters on a `/search` endpoint — and raises `ArgumentError` for anything else.
+  Zammad drops a parameter it does not know rather than refusing it, so an attribute
+  filter on an index endpoint came back as the whole unfiltered list.
 - A resource proxy is `Enumerable` over `all`, so `client.ticket.each`,
   `client.ticket.first(5)`, `client.ticket.map`, `#find_each`, `#in_batches`, `#page`,
   `#pluck` and `#count` all work without naming `all`. `client.x.find(id)` keeps
@@ -109,9 +114,12 @@ A breaking release that modernises the whole gem. See
 - `Collection#count` costs a single request on a search endpoint, which Zammad can count
   without returning the records.
 - `Collection#pluck(*attributes)`, for reading one or more attributes from every record.
-- `client.<resource>.find_by(**params)` and `#find_by!`, which request a single record
-  rather than the page of 100 that `where(...).first` would have fetched, and
-  `client.<resource>.exists?(id)`.
+- `client.<resource>.find_by(**params)` and `#find_by!`, which look a record up by
+  attribute value, and `client.<resource>.exists?(id)`. `find_by` searches and then
+  checks the hits itself, because Zammad's index endpoints cannot filter: it returns a
+  record that genuinely carries the attributes asked for, or nil. What the search can
+  surface is Zammad's business, so `find_by(...) || create(...)` can still create a
+  duplicate — as writing the search out by hand would.
 - `ResponseError` accepts a `detail:` describing a failure that has no HTTP response of its
   own, so `find_by!` reads as `no record matched` rather than `no response`.
 - The page size is clamped to what an endpoint serves (100 for `/api/v1/tickets`, 200 for

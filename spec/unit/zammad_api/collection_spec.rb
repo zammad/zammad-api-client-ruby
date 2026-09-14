@@ -276,14 +276,23 @@ RSpec.describe ZammadAPI::Collection do
   describe '#where' do
     it 'adds query parameters' do
       stub_request(:get, url)
-        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => '100', 'active' => 'true' })
+        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => '100', 'sort_by' => 'name' })
         .to_return(json_response([{ id: 1 }]))
 
-      expect(collection.where(active: true).map(&:id)).to eq([1])
+      expect(collection.where(sort_by: 'name').map(&:id)).to eq([1])
     end
 
     it 'returns a new collection' do
-      expect(collection.where(active: true)).not_to be(collection)
+      expect(collection.where(sort_by: 'name')).not_to be(collection)
+    end
+
+    it 'rejects an attribute filter the endpoint would drop' do
+      expect { collection.where(name: 'Users') }
+        .to raise_error(ArgumentError, /ignores name, so where would hand back unfiltered records/)
+    end
+
+    it 'names what the endpoint does honour' do
+      expect { collection.where(name: 'Users') }.to raise_error(ArgumentError, /honours sort_by, order_by/)
     end
 
     %i[page per_page expand only_total_count].each do |reserved|

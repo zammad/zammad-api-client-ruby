@@ -173,6 +173,61 @@ end
 
 check('search') { "#{CLIENT.user.search(LOGIN).to_a.size} hits" }
 
+# These were never driven against a live Zammad, which is why nobody noticed
+# that an attribute passed to `where` never reached the query at all.
+check('find_by returns a record that matches') do
+  found = CLIENT.group.find_by(name: "smoke-#{SUFFIX}")
+  raise 'no record found' if found.nil?
+  raise "found the wrong record: #{found.name}" if found.name != "smoke-#{SUFFIX}"
+
+  "id=#{found.id}"
+end
+
+check('find_by returns nil for no match') do
+  found = CLIENT.group.find_by(name: "no-such-group-#{SUFFIX}")
+  raise "expected nil, got #{found.inspect}" if !found.nil?
+
+  'nil'
+end
+
+check('find_by! raises for no match') do
+  CLIENT.group.find_by!(name: "no-such-group-#{SUFFIX}")
+  raise 'expected NotFoundError'
+rescue ZammadAPI::NotFoundError
+  'raised'
+end
+
+check('exists?') do
+  raise 'the created group is missing' if !CLIENT.group.exists?(@group.id)
+  raise 'a made-up id exists' if CLIENT.group.exists?(0)
+
+  'true and false'
+end
+
+check('pluck') do
+  names = CLIENT.group.all.pluck(:name)
+  raise 'created group missing' if !names.include?("smoke-#{SUFFIX}")
+
+  "#{names.size} names"
+end
+
+check('empty? on a search with no hits') do
+  raise 'expected empty' if !CLIENT.group.search("no-such-group-#{SUFFIX}").empty?
+
+  'true'
+end
+
+check('where refuses a filter the endpoint would drop') do
+  CLIENT.group.where(name: "smoke-#{SUFFIX}").to_a
+  raise 'expected ArgumentError'
+rescue ArgumentError => e
+  e.message.split('.').first
+end
+
+check('where accepts a parameter the endpoint honours') do
+  "#{CLIENT.group.all.where(sort_by: 'name').page(1, of: 2).to_a.size} record(s)"
+end
+
 section 'Tickets'
 
 check!('create a ticket with its first article') do

@@ -42,6 +42,6 @@ puts "sending #{ticket.changes.inspect}"
 ticket.save
 
 # Collections paginate themselves, and `first` stops as soon as it has enough.
-client.ticket.where(state: 'open').first(5).each do |open_ticket|
+client.ticket.search('state.name:open').first(5).each do |open_ticket|
   puts "open: ##{open_ticket.number} #{open_ticket.title}"
 end

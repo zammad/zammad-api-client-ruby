@@ -212,13 +212,22 @@ group.fetch(:name) # raises KeyError if the attribute is absent
 group.to_h       # every attribute, as a Hash you may modify
 ```
 
-Or by attribute, which asks for a single record rather than a whole page:
+Or by attribute value:
 
 ```ruby
 client.user.find_by(email: 'someone@example.com') # => the record, or nil
 client.user.find_by!(email: 'nobody@example.com') # raises NotFoundError
 client.group.exists?(42)                          # => true
 ```
+
+`find_by` searches and then checks the hits itself, because Zammad's index endpoints
+cannot filter — see [Filters](#filters). A record it returns genuinely carries the
+attributes you asked for, compared exactly and against the value as Zammad stores it, so
+`find_by(email: 'Someone@Example.com')` does not match a login Zammad downcased.
+
+What the search can surface is Zammad's business: a value the instance has not indexed, or
+cannot index, is a record `find_by` will not find. `find_by(...) || create(...)` can
+therefore still create a duplicate — as writing the search out by hand would.
 
 Zammad records can carry administrator-defined custom attributes, so an unknown reader
 returns `nil` rather than raising. Use `fetch` when a missing attribute should be an error.
@@ -423,17 +432,35 @@ end
 
 ### Filters
 
+**Zammad's index endpoints do not filter.** `ApplicationController#model_index_render`
+sorts and pages and drops every other parameter, and `/api/v1/tickets` and
+`/api/v1/users` hardcode their order, so they honour nothing beyond paging. Filtering by
+an attribute value exists only on the `/search` endpoints.
+
+So `where` accepts only what the endpoint actually reads, and says so about anything else
+rather than handing back an unfiltered list:
+
 ```ruby
-client.ticket.where(state: 'open').first(10)   # a filtered collection
-client.group.all.where(active: true)           # the same, from an existing collection
+client.group.all.where(sort_by: 'name', order_by: 'DESC')  # honoured
+client.ticket.where(state: 'open')
+# ArgumentError: api/v1/tickets ignores state, so where would hand back unfiltered
+# records. That endpoint honours nothing beyond paging. Zammad filters by attribute
+# value only through a search endpoint, so use find_by for one record or search for many.
 ```
 
-`where` takes Zammad query parameters, such as `sort_by` where the endpoint supports it.
-Paging is not one of them: that is what `page`, `in_batches` and `find_each` are for, and passing `page:` or
-`per_page:` to `where` raises `ArgumentError` rather than being silently ignored.
+Narrow by a value with [`find_by`](#fetch) for one record, or `search` for many:
+
+```ruby
+client.user.find_by(email: 'someone@example.com')
+client.ticket.search('state.name:open').first(10)
+```
+
+Paging is not a filter either: that is what `page`, `in_batches` and `find_each` are for,
+and passing `page:` or `per_page:` to `where` raises `ArgumentError` rather than being
+silently ignored. So does `query:`, which is the term `search` set.
 
 A `nil` value raises too. There is no query string that means "this field is null", so
-`where(owner_id: nil)` cannot ask for unassigned tickets — it would ask for all of them.
+`where(owner_id: nil)` could not ask for unassigned tickets — it would ask for all of them.
 
 ### Search
 
@@ -497,8 +524,8 @@ client.ticket.all.count                         # one request per page of 100
 rather than a page:
 
 ```ruby
-client.ticket.where(state: 'merged').empty? # one request, for one record
-client.group.all.size                       # => 12
+client.ticket.search('state.name:merged').empty? # one request, for one record
+client.group.all.size                            # => 12
 ```
 
 Nothing is cached, so every traversal of a collection fetches again.
@@ -744,7 +771,7 @@ at the call site. Start with the handful of changes that do not.
 | `collection.each_page { ... }`           | `collection.in_batches { ... }`                  | Ruby already has a name for this                                    |
 | `collection[3]`                          | `collection.page(4, of: 1).first`                | An index that costs a request, and that ignored `page`, was a trap  |
 | `client.x.all(per_page: 50)`             | `client.x.all.page(1, of: 50)`, `find_each(batch_size: 50)` | `all` accepted the argument and discarded it; page size belongs to the call that reads |
-| `client.x.all(active: true)`             | `client.x.where(active: true)`                   | Same: the filter never reached the request                          |
+| `client.x.all(active: true)`             | `client.x.find_by(active: true)` or `client.x.search(...)` | The filter never reached the request in 1.x, and could not have: Zammad's index endpoints do not filter. `where` now raises instead of quietly returning everything |
 | `client.x.search(query: 'zammad')`       | `client.x.search('zammad')`                      | The search term is the argument, not a keyword                      |
 | `client.x.search(query: 'z', page: 2, per_page: 50)` | `client.x.search('z').page(2, of: 50)` | Search did honour those two; paging is the collection's job now     |
 

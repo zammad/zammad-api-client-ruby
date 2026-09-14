@@ -13,12 +13,15 @@ module ZammadAPI
     end
 
     class User < Base
+      INDEX_QUERY_KEYS: Array[Symbol]
+
       # Narrowed from Base so Client#me returns the concrete user type.
       def self.from_response: (Transport, Hash[untyped, untyped] attributes) -> User
     end
 
     class Ticket < Base
       MAX_PER_PAGE: Integer
+      INDEX_QUERY_KEYS: Array[Symbol]
 
       def articles: () -> Array[TicketArticle]
       def article: (?Hash[untyped, untyped] attributes) -> TicketArticle

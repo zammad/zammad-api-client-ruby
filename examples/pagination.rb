@@ -39,15 +39,17 @@ puts "detect             ##{tickets.detect { it.state == 'open' }&.number}, stop
 # One specific page, when you are driving the paging yourself.
 puts "page(2, of: 10)    #{tickets.page(2, of: 10).map(&:id).inspect}"
 
-# Filters are Zammad query parameters, and compose with all of the above.
-puts "where(state:)      #{client.ticket.where(state: 'open').first(5).size} open tickets"
+# Narrowing by a value is `search`, not `where`: Zammad's index endpoints sort
+# and page and drop every other parameter, so `where(state: 'open')` raises
+# rather than handing back every ticket. Searches compose with all of the above.
+puts "search             #{client.ticket.search('state.name:open').first(5).size} open tickets"
 
 # Counting a search is one request, because Zammad answers it with a total.
 # An index endpoint has to be walked page by page.
 puts "search.count       #{client.ticket.search('state.name:open').count}, one request"
-puts "empty?             #{client.ticket.where(state: 'merged').empty?}, asks for a single record"
+puts "empty?             #{client.ticket.search('state.name:merged').empty?}, asks for a single record"
 
-# `where` and `page` return a new collection, so scoping one never disturbs
+# `search` and `page` return a new collection, so scoping one never disturbs
 # the original.
 puts "immutable          #{tickets.page(2).equal?(tickets)}"
 
