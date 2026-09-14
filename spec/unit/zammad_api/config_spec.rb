@@ -275,6 +275,23 @@ RSpec.describe ZammadAPI::Config do
         .to eq('https://zammad.example.com/tenant@acme/')
     end
 
+    # Bounded only by the path, the match crossed into the query string and
+    # rendered a host that does not exist - into every ConnectionError message.
+    it 'leaves an @ in a query string alone' do
+      expect(build(url: 'https://zammad.example.com?tenant=a@acme').redacted_url)
+        .to eq('https://zammad.example.com?tenant=a@acme/')
+    end
+
+    it 'leaves an @ in a fragment alone' do
+      expect(build(url: 'https://zammad.example.com#a@b').redacted_url)
+        .to eq('https://zammad.example.com#a@b/')
+    end
+
+    it 'still blanks credentials on a url that also carries an @ later on' do
+      expect(build(url: 'https://admin:s3cret@zammad.example.com/tenant@acme/').redacted_url)
+        .to eq('https://[REDACTED]@zammad.example.com/tenant@acme/')
+    end
+
     it 'leaves a url without credentials alone' do
       expect(build(url: 'https://zammad.example.com/').redacted_url).to eq('https://zammad.example.com/')
     end

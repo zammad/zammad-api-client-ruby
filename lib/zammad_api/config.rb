@@ -91,7 +91,14 @@ module ZammadAPI
     # a password may carry an unencoded one: +pa@ss+ used to leave +@ss+ in
     # the rendered URL, and a partly redacted credential still reaches every
     # log and exception report the whole one was kept out of.
-    USERINFO_PATTERN = %r{(?<=://)[^/]+(?=@)}
+    #
+    # Bounded by +?+ and +#+ as well as +/+, so that it stays inside the
+    # authority. Bounded only by the path, it crossed into a query string and
+    # read an +@+ there as a credential marker: +https://host?a=b@c+ rendered
+    # as +https://[REDACTED]@c+, a host that does not exist - printed in every
+    # ConnectionError and TimeoutError message and in {#inspect}, so the
+    # operator debugging an outage was shown the wrong instance.
+    USERINFO_PATTERN = %r{(?<=://)[^/?\#]+(?=@)}
 
     def initialize(
       url:,
