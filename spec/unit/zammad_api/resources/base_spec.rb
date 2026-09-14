@@ -520,6 +520,44 @@ RSpec.describe ZammadAPI::Resources::Base do
         expect { group.save }.to raise_error(ZammadAPI::Error, /was destroyed/)
       end
     end
+
+    context 'with state staged before it was destroyed' do
+      before do
+        stub_request(:delete, "#{url}/1").to_return(status: 200, body: '')
+        group.name = 'Support'
+      end
+
+      it 'drops a change that can never be sent' do
+        group.destroy
+
+        expect(group).not_to be_changed
+        expect(group.changes).to be_empty
+      end
+
+      it 'keeps the attributes readable, so a destroyed record can still be reported on' do
+        group.destroy
+
+        expect(group.id).to eq(1)
+        expect(group.name).to eq('Support')
+      end
+
+      it 'drops the association readers, which would request a record that is gone' do
+        before_destroy = group.related
+        group.destroy
+
+        expect(group.related).not_to be(before_destroy)
+      end
+
+      it 'drops the failure of a save that is over' do
+        stub_request(:put, "#{url}/1").with(query: hash_including({}))
+          .to_return(json_response({ error: 'Name is required' }, status: 422))
+        group.save
+
+        expect(group.error).to be_a(ZammadAPI::ValidationError)
+        group.destroy
+        expect(group.error).to be_nil
+      end
+    end
   end
 
   describe 'equality' do

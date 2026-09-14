@@ -327,13 +327,17 @@ module ZammadAPI
       #
       # The record is marked {#destroyed?} rather than left looking live, so
       # that a later {#save} fails here with the reason rather than one call
-      # later as a 404 from Zammad.
+      # later as a 404 from Zammad. The attributes stay readable, but the
+      # state that only meant something while the record existed does not:
+      # staged changes, the last validation failure, and the association
+      # readers all go.
       #
       # @return [true]
       # @raise [ResponseError] when Zammad rejected the request
       def destroy
         transport.delete(member_path, operation: 'destroy object', resource_class: self.class)
         @destroyed = true
+        reset_pending_state!
         true
       end
 
@@ -354,11 +358,21 @@ module ZammadAPI
       # from before the reload.
       def replace_attributes!(response, operation:)
         @attributes = frozen_attributes(response.decoded(:object, operation: operation, resource_class: self.class))
-        @changes    = {}
         @new_record = false
         @destroyed  = false
-        @error      = nil
-        @related    = nil
+        reset_pending_state!
+      end
+
+      # The part of that which is not about arriving with new attributes, but
+      # about the record's state on the server having changed underneath what
+      # is held here. `destroy` is the third path through this, and was the
+      # one left out: a destroyed record went on reporting `changed?` and a
+      # change set that can never be sent, and went on handing out a `related`
+      # proxy that would happily request a record that no longer exists.
+      def reset_pending_state!
+        @changes = {}
+        @error   = nil
+        @related = nil
       end
 
       # The baseline is the value this record was loaded with, not the value
