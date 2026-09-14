@@ -109,9 +109,16 @@ module ZammadAPI
       super(build_message)
     end
 
+    # The status this error carries, or - for one this gem raised without a
+    # request, such as {ResourceProxy#find_by!} finding nothing - the status
+    # its class is the name for. A NotFoundError used to answer nil there,
+    # so `rescue NotFoundError => e; retry if e.status == 404` quietly stopped
+    # retrying for the one NotFoundError that came from this gem rather than
+    # from Zammad, while every other one carried 404.
+    #
     # @return [Integer, nil] HTTP status code
     def status
-      response&.status
+      response&.status || STATUS_ERRORS.key(self.class)
     end
 
     # @return [Hash, String, nil] parsed JSON body, or the raw body for

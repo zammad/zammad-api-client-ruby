@@ -150,6 +150,23 @@ RSpec.describe ZammadAPI::ResponseError do
       bare = described_class.build(nil, operation: 'find object')
       expect([bare.status, bare.body, bare.headers, bare.server_message]).to eq([nil, nil, {}, nil])
     end
+
+    # A NotFoundError this gem raises itself - find_by! finding nothing - used
+    # to answer nil here, so `retry if e.status == 404` stopped retrying for
+    # the one NotFoundError that did not come from Zammad.
+    it 'reports the status its class is the name for, without a response' do
+      bare = ZammadAPI::NotFoundError.new(operation: 'find object by name', detail: 'no record matched')
+      expect(bare.status).to eq(404)
+    end
+
+    it 'still has no body or headers to report without a response' do
+      bare = ZammadAPI::NotFoundError.new(operation: 'find object by name', detail: 'no record matched')
+      expect([bare.body, bare.headers]).to eq([nil, {}])
+    end
+
+    it 'leaves a generic ResponseError without a status' do
+      expect(described_class.new(operation: 'find object').status).to be_nil
+    end
   end
 
   describe ZammadAPI::RateLimitError do
