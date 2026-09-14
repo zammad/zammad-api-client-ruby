@@ -116,6 +116,15 @@ module ZammadAPI
     # +find_by(...) || create(...)+ can still create a duplicate - exactly as
     # writing the search out by hand would.
     #
+    # Only the first {SEARCH_MAX_PER_PAGE} hits are examined, so this costs one
+    # request whether it matches or not. Walking every page instead made a miss
+    # cost a request per page of hits - a term appearing in a few thousand
+    # records billed forty requests to answer "no", on exactly the
+    # +find_by(...) || create(...)+ path that runs for every new record. Search
+    # hits come back by relevance, so a record carrying the value searched for
+    # is at the top of them or not among them at all; to look further, page
+    # through {#search} directly.
+    #
     # @example
     #   client.user.find_by(email: 'someone@example.com')&.id
     #
@@ -128,7 +137,9 @@ module ZammadAPI
       term = params.values.map(&:to_s).reject(&:empty?).join(' ')
       raise ArgumentError, 'find_by needs an attribute value to search for' if term.empty?
 
-      search(term).detect { |record| params.all? { |key, value| record[key] == value } }
+      search(term)
+        .page(1, of: SEARCH_MAX_PER_PAGE)
+        .detect { |record| params.all? { |key, value| record[key] == value } }
     end
 
     # Fetches the first record carrying all of these attribute values, raising

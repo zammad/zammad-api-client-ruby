@@ -134,6 +134,26 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect(proxy.find_by(name: 'Users').id).to eq(1)
     end
 
+    # Walking every page billed a request per page of hits to answer "no",
+    # on the find_by(...) || create(...) path that runs for every new record.
+    it 'costs one request when nothing matches, however many hits there are' do
+      hits = Array.new(ZammadAPI::ResourceProxy::SEARCH_MAX_PER_PAGE) { { id: it + 1, name: 'Other' } }
+      stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response(hits))
+
+      expect(proxy.find_by(name: 'Users')).to be_nil
+      expect(a_request(:get, search_url).with(query: hash_including({}))).to have_been_made.once
+    end
+
+    it 'asks for a single page of hits at the size the search endpoint serves' do
+      stub = stub_request(:get, search_url)
+        .with(query: hash_including('page' => '1', 'per_page' => ZammadAPI::ResourceProxy::SEARCH_MAX_PER_PAGE.to_s))
+        .to_return(json_response([{ id: 1, name: 'Users' }]))
+
+      proxy.find_by(name: 'Users')
+
+      expect(stub).to have_been_requested
+    end
+
     it 'returns a persisted record' do
       stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response([{ id: 1, name: 'Users' }]))
 
@@ -330,12 +350,19 @@ RSpec.describe ZammadAPI::ResourceProxy do
         .to_return(json_response(records))
     end
 
+    # The walk confirms a short page with one more request, so a collection
+    # that fits in a single page needs the empty page after it.
+    def stub_last_page(page, records, per_page: ZammadAPI::Collection::DEFAULT_PER_PAGE)
+      stub_page(page, records, per_page: per_page)
+      stub_page(page + 1, [], per_page: per_page)
+    end
+
     it 'is Enumerable' do
       expect(proxy).to be_a(Enumerable)
     end
 
     it 'yields every record from #each' do
-      stub_page(1, [{ id: 1, name: 'Users' }, { id: 2, name: 'Support' }])
+      stub_last_page(1, [{ id: 1, name: 'Users' }, { id: 2, name: 'Support' }])
 
       expect(proxy.map(&:name)).to eq(%w[Users Support])
     end
@@ -381,7 +408,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
     end
 
     it 'forwards #find_each' do
-      stub_page(1, [{ id: 1 }], per_page: 5)
+      stub_last_page(1, [{ id: 1 }], per_page: 5)
 
       ids = []
       proxy.find_each(batch_size: 5) { ids << it.id }
@@ -389,7 +416,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
     end
 
     it 'forwards #in_batches' do
-      stub_page(1, [{ id: 1 }], per_page: 5)
+      stub_last_page(1, [{ id: 1 }], per_page: 5)
 
       sizes = []
       proxy.in_batches(of: 5) { sizes << it.size }
@@ -397,19 +424,19 @@ RSpec.describe ZammadAPI::ResourceProxy do
     end
 
     it 'forwards #pluck' do
-      stub_page(1, [{ id: 1, name: 'Users' }])
+      stub_last_page(1, [{ id: 1, name: 'Users' }])
 
       expect(proxy.pluck(:name)).to eq(['Users'])
     end
 
     it 'forwards #size' do
-      stub_page(1, [{ id: 1 }])
+      stub_last_page(1, [{ id: 1 }])
 
       expect(proxy.size).to eq(1)
     end
 
     it 'forwards #length' do
-      stub_page(1, [{ id: 1 }])
+      stub_last_page(1, [{ id: 1 }])
 
       expect(proxy.length).to eq(1)
     end
@@ -445,8 +472,11 @@ RSpec.describe ZammadAPI::ResourceProxy do
 
     it 'still narrows a search by a parameter it does not own' do
       stub_request(:get, "#{url}/search")
-        .with(query: hash_including({ 'query' => 'login failure', 'sort_by' => 'created_at' }))
+        .with(query: hash_including({ 'query' => 'login failure', 'sort_by' => 'created_at', 'page' => '1' }))
         .to_return(json_response([{ id: 1 }]))
+      stub_request(:get, "#{url}/search")
+        .with(query: hash_including({ 'query' => 'login failure', 'sort_by' => 'created_at', 'page' => '2' }))
+        .to_return(json_response([]))
 
       expect(proxy.search('login failure').where(sort_by: 'created_at').map(&:id)).to eq([1])
     end
