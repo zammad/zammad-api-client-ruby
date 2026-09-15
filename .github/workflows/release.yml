@@ -25,5 +25,5 @@ jobs:
           ruby-version: '3.4'
           bundler-cache: true
       - name: Verify the release candidate
-        run: bundle exec rake spec:unit rubocop steep
+        run: bundle exec rake spec:unit rubocop steep rbs_published
       - uses: rubygems/release-gem@v1
