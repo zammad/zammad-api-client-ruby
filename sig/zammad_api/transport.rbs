@@ -8,6 +8,10 @@ module ZammadAPI
     RETRIABLE_EXCEPTIONS: Array[untyped]
     TIMEOUT_ERRORS: Array[untyped]
     CONNECTION_ERRORS: Array[untyped]
+    # Untyped for the same reason as the Faraday ones above: naming
+    # OpenSSL::SSL::SSLError here would make the published signatures need
+    # openssl declarations that a consumer has not loaded.
+    SSL_ERRORS: Array[untyped]
     SENSITIVE_KEY_PATTERN: Regexp
     REDACTED: String
     UNRESERVED_IN_PATH: Regexp
@@ -21,6 +25,7 @@ module ZammadAPI
     def self.stringify_query: (Hash[untyped, untyped]) -> Hash[String, untyped]
     def self.stringify_query_value: (String, untyped) -> untyped
     def self.escape_path_segment: (untyped) -> String
+    def self.relative_path: (untyped) -> String
 
     def initialize: (Config) -> void
     def with_on_behalf_of: ((String | Integer)? identifier) -> Transport
@@ -44,6 +49,7 @@ module ZammadAPI
     def log_request: (Symbol, String, Hash[Symbol, untyped]?, untyped) -> void
     def log_response: (Symbol, String, Response, Float) -> void
     def redact: (untyped) -> untyped
+    def redact_config_values: (untyped message) -> String
     def logger: () -> Logger
   end
 end

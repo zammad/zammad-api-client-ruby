@@ -625,4 +625,59 @@ RSpec.describe ZammadAPI::Transport do
       end
     end
   end
+
+  # `request` documents that every failure leaves it as a ZammadAPI::Error.
+  # Faraday::SSLError was handled and its unwrapped counterpart was not, so a
+  # certificate mismatch through an adapter that does not wrap - an adapter
+  # this gem lets a caller choose - went straight past the rescue.
+  describe 'a TLS failure through an adapter that does not wrap it' do
+    before { BareTlsAdapter.attempts = [] }
+
+    def bare_tls_transport(**overrides)
+      unit_transport(adapter: :bare_tls, retry_interval: 0.01, **overrides)
+    end
+
+    it 'maps it to ConnectionError rather than letting it out raw' do
+      expect { bare_tls_transport.get('api/v1/groups', operation: 'test') }
+        .to raise_error(ZammadAPI::ConnectionError, /TLS handshake with .* failed/)
+    end
+
+    it 'is catchable as the gem error every caller rescues' do
+      expect { bare_tls_transport.get('api/v1/groups', operation: 'test') }
+        .to raise_error(ZammadAPI::Error)
+    end
+
+    # A rejected certificate is a fact about the instance, not a transient
+    # failure: retrying only delays the error by the backoff.
+    it 'does not retry it' do
+      expect { bare_tls_transport(retries: 2).get('api/v1/groups', operation: 'test') }
+        .to raise_error(ZammadAPI::ConnectionError)
+      expect(BareTlsAdapter.attempts.size).to eq(1)
+    end
+
+    it 'keeps the unwrapped TLS error out of the retry list' do
+      expect(described_class::RETRIABLE_EXCEPTIONS).not_to include(*described_class::SSL_ERRORS)
+    end
+  end
+
+  # The error Faraday or URI raises quotes the value it rejected, and for a
+  # proxy that value carries its credentials - into a message that lands in
+  # every log and exception report.
+  describe 'a connection that cannot be built from a credential-bearing proxy' do
+    let(:proxy) { 'http://user:pa ss@proxyhost:3128' }
+
+    it 'reports it as a configuration error' do
+      expect { unit_transport(proxy: proxy) }.to raise_error(ZammadAPI::ConfigurationError)
+    end
+
+    it 'keeps the proxy password out of the message' do
+      expect { unit_transport(proxy: proxy) }
+        .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.message).not_to include('pa ss') }
+    end
+
+    it 'still says which value was rejected' do
+      expect { unit_transport(proxy: proxy) }
+        .to raise_error(ZammadAPI::ConfigurationError, %r{http://\[REDACTED\]@proxyhost:3128})
+    end
+  end
 end

@@ -3,6 +3,7 @@
 require 'faraday'
 require 'faraday/retry'
 require 'json'
+require 'openssl'
 
 require_relative 'errors'
 require_relative 'response'
@@ -41,6 +42,18 @@ module ZammadAPI
       Errno::EPIPE,
       SocketError
     ].freeze
+
+    # TLS failures, for the same reason the socket errors above are listed:
+    # most adapters wrap one into a Faraday::SSLError, but this gem lets a
+    # caller choose the adapter and not every adapter does. Unlisted, a
+    # certificate mismatch through such an adapter left `request` raw, past
+    # the `rescue ZammadAPI::TransportError` a caller had written - the one
+    # thing the rescue clauses there exist to prevent.
+    #
+    # Not in {RETRIABLE_EXCEPTIONS}: a rejected certificate is a fact about
+    # the instance, not a transient failure, and retrying it only delays the
+    # error by the backoff.
+    SSL_ERRORS = [OpenSSL::SSL::SSLError].freeze
 
     # Failures worth retrying. Faraday::RetriableResponse is how the retry
     # middleware signals a retriable status internally and must stay in this
@@ -179,6 +192,25 @@ module ZammadAPI
       segment.gsub(UNRESERVED_IN_PATH) { |character| character.bytes.map { format('%%%02X', it) }.join }
     end
 
+    # Strips the leading slashes from a path so that it resolves against the
+    # instance URL rather than against the host.
+    #
+    # {Config#url} always ends in a slash and every request path is appended
+    # relative to it, so a leading slash would drop the sub-path of a Zammad
+    # served from one - `https://host/zammad/` + `/api/v1/tickets` resolves to
+    # `https://host/api/v1/tickets`.
+    #
+    # Public for the same reason as {.stringify_query} and
+    # {.escape_path_segment}: {Client} and {Test} both apply this rule, the
+    # latter to decide which stub a request matches, and a path rule kept in
+    # three places is one that gets changed in one of them - at which point
+    # the stand-in quietly stops matching what the client sends.
+    #
+    # @api private
+    # @param path [Object]
+    # @return [String]
+    def self.relative_path(path) = path.to_s.sub(%r{\A/+}, '')
+
     # @param config [Config]
     def initialize(config)
       @config       = config
@@ -254,7 +286,7 @@ module ZammadAPI
       raise ResponseError.build(response, operation: operation, resource_class: resource_class)
     rescue Faraday::TimeoutError, *TIMEOUT_ERRORS => e
       raise TimeoutError, "Can't #{operation}: request to #{path} timed out (#{e.message})"
-    rescue Faraday::SSLError => e
+    rescue Faraday::SSLError, *SSL_ERRORS => e
       raise ConnectionError, "Can't #{operation}: TLS handshake with #{config.redacted_url} failed (#{e.message})"
     rescue Faraday::ConnectionFailed, *CONNECTION_ERRORS => e
       raise ConnectionError, "Can't #{operation}: #{config.redacted_url} is unreachable (#{e.message})"
@@ -306,7 +338,26 @@ module ZammadAPI
       # `rescue ZammadAPI::ConfigurationError` that building a client is
       # documented to need. The class is named in the message because
       # "bad URI (is not URI?)" on its own says nothing about where to look.
-      raise ConfigurationError, "config could not be used to build a connection: #{e.class}: #{e.message}"
+      raise ConfigurationError, "config could not be used to build a connection: #{e.class}: #{redact_config_values(e.message)}"
+    end
+
+    # The underlying error quotes the value it rejected, and for a proxy that
+    # value carries its credentials: `proxy: 'http://user:pa ss@host:3128'`
+    # came back as URI::InvalidURIError with the whole URL, password included,
+    # in its message - and that message goes into the ConfigurationError
+    # above, which lands in every log and exception report. The one case
+    # {Config#inspect} and USERINFO_PATTERN exist to prevent, reached by
+    # another route.
+    #
+    # The configured values are swapped for their redacted forms rather than
+    # the message being dropped, because "bad URI (is not URI?)" without the
+    # URI says nothing about where to look. Substring replacement, because
+    # the message embeds the value verbatim, and the url as well as the proxy
+    # because 1.x callers still put credentials in the instance URL.
+    def redact_config_values(message)
+      [config.proxy, config.url].compact.inject(message.to_s) do |text, value|
+        text.gsub(value, config.redacted(value))
+      end
     end
 
     def apply_authentication(faraday)
