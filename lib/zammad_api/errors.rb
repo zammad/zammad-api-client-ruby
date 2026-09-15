@@ -187,7 +187,10 @@ module ZammadAPI
   class RateLimitError < ClientError
     # @return [Integer, nil] value of the +Retry-After+ response header
     def retry_after
-      value = headers['retry-after'] || headers['Retry-After']
+      # Downcased, because every {Response} is built with its header keys
+      # downcased - {Transport#decode} and {Test#stub} both do it - so there
+      # is no capitalised spelling left to fall back to.
+      value = headers['retry-after']
       return nil if value.nil?
 
       Integer(value, exception: false)
