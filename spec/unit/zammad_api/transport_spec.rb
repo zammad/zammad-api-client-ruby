@@ -679,5 +679,34 @@ RSpec.describe ZammadAPI::Transport do
       expect { unit_transport(proxy: proxy) }
         .to raise_error(ZammadAPI::ConfigurationError, %r{http://\[REDACTED\]@proxyhost:3128})
     end
+
+    # The error quotes what it rejected through `inspect`, which escapes the
+    # backslash - so the text in the message stopped matching the configured
+    # value and the substring swap redacted nothing at all.
+    context 'when the value carries a backslash, which inspect escapes' do
+      let(:proxy) { 'http://user:secret@proxyhost/a\0b' }
+
+      it 'still keeps the password out of the message' do
+        expect { unit_transport(proxy: proxy) }
+          .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.message).not_to include('secret') }
+      end
+    end
+
+    # `\0` in a gsub replacement String expands to the matched text, which is
+    # the unredacted value.
+    context 'when the value carries a sequence a gsub replacement would expand' do
+      let(:proxy) { 'http://user:secret@proxyhost/a\0b' }
+
+      it 'does not put the credential back through the replacement' do
+        message = begin
+          unit_transport(proxy: proxy)
+          nil
+        rescue ZammadAPI::ConfigurationError => e
+          e.message
+        end
+
+        expect(message.scan('user:secret')).to be_empty
+      end
+    end
   end
 end

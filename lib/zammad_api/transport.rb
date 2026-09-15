@@ -356,7 +356,27 @@ module ZammadAPI
     # because 1.x callers still put credentials in the instance URL.
     def redact_config_values(message)
       [config.proxy, config.url].compact.inject(message.to_s) do |text, value|
-        text.gsub(value, config.redacted(value))
+        redacted = config.redacted(value)
+
+        # The block form. A String replacement expands the backslash
+        # sequences it contains, and the replacement here is the configured
+        # value with its userinfo blanked - so a value carrying `\0` or `\&`
+        # put the whole matched text back, credentials included, into the
+        # message it had just been taken out of, and one carrying `\1` cut
+        # the replacement short instead.
+        #
+        # Both spellings of the value, because the error being quoted may
+        # have inspected it rather than interpolated it: URI::InvalidURIError
+        # does, and inspect escapes exactly the backslashes, quotes and
+        # control characters that make a URL invalid in the first place. The
+        # escaped text no longer equals the value as configured, so the swap
+        # matched nothing and left the password standing in full - the case
+        # this method exists for, reached through the quoting rather than
+        # the value.
+        inspected = value.inspect
+        quoted    = inspected[1...-1] || inspected
+
+        text.gsub(value) { redacted }.gsub(quoted) { redacted }
       end
     end
 

@@ -218,7 +218,11 @@ A breaking release that modernises the whole gem. See
 
 - Credentials are no longer written to the debug log. The old transport logged
   `user:password` on every client build; payload keys such as `password` and `token` are
-  now redacted, and `Config#inspect` redacts credentials.
+  now redacted, and `Config#inspect` redacts credentials. A `ConfigurationError` raised
+  while building the connection redacts the configured url and proxy out of the underlying
+  message too, including where that message quoted the value through `inspect` rather than
+  interpolating it — which is what `URI::InvalidURIError` does, for exactly the characters
+  that make a URL invalid.
 - `on_behalf_of` no longer leaks: the old `perform_on_behalf_of` used `tap` without an
   `ensure`, so an exception inside the block left the `From` header set on every later
   request.
