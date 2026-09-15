@@ -45,6 +45,19 @@ RSpec.describe ZammadAPI::Collection do
     end
   end
 
+  # An endpoint that both caps the page below what was requested and reports a
+  # total - the case where "short of what was asked for" and "short of what is
+  # served" come apart.
+  def stub_capped_counted_endpoint(records:, max:, total_header:)
+    stub_request(:get, url).with(query: hash_including({})).to_return do |request|
+      params = URI.decode_www_form(URI(request.uri).query).to_h
+      limit  = [Integer(params['per_page']), max].min
+      offset = (Integer(params['page']) - 1) * limit
+      page   = Array(offset...[offset + limit, records].min).map { { id: it + 1 } }
+      json_response(page, headers: { 'X-Total-Count' => total_header.to_s })
+    end
+  end
+
   it 'is an Enumerable' do
     expect(described_class.ancestors).to include(Enumerable)
   end
@@ -642,6 +655,18 @@ RSpec.describe ZammadAPI::Collection do
       stub_page(2, [])
 
       expect(collection.map(&:id)).to eq([1])
+    end
+
+    # The page has to be short of what this endpoint serves, which is not the
+    # same as short of what was asked for. Where the server's cap is lower
+    # than the request, every page is short of the request, so reading the
+    # requested size made each one look like the last: the walk ended at the
+    # first page whose running count met an under-reporting total, four
+    # records into five, with nothing raised.
+    it 'does not truncate a walk on an endpoint that pages smaller than requested' do
+      stub_capped_counted_endpoint(records: 5, max: 2, total_header: 4)
+
+      expect(collection.map(&:id)).to eq([1, 2, 3, 4, 5])
     end
   end
 

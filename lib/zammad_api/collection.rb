@@ -294,7 +294,7 @@ module ZammadAPI
         # the header - used to end the walk early: 100 of 150 records came
         # back, nothing was raised, and nothing told that result apart from a
         # complete one.
-        break if reached_total?(seen, total, records.size)
+        break if reached_total?(seen, total, records.size, page_size)
 
         # How big a page this endpoint actually serves, learned from the first
         # one rather than assumed. The requested size is clamped to a per-
@@ -351,10 +351,10 @@ module ZammadAPI
     # Two conditions, because a count can be wrong in both directions and only
     # one of them is safe:
     #
-    # * The page came back short of the size that was asked for, so the
-    #   endpoint had no more to give at this page size. A full page means it
-    #   may still be serving, whatever its count claims, and the cost of
-    #   asking is one request that comes back empty.
+    # * The page came back short of the size this endpoint serves, so it had
+    #   no more to give. A full page means it may still be serving, whatever
+    #   its count claims, and the cost of asking is one request that comes
+    #   back empty.
     # * Exactly as many records were seen as the count names. Seeing more
     #   means the endpoint has already contradicted its own header, and a
     #   count contradicted once is not one to end a walk on - the remaining
@@ -363,7 +363,26 @@ module ZammadAPI
     # An over-reported total still costs nothing: the walk runs on and stops
     # on the empty page, which is what it did before there was a header to
     # read.
-    def reached_total?(seen, total, page_records) = !total.nil? && seen == total && page_records < @per_page
+    def reached_total?(seen, total, page_records, page_size)
+      return false if total.nil? || seen != total
+
+      # Short of what this endpoint serves, which is not the same as short of
+      # what was asked for. The two differ wherever the server's cap is lower
+      # than the request - a lowered api_pagination_limit, a custom deployment
+      # - and reading the requested size there made every page look like the
+      # last one: an endpoint serving 2 per page against a request for 100,
+      # with a total under-reporting 2 of 3, ended the walk on page one with 2
+      # records and nothing raised. That is the failure the corroboration
+      # exists to prevent, reached one page further in.
+      #
+      # Page one is still read against the requested size, because nothing has
+      # shown what the endpoint serves yet. What that leaves is the case where
+      # the cap is lower AND the total under-reports AND the short first page
+      # is all there is: only a second request tells that apart from a
+      # complete result, and paying for one on every collection smaller than a
+      # page is the cost reading the total is here to avoid.
+      page_records < (page_size.zero? ? @per_page : page_size)
+    end
 
     # How many records the endpoint says this query has.
     #
