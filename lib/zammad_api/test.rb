@@ -41,6 +41,21 @@ module ZammadAPI
     # a request it had never declared.
     class UnstubbedRequestError < StandardError; end
 
+    # Raised when two stubs describe one request equally well.
+    #
+    # Two stubs that name different query parameters can both match a request
+    # carrying all of them, and there is no honest way to rank them: a search
+    # stubbed once for its records and once for its count is matched by both
+    # when `count` sends the search term and +only_total_count+ together. The
+    # stand-in used to pick one, hand back the wrong body, consume the stub on
+    # the way past, and then report the endpoint as unstubbed - three
+    # confusing symptoms for one fixable declaration.
+    #
+    # Outside {ZammadAPI::Error} for the same reason as
+    # {UnstubbedRequestError}: it says the test is wrong, not that Zammad
+    # refused anything.
+    class AmbiguousStubError < StandardError; end
+
     # One request the code under test made.
     #
     # The verb is +verb+ rather than +method+, because a member named +method+
@@ -116,6 +131,11 @@ module ZammadAPI
       # transport would refuse - a nil value - is reported against the line
       # that wrote the stub instead of against whichever request reached it.
       scope = query && ::ZammadAPI::Transport.stringify_query(query)
+      # A scope that names nothing matches every request, which is what a stub
+      # with no query at all is. Kept apart, the two were equally specific and
+      # `query: {}` collided with a catch-all as an ambiguous pair rather than
+      # joining it.
+      scope = nil if scope.nil? || scope.empty?
 
       @monitor.synchronize do
         (@stubs[key(method, path)] ||= []) << {
@@ -165,7 +185,7 @@ module ZammadAPI
     # @raise [ResponseError] for a stubbed non-2xx status
     # @raise [UnstubbedRequestError] when no stub matches
     def answer(method, path, operation:, query: nil, body: nil, resource_class: nil, on_behalf_of: nil)
-      relative = path.to_s.sub(%r{\A/+}, '')
+      relative = ::ZammadAPI::Transport.relative_path(path)
       # Through the real transport's own stringification, so that {Request#query}
       # holds what a request would have carried rather than the raw Ruby values.
       # A stand-in that records a different shape than the wire makes an
@@ -179,7 +199,7 @@ module ZammadAPI
 
       raise UnstubbedRequestError, unstubbed_message(method, relative) if stub.nil?
 
-      response = response_for(stub)
+      response = response_for(stub, params)
       return response if response.success?
 
       raise ResponseError.build(response, operation: operation, resource_class: resource_class)
@@ -187,7 +207,7 @@ module ZammadAPI
 
     private
 
-    def key(method, path) = [method.to_sym, path.to_s.sub(%r{\A/+}, '')]
+    def key(method, path) = [method.to_sym, ::ZammadAPI::Transport.relative_path(path)]
 
     # A copy of the payload, frozen, for the record of what was sent.
     #
@@ -197,14 +217,7 @@ module ZammadAPI
     # anywhere. `query` is already a fresh structure by the time it gets here,
     # because the transport's stringification builds one; `body` is handed
     # over untouched, and was the one shape left sharing state with the test.
-    def snapshot(value)
-      case value
-      when Hash   then value.to_h { |key, nested| [key, snapshot(nested)] }.freeze
-      when Array  then value.map { snapshot(it) }.freeze
-      when String then value.dup.freeze
-      else value
-      end
-    end
+    def snapshot(value) = DeepCopy.frozen_copy(value)
 
     # Picks the stub that answers this request, and keeps the last one of its
     # kind in place so that one stub can answer any number of requests while
@@ -215,6 +228,19 @@ module ZammadAPI
     # first use as soon as any other stub for the same verb and path existed
     # behind it - the pair a `search(...).count` test needs - so the second
     # count silently fell through to the records stub and walked the pages.
+    #
+    # A scope here is the exact set of parameters a stub names, not merely the
+    # fact that it names some. Grouped by whether a stub was scoped at all,
+    # two stubs carrying *different* scopes were read as a sequence and the
+    # first was consumed: stubbing a search once for its records and once for
+    # its count made `count` eat the records stub, hand back an Array where a
+    # count belonged, and then raise UnstubbedRequestError for a page that was
+    # stubbed all along.
+    #
+    # The most specific scope answers, counting the parameters it pins, so a
+    # stub written for one request still wins over a catch-all for the
+    # endpoint however they were declared. Scopes that tie are genuinely
+    # ambiguous and say so.
     def take(method, path, params)
       queued = @stubs[key(method, path)]
       return nil if queued.nil?
@@ -222,13 +248,32 @@ module ZammadAPI
       matching = queued.each_index.select { matches?(queued[it][:query], params) }
       return nil if matching.empty?
 
-      # A stub naming query parameters was written for this request; an
-      # unscoped one is a catch-all for the endpoint. The specific ones answer
-      # first, and only fall back when none of them match.
-      scoped = matching.select { queued[it][:query] }
-      group  = scoped.empty? ? matching : scoped
+      group = most_specific(queued, matching, method, path)
 
       group.one? ? queued[group.first] : queued.delete_at(group.first)
+    end
+
+    # The matching stubs that share the most specific scope, in the order they
+    # were declared.
+    #
+    # @raise [AmbiguousStubError] when two scopes are equally specific
+    def most_specific(queued, matching, method, path)
+      scopes = matching.group_by { queued[it][:query] }
+      depth  = scopes.keys.to_h { [it, it.nil? ? 0 : it.size] }
+      best   = depth.values.max
+
+      winners = scopes.select { |scope, _| depth[scope] == best }
+      raise AmbiguousStubError, ambiguous_message(method, path, winners.keys) if winners.size > 1
+
+      winners.values.first
+    end
+
+    def ambiguous_message(method, path, scopes)
+      rendered = scopes.map { "query: #{it.inspect}" }.join(' and ')
+      "#{method.to_s.upcase} #{path} is matched equally well by #{scopes.size} stubs (#{rendered}), " \
+        'and this stand-in will not guess which one you meant. Name the parameters that tell the requests apart ' \
+        '- a count stub that also carries the search term is more specific than one that does not - or leave the ' \
+        'more general stub unscoped, which makes it a catch-all that answers only what the scoped ones do not.'
     end
 
     # Both sides have been through the transport's own stringification, the
@@ -245,8 +290,30 @@ module ZammadAPI
       expected.all? { |name, value| params[name] == value }
     end
 
-    def response_for(stub)
-      case stub[:body]
+    # The records a stub holds are one page of them, not the answer to every
+    # page.
+    #
+    # A collection walks until a page repeats, comes back short, or comes back
+    # empty. A stub that keeps serving the same records to every page trips
+    # the first of those, so the obvious way to stand in for a list endpoint -
+    # one `stub(:get, 'api/v1/groups', body: [...])` - made every full read of
+    # that collection raise PaginationError, and the only way to find that out
+    # was to hit it. Against a real Zammad the same code works, because page 2
+    # comes back empty; the stand-in is what differed.
+    #
+    # So a stub that does not name a page answers one, and a request for any
+    # page after it gets an empty one. A stub that does name a page is left
+    # exactly as written - that is how a test says what the second page holds.
+    def paged_body(stub, params)
+      body = stub[:body]
+      return body if !body.is_a?(Array) || stub[:query]&.key?('page')
+      return body if [nil, '1'].include?(params['page'])
+
+      []
+    end
+
+    def response_for(stub, params)
+      case paged_body(stub, params)
       in Hash | Array => structured
         raw = JSON.generate(structured)
         build_response(stub, JSON.parse(raw, symbolize_names: true), raw, json: true)

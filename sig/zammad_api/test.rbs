@@ -1,6 +1,13 @@
 module ZammadAPI
   class Test
-    class UnstubbedRequestError < Error
+    # Both are deliberately outside ZammadAPI::Error: they say the test is
+    # wrong, not that Zammad refused anything, and the signature said
+    # otherwise - so a `rescue ZammadAPI::Error` type-checked as catching a
+    # forgotten stub that it does not in fact catch.
+    class UnstubbedRequestError < ::StandardError
+    end
+
+    class AmbiguousStubError < ::StandardError
     end
 
     class Request < ::Data
@@ -44,8 +51,11 @@ module ZammadAPI
     def key: (Symbol method, String path) -> [Symbol, String]
     def snapshot: (untyped) -> untyped
     def take: (Symbol method, String path, Hash[String, untyped] params) -> Hash[Symbol, untyped]?
+    def most_specific: (Array[Hash[Symbol, untyped]] queued, Array[Integer] matching, Symbol method, String path) -> Array[Integer]
+    def ambiguous_message: (Symbol method, String path, Array[Hash[String, untyped]?] scopes) -> String
     def matches?: (Hash[untyped, untyped]? expected, Hash[String, untyped] params) -> bool
-    def response_for: (Hash[Symbol, untyped] stub) -> Response
+    def paged_body: (Hash[Symbol, untyped] stub, Hash[String, untyped] params) -> untyped
+    def response_for: (Hash[Symbol, untyped] stub, Hash[String, untyped] params) -> Response
     def build_response: (Hash[Symbol, untyped] stub, untyped body, String raw_body, json: bool) -> Response
     def unstubbed_message: (Symbol method, String path) -> String
 

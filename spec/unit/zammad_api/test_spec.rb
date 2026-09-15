@@ -405,4 +405,108 @@ RSpec.describe ZammadAPI::Test do
       expect(zammad.requests.size).to eq(100)
     end
   end
+
+  # A collection walks until a page repeats, comes back short, or comes back
+  # empty. A stub that served the same records to every page tripped the
+  # first of those, so the obvious way to stand in for a list endpoint made
+  # every full read of it raise PaginationError - against a real Zammad the
+  # same code works, because page 2 comes back empty.
+  describe 'a list endpoint stubbed once' do
+    subject(:zammad) { described_class.new }
+
+    let(:client) { zammad.client }
+
+    before { zammad.stub(:get, 'api/v1/groups', body: [{ id: 1, name: 'a' }, { id: 2, name: 'b' }]) }
+
+    it 'reads the whole collection without a second stub' do
+      expect(client.group.all.map(&:id)).to eq([1, 2])
+    end
+
+    it 'counts it' do
+      expect(client.group.all.count).to eq(2)
+    end
+
+    it 'plucks from it' do
+      expect(client.group.all.pluck(:name)).to eq(%w[a b])
+    end
+
+    it 'answers page 1 with the records it holds' do
+      expect(client.group.all.page(1).map(&:id)).to eq([1, 2])
+    end
+
+    it 'answers a later page as an endpoint out of records would' do
+      expect(client.group.all.page(2).map(&:id)).to eq([])
+    end
+
+    it 'stops walking rather than reporting the stand-in as a broken paginator' do
+      expect { client.group.all.to_a }.not_to raise_error
+    end
+  end
+
+  describe 'a list endpoint whose pages are stubbed by hand' do
+    subject(:zammad) { described_class.new }
+
+    let(:client) { zammad.client }
+
+    # A stub that names a page is left exactly as written - that is how a test
+    # says what the second page holds.
+    it 'serves each page as declared' do
+      zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { page: 1 })
+      zammad.stub(:get, 'api/v1/groups', body: [{ id: 2 }], query: { page: 2 })
+      zammad.stub(:get, 'api/v1/groups', body: [], query: { page: 3 })
+
+      expect(client.group.all.map(&:id)).to eq([1, 2])
+    end
+
+    it 'keeps a body that is not a list alone' do
+      zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'a' })
+
+      expect(client.group.find(1).name).to eq('a')
+    end
+  end
+
+  # Two stubs naming different parameters both match a request carrying all of
+  # them. Grouped only by whether they were scoped at all, they were read as a
+  # sequence and the first was consumed: the count ate the records stub,
+  # handed back an Array where a count belonged, and then reported the
+  # endpoint as unstubbed.
+  describe 'two stubs that describe one request equally well' do
+    subject(:zammad) { described_class.new }
+
+    let(:client) { zammad.client }
+
+    before do
+      zammad.stub(:get, 'api/v1/tickets/search', body: [{ id: 1 }], query: { query: 'foo' })
+      zammad.stub(:get, 'api/v1/tickets/search', body: { total_count: 2 }, query: { only_total_count: true })
+    end
+
+    it 'refuses to guess which one was meant' do
+      expect { client.ticket.search('foo').count }.to raise_error(described_class::AmbiguousStubError)
+    end
+
+    it 'names both scopes, so the fix is visible from the message' do
+      expect { client.ticket.search('foo').count }
+        .to raise_error(described_class::AmbiguousStubError, /only_total_count.*|.*only_total_count/)
+    end
+
+    it 'says the test is wrong rather than that Zammad refused something' do
+      expect(described_class::AmbiguousStubError.ancestors).not_to include(ZammadAPI::Error)
+    end
+
+    it 'answers the request a more specific stub names' do
+      zammad.reset
+      zammad.stub(:get, 'api/v1/tickets/search', body: [{ id: 1 }], query: { query: 'foo' })
+      zammad.stub(:get, 'api/v1/tickets/search', body: { total_count: 2 }, query: { query: 'foo', only_total_count: true })
+
+      expect(client.ticket.search('foo').count).to eq(2)
+    end
+
+    it 'leaves the less specific stub answering the requests it alone matches' do
+      zammad.reset
+      zammad.stub(:get, 'api/v1/tickets/search', body: [{ id: 1 }], query: { query: 'foo' })
+      zammad.stub(:get, 'api/v1/tickets/search', body: { total_count: 2 }, query: { query: 'foo', only_total_count: true })
+
+      expect(client.ticket.search('foo').map(&:id)).to eq([1])
+    end
+  end
 end
