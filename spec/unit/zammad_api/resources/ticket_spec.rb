@@ -56,5 +56,28 @@ RSpec.describe ZammadAPI::Resources::Ticket do
 
       expect(ticket.article(body: 'hello')).to be_persisted
     end
+
+    # An article belongs to a ticket by id. Unchecked, this POSTed
+    # `ticket_id: null` and left the caller reading Zammad's 422 to work out
+    # that the ticket had never been saved.
+    context 'when the ticket has not been saved' do
+      subject(:ticket) { described_class.new(unit_transport, title: 'Help') }
+
+      it 'refuses locally' do
+        expect { ticket.article(body: 'hello') }.to raise_error(ZammadAPI::Error, /has no id, save it first/)
+      end
+
+      it 'sends nothing' do
+        stub = stub_request(:post, article_url).with(query: hash_including({}))
+
+        begin
+          ticket.article(body: 'hello')
+        rescue ZammadAPI::Error
+          nil
+        end
+
+        expect(stub).not_to have_been_requested
+      end
+    end
   end
 end

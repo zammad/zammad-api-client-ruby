@@ -41,9 +41,15 @@ module ZammadAPI
       #
       # @param attributes [Hash] article attributes, e.g. +body:+, +type:+
       # @return [TicketArticle] the created article
+      # @raise [Error] when the ticket has no id yet
       # @raise [ResponseError] when Zammad rejected the request
       def article(attributes = {})
-        record = TicketArticle.new(transport, attributes.merge(ticket_id: id))
+        # An article belongs to a ticket by id, so ask for one here rather
+        # than merging nil. Unchecked, this POSTed `ticket_id: null` and left
+        # the caller reading Zammad's 422 to work out that the ticket they
+        # were adding to had never been saved - the one path in the gem that
+        # needed a stored id and went to the server to find out it had none.
+        record = TicketArticle.new(transport, attributes.merge(ticket_id: require_id!))
         record.save!
         record
       end
