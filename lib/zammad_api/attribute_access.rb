@@ -2,6 +2,8 @@
 
 require 'json'
 
+require_relative 'deep_copy'
+
 module ZammadAPI
   # Read access to a Zammad record's attributes.
   #
@@ -165,30 +167,11 @@ module ZammadAPI
 
     # Recursively converts string keys to symbols, including inside arrays, so
     # that user supplied attributes behave the same as decoded responses, and
-    # freezes the result.
-    #
-    # The freezing is what makes {#attributes} safe to expose: a record that
-    # handed out a writable hash would report changes it never staged and so
-    # never sent. Strings are copied before being frozen, so freezing a value
-    # the caller passed in does not reach back into their own variable.
-    def frozen_attributes(value)
-      case value
-      when Hash   then value.to_h { |key, nested| [key.respond_to?(:to_sym) ? key.to_sym : key, frozen_attributes(nested)] }.freeze
-      when Array  then value.map { frozen_attributes(it) }.freeze
-      when String then value.dup.freeze
-      else value
-      end
-    end
+    # freezes the result. See {DeepCopy} for why the walk lives there.
+    def frozen_attributes(value) = DeepCopy.frozen_copy(value, symbolize_keys: true)
 
     # The inverse of {#frozen_attributes}, for handing out a copy that callers
     # may treat as their own.
-    def deep_dup(value)
-      case value
-      when Hash   then value.to_h { |key, nested| [key, deep_dup(nested)] }
-      when Array  then value.map { deep_dup(it) }
-      when String then value.dup
-      else value
-      end
-    end
+    def deep_dup(value) = DeepCopy.writable_copy(value)
   end
 end

@@ -2,6 +2,7 @@
 
 require_relative 'zammad_api/version'
 require_relative 'zammad_api/errors'
+require_relative 'zammad_api/deep_copy'
 require_relative 'zammad_api/config'
 require_relative 'zammad_api/response'
 require_relative 'zammad_api/transport'
