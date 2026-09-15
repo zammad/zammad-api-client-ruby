@@ -167,7 +167,7 @@ module ZammadAPI
       params   = ::ZammadAPI::Transport.stringify_query(query || {})
 
       stub = @monitor.synchronize do
-        @requests << Request.new(verb: method, path: relative, query: params, body: body, on_behalf_of: on_behalf_of)
+        @requests << Request.new(verb: method, path: relative, query: params, body: snapshot(body), on_behalf_of: on_behalf_of)
         take(method, relative, params)
       end
 
@@ -182,6 +182,23 @@ module ZammadAPI
     private
 
     def key(method, path) = [method.to_sym, path.to_s.sub(%r{\A/+}, '')]
+
+    # A copy of the payload, frozen, for the record of what was sent.
+    #
+    # The caller's Hash used to be recorded by reference, so a test that built
+    # one payload, sent it, then changed it for a second call rewrote the
+    # first recorded request and asserted against a body that never went
+    # anywhere. `query` is already a fresh structure by the time it gets here,
+    # because the transport's stringification builds one; `body` is handed
+    # over untouched, and was the one shape left sharing state with the test.
+    def snapshot(value)
+      case value
+      when Hash   then value.to_h { |key, nested| [key, snapshot(nested)] }.freeze
+      when Array  then value.map { snapshot(it) }.freeze
+      when String then value.dup.freeze
+      else value
+      end
+    end
 
     # Picks the stub that answers this request, and keeps the last one of its
     # kind in place so that one stub can answer any number of requests while

@@ -42,6 +42,7 @@ module ZammadAPI
     private
 
     def key: (Symbol method, String path) -> [Symbol, String]
+    def snapshot: (untyped) -> untyped
     def take: (Symbol method, String path, Hash[String, untyped] params) -> Hash[Symbol, untyped]?
     def matches?: (Hash[untyped, untyped]? expected, Hash[String, untyped] params) -> bool
     def response_for: (Hash[Symbol, untyped] stub) -> Response

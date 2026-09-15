@@ -288,6 +288,27 @@ RSpec.describe ZammadAPI::Test do
       expect(zammad.requests.last.body).to eq({ name: 'Renamed' })
     end
 
+    # Recorded by reference, a test that built one payload, sent it, then
+    # changed it for a second call rewrote the first recorded request and
+    # asserted against a body that never went anywhere.
+    it 'records the body as it was sent, not as the test left it afterwards' do
+      zammad.stub(:post, 'api/v1/groups', body: { id: 2 })
+      payload = { name: 'Support', note: { internal: 'yes' } }
+      client.post('api/v1/groups', body: payload)
+
+      payload[:name] = 'Mutated'
+      payload[:note][:internal] = 'no'
+
+      expect(zammad.requests.last.body).to eq({ name: 'Support', note: { internal: 'yes' } })
+    end
+
+    it 'hands out a recorded body that cannot be written through' do
+      zammad.stub(:post, 'api/v1/groups', body: { id: 2 })
+      client.post('api/v1/groups', body: { name: 'Support' })
+
+      expect(zammad.requests.last.body).to be_frozen
+    end
+
     it 'records the query parameters the client sent' do
       client.group.find(1)
 
