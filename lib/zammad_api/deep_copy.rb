@@ -14,6 +14,15 @@ module ZammadAPI
   # +JSON.parse+ builds and what a caller may hand in as attributes. Numbers,
   # booleans and nil are immutable already and are passed through untouched.
   #
+  # One walk, deliberately. A record built from a response copies every String
+  # of a body +JSON.parse+ has just built and nothing else holds, so a variant
+  # that froze such a body in place would save that copy on the paging hot
+  # path - which is a real cost, and still not a reason for a second walk:
+  # three of them is what this module replaced, and the one that differed did
+  # so without anything to say whether the difference was the point. If the
+  # copy is worth removing, it is an argument to this walk and it applies to
+  # the one place that can prove nothing else references the value.
+  #
   # @api private
   module DeepCopy
     module_function
