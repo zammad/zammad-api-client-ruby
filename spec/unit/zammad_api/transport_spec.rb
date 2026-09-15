@@ -569,10 +569,15 @@ RSpec.describe ZammadAPI::Transport do
           operation: 'test',
           body:      {
             login:            'jane',
+            keyboard_layout:  'de',
             password_confirm: 'confirm-s3cret',
+            passwd:           'passwd-s3cret',
             access_token:     'access-s3cret',
             refresh_token:    'refresh-s3cret',
-            client_secret:    'client-s3cret'
+            client_secret:    'client-s3cret',
+            api_key:          'api-key-s3cret',
+            apikey:           'apikey-s3cret',
+            key:              'key-s3cret'
           }
         )
       end
@@ -587,6 +592,28 @@ RSpec.describe ZammadAPI::Transport do
 
       it 'redacts a refresh_token' do
         expect(log).not_to include('refresh-s3cret')
+      end
+
+      it 'redacts an api_key' do
+        expect(log).not_to include('api-key-s3cret')
+      end
+
+      it 'redacts an apikey, which nothing separates the word in' do
+        expect(log).not_to include('apikey-s3cret')
+      end
+
+      it 'redacts a bare key' do
+        expect(log).not_to include('key-s3cret')
+      end
+
+      it 'redacts a passwd' do
+        expect(log).not_to include('passwd-s3cret')
+      end
+
+      # Matched as a word, so that a key merely containing the letters stays
+      # readable in the log rather than being blanked for nothing.
+      it 'leaves a key whose name only contains one of the words alone' do
+        expect(log).to include('keyboard_layout: "de"')
       end
 
       it 'redacts a client_secret' do

@@ -67,7 +67,15 @@ module ZammadAPI
     # Zammad and OAuth actually send - password_confirm, access_token,
     # refresh_token, client_secret - which an exact-match list silently let
     # through to the log.
-    SENSITIVE_KEY_PATTERN = /password|token|secret|private_key/i
+    #
+    # The same argument reaches further than the first version of this list
+    # took it. `password` alone wrote `passwd` and `pwd` out in full, and
+    # `private_key` covered exactly one of the key spellings, so `api_key`
+    # and a bare `key` went to the log intact. `key` is matched as a word
+    # rather than as a substring, so `ssh_key` and `key` are covered while
+    # `keyboard` and `monkey_id` are not; `apikey` is spelled out because
+    # nothing separates the word there.
+    SENSITIVE_KEY_PATTERN = /password|passwd|pwd|token|secret|credential|api_?key|(?<![a-z])keys?(?![a-z])/i
 
     REDACTED = '[REDACTED]'
 
