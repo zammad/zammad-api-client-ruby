@@ -314,7 +314,7 @@ module ZammadAPI
 
     private
 
-    def collection(path, operation, query: {}, max_per_page: resource_class::MAX_PER_PAGE, filterable: resource_class::INDEX_QUERY_KEYS, filter_hint: index_filter_hint, countable: false)
+    def collection(path, operation, query: {}, max_per_page: resource_class.page_limit, filterable: resource_class.filterable_keys, filter_hint: index_filter_hint, countable: false)
       Collection.new(
         transport:      @transport,
         resource_class: resource_class,
@@ -335,12 +335,12 @@ module ZammadAPI
     # record" - so `find_by(...) || create(...)`, the shape
     # examples/onboard_customer.rb is built on, raised instead of creating.
     def searchable!
-      return if resource_class::SEARCHABLE
+      return if resource_class.searchable?
 
       raise Error, "Zammad routes no search endpoint for #{resource_class.name}, so it cannot be searched by term or looked up with find_by: #{path}/search answers 404, which would arrive here as a NotFoundError about a record. Walk the records and pick one instead, with all.detect { ... }."
     end
 
-    def index_filter_hint = resource_class::SEARCHABLE ? INDEX_FILTER_HINT : UNSEARCHABLE_FILTER_HINT
+    def index_filter_hint = resource_class.searchable? ? INDEX_FILTER_HINT : UNSEARCHABLE_FILTER_HINT
 
     # Quotes a value that would otherwise be read as query syntax, escaping the
     # two characters that would end the quoting.

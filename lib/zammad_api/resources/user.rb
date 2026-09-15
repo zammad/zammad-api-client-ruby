@@ -9,9 +9,9 @@ module ZammadAPI
 
       # UsersController#index hardcodes `reorder(id: :asc)`, so it honours
       # nothing but the paging - not even sort_by.
-      INDEX_QUERY_KEYS = [].freeze
+      index_query_keys
 
-      SEARCHABLE = true
+      searchable true
 
       belongs_to :organization, class_name: 'Organization'
     end

@@ -10,13 +10,13 @@ module ZammadAPI
 
       # TicketsController#index hardcodes `reorder(id: :asc)`, so it honours
       # nothing but the paging - not even sort_by.
-      INDEX_QUERY_KEYS = [].freeze
+      index_query_keys
 
       # /api/v1/tickets caps the page size at 100, unlike the generic index
       # endpoints, see TicketsController#index.
-      MAX_PER_PAGE = 100
+      max_per_page 100
 
-      SEARCHABLE = true
+      searchable true
 
       belongs_to :customer,     class_name: 'User'
       belongs_to :owner,        class_name: 'User'

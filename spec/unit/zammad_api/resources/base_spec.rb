@@ -645,4 +645,121 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(ZammadAPI::Resources::Group.from_response(unit_transport, id: 1)).to be_persisted
     end
   end
+
+  # A plain class-level ivar is not inherited, so a subclass used to inherit
+  # every association, the page limit and the searchability, and lose only the
+  # API path - raising "does not declare an API path" from a class that
+  # plainly did.
+  describe 'a resource subclassed by a caller' do
+    subject(:subclass) { Class.new(ZammadAPI::Resources::Ticket) { def self.name = 'MyTicket' } }
+
+    it 'inherits the API path' do
+      expect(subclass.resource_path).to eq('api/v1/tickets')
+    end
+
+    it 'inherits the member path built from it' do
+      expect(subclass.member_path(7)).to eq('api/v1/tickets/7')
+    end
+
+    it 'inherits searchability' do
+      expect(subclass.searchable?).to be(true)
+    end
+
+    it 'inherits the page limit' do
+      expect(subclass.page_limit).to eq(100)
+    end
+
+    it 'inherits the filterable keys' do
+      expect(subclass.filterable_keys).to eq([])
+    end
+
+    it 'inherits the associations, as it always did' do
+      expect(subclass.associations.keys).to eq(ZammadAPI::Resources::Ticket.associations.keys)
+    end
+
+    it 'lets a subclass declare a path of its own' do
+      own = Class.new(ZammadAPI::Resources::Ticket) { path 'api/v1/my_tickets' }
+
+      expect(own.resource_path).to eq('api/v1/my_tickets')
+    end
+
+    # An override has to win even when it is the falsey value, which is why
+    # the lookup asks whether the ivar is defined rather than whether it is
+    # truthy.
+    it 'lets a subclass declare itself unsearchable' do
+      own = Class.new(ZammadAPI::Resources::Ticket) { searchable false }
+
+      expect(own.searchable?).to be(false)
+    end
+  end
+
+  # Declared as bare constants, a misspelled override was silently ignored and
+  # the resource kept Base's default: SEARCHEABLE = true left the resource
+  # unsearchable, and every find_by on it raised "Zammad routes no search
+  # endpoint" with no hint that the declaration was the problem.
+  describe 'the endpoint declarations' do
+    it 'refuses a misspelled declaration at load' do
+      expect { Class.new(described_class) { searcheable true } }
+        .to raise_error(NoMethodError, /searcheable/)
+    end
+
+    it 'defaults to unsearchable, so an unrouted /search is refused at the call site' do
+      expect(Class.new(described_class).searchable?).to be(false)
+    end
+
+    it 'defaults to the generic index page limit' do
+      expect(Class.new(described_class).page_limit).to eq(described_class::DEFAULT_MAX_PER_PAGE)
+    end
+
+    it 'defaults to the generic index query keys' do
+      expect(Class.new(described_class).filterable_keys).to eq(described_class::DEFAULT_INDEX_QUERY_KEYS)
+    end
+
+    it 'records a declared page limit' do
+      expect(Class.new(described_class) { max_per_page 25 }.page_limit).to eq(25)
+    end
+
+    it 'records declared query keys' do
+      expect(Class.new(described_class) { index_query_keys :sort_by }.filterable_keys).to eq([:sort_by])
+    end
+
+    it 'reads a declaration of no query keys' do
+      expect(Class.new(described_class) { index_query_keys }.filterable_keys).to eq([])
+    end
+  end
+
+  # What makes a record persisted is that Zammad answered 2xx, not that the
+  # answer parsed. Decoded first, a create whose 201 carried an HTML error
+  # page from an intervening proxy raised ParseError with the record still
+  # looking new - so the ticket existed in Zammad and a retried save POSTed a
+  # second one.
+  describe 'a create whose success body cannot be parsed' do
+    subject(:group) { client.group.new(name: 'Support') }
+
+    before { stub_request(:post, url).with(query: hash_including({})).to_return(status: 201, body: '<html>proxy</html>') }
+
+    it 'still reports the parse failure' do
+      expect { group.save }.to raise_error(ZammadAPI::ParseError)
+    end
+
+    it 'does not leave the record looking unsaved' do
+      begin
+        group.save
+      rescue ZammadAPI::ParseError
+        nil
+      end
+
+      expect(group.new_record?).to be(false)
+    end
+
+    it 'does not create a second record when the save is retried' do
+      2.times do
+        group.save
+      rescue ZammadAPI::ParseError
+        nil
+      end
+
+      expect(a_request(:post, url).with(query: hash_including({}))).to have_been_made.once
+    end
+  end
 end

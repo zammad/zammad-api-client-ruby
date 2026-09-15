@@ -7,7 +7,7 @@ module ZammadAPI
     class Organization < Base
       path 'api/v1/organizations'
 
-      SEARCHABLE = true
+      searchable true
     end
   end
 end

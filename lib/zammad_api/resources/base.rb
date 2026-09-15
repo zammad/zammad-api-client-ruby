@@ -22,29 +22,19 @@ module ZammadAPI
 
       # Largest page size Zammad's generic index endpoints serve, from
       # ApplicationController#model_index_render via CanPaginate. Resources
-      # whose endpoint caps lower override this.
-      MAX_PER_PAGE = 1000
+      # whose endpoint caps lower declare +max_per_page+.
+      DEFAULT_MAX_PER_PAGE = 1000
 
-      # Query parameters this resource's index endpoint honours, beyond the
-      # paging {Collection} owns.
+      # Query parameters an index endpoint honours, beyond the paging
+      # {Collection} owns.
       #
       # ApplicationController#model_index_render builds its query as
       # `reorder(order_sql).offset(...).limit(...)` - it sorts and pages and
       # drops every other parameter. There is no attribute filtering on an
       # index endpoint at all; that is what /search is for. Resources whose
-      # controller hardcodes the order override this with an empty list.
-      INDEX_QUERY_KEYS = %i[sort_by order_by].freeze
-
-      # Whether Zammad routes a +/search+ endpoint for this resource.
-      #
-      # Declared rather than assumed, and false unless a resource says
-      # otherwise: an unrouted `.../search` answers 404, which arrives as a
-      # NotFoundError from inside {ResourceProxy#find_by} - a method
-      # documented to return nil when nothing matched. A new resource that
-      # forgets to declare this is refused at the call site instead, which is
-      # a question about the resource rather than a wrong answer about a
-      # record.
-      SEARCHABLE = false
+      # controller hardcodes the order declare +index_query_keys+ with
+      # nothing in it.
+      DEFAULT_INDEX_QUERY_KEYS = %i[sort_by order_by].freeze
 
       # Staged changes as +attribute => [old_value, new_value]+.
       #
@@ -73,10 +63,54 @@ module ZammadAPI
           @path = value
         end
 
+        # Declares that Zammad routes a +/search+ endpoint for this resource.
+        #
+        # Declared rather than assumed, and false unless a resource says
+        # otherwise: an unrouted `.../search` answers 404, which arrives as a
+        # NotFoundError from inside {ResourceProxy#find_by} - a method
+        # documented to return nil when nothing matched. A resource that
+        # forgets to declare this is refused at the call site instead, which
+        # is a question about the resource rather than a wrong answer about a
+        # record.
+        #
+        # @param value [Boolean]
+        # @return [void]
+        def searchable(value)
+          @searchable = value
+        end
+
+        # Declares the largest page size this resource's index endpoint
+        # serves.
+        #
+        # @param value [Integer]
+        # @return [void]
+        def max_per_page(value)
+          @max_per_page = value
+        end
+
+        # Declares the query parameters this resource's index endpoint
+        # honours, beyond the paging {Collection} owns.
+        #
+        # @param keys [Array<Symbol>]
+        # @return [void]
+        def index_query_keys(*keys)
+          @index_query_keys = keys.flatten.freeze
+        end
+
         # @return [String] the API path of this resource
         def resource_path
-          @path || raise(Error, "#{name} does not declare an API path")
+          declaration(:path) || raise(Error, "#{name} does not declare an API path")
         end
+
+        # @return [Boolean] whether Zammad routes a +/search+ endpoint here
+        def searchable? = declaration(:searchable) { false }
+
+        # @return [Integer] the largest page size this endpoint serves
+        def page_limit = declaration(:max_per_page) { DEFAULT_MAX_PER_PAGE }
+
+        # @return [Array<Symbol>] the query parameters {Collection#where} may
+        #   pass to this endpoint
+        def filterable_keys = declaration(:index_query_keys) { DEFAULT_INDEX_QUERY_KEYS }
 
         # The API path of one record of this kind.
         #
@@ -136,6 +170,27 @@ module ZammadAPI
         end
 
         private
+
+        # Reads a declaration from this class, or failing that from the
+        # resource it inherits from.
+        #
+        # A plain class-level ivar is not inherited, so `class MyTicket <
+        # Ticket; end` used to inherit all nine of Ticket's associations, its
+        # page limit and its searchability, and lose only its API path -
+        # `MyTicket.resource_path` raised "does not declare an API path" from
+        # a class that plainly did. {.associations} and {.related_class} both
+        # walk the ancestry deliberately; these read through the same way.
+        #
+        # `instance_variable_defined?` rather than a truth test, so that a
+        # resource may declare a value that is false or nil and have it
+        # override an inherited one.
+        def declaration(name, &default)
+          variable = :"@#{name}"
+          return instance_variable_get(variable) if instance_variable_defined?(variable)
+          return superclass.send(:declaration, name, &default) if superclass.respond_to?(:declaration, true)
+
+          default&.call
+        end
 
         def declared_associations = @declared_associations ||= {}
 

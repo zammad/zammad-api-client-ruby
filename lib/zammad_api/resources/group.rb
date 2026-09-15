@@ -7,7 +7,7 @@ module ZammadAPI
     class Group < Base
       path 'api/v1/groups'
 
-      SEARCHABLE = true
+      searchable true
     end
   end
 end
