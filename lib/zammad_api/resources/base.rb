@@ -390,9 +390,18 @@ module ZammadAPI
       # the moment a sixth field was added to only one of them, and nothing
       # would have caught a reloaded record still holding an association proxy
       # from before the reload.
+      # The flag goes down before the body is decoded, because what makes a
+      # record persisted is that Zammad answered 2xx, not that the answer
+      # parsed. Decoded first, a create whose 201 carried something other than
+      # a JSON object - an HTML error page from an intervening proxy - raised
+      # ParseError with @new_record still true, so the ticket existed in
+      # Zammad while the record here still looked unsaved and a retried `save`
+      # POSTed a second one. The staged changes stay put on that path, so the
+      # retry is a PUT of what was never confirmed rather than a second
+      # create.
       def replace_attributes!(response, operation:)
-        @attributes = frozen_attributes(response.decoded(:object, operation: operation, resource_class: self.class))
         @new_record = false
+        @attributes = frozen_attributes(response.decoded(:object, operation: operation, resource_class: self.class))
         reset_pending_state!
       end
 
