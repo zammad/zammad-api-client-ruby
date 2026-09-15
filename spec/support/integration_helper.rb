@@ -30,17 +30,37 @@ class Helper
   # Memoized and idempotent, so it does not matter which spec file happens to
   # run first, and re-running the suite against an already configured instance
   # is not an error.
+  # The failure is memoized alongside the success, because `||=` memoizes
+  # neither. A TEST_URL with nothing behind it re-ran the whole probe - two
+  # requests, each with a ten second open timeout - once per example, so a
+  # Zammad that never came up took the suite a very long time to say so.
   def self.ensure_configured!
-    @ensure_configured ||= begin
+    return true if @ensure_configured
+    raise @setup_failure if @setup_failure
+
+    begin
       auto_wizard? || verify_setup_done!
-      true
+      @ensure_configured = true
+    rescue SetupError => e
+      @setup_failure = e
+      raise
     end
   end
 
   # @return [Boolean] whether the auto wizard ran now
+  # @raise [SetupError] when the instance cannot be reached at all
   def self.auto_wizard?
     response = connection.get('api/v1/getting_started/auto_wizard')
     parse(response.body)['auto_wizard_success'] == true
+  rescue Faraday::Error => e
+    # {.verify_setup_done!} wraps its failure into a SetupError naming the URL
+    # and the user; this probe runs one line earlier and did not, so the
+    # commonest failure of all - CI booting against a Zammad that never came
+    # up - reached every example as a bare Faraday exception from a helper
+    # that exists to explain exactly that.
+    raise SetupError,
+          "Zammad at #{config[:url]} could not be reached: the setup check failed to connect " \
+          "(#{e.class}: #{e.message}). Set TEST_URL to a running instance."
   end
 
   # A configured Zammad requires authentication even for
