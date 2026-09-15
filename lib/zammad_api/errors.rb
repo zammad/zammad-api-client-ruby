@@ -150,7 +150,10 @@ module ZammadAPI
     def server_message
       return nil if !body.is_a?(Hash)
 
-      value = body[:error_human] || body[:error] || body['error_human'] || body['error']
+      # Symbol keys only: both decode paths - Transport#decode_body and the
+      # test kit - parse with symbolize_names, so a string-keyed body cannot
+      # reach here and the fallbacks that read one were never run.
+      value = body[:error_human] || body[:error]
       value.to_s.empty? ? nil : value.to_s
     end
 
