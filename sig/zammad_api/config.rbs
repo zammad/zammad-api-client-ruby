@@ -72,6 +72,7 @@ module ZammadAPI
     def render: (Symbol, untyped) -> String
     def normalize_url: (untyped) -> String
     def validate_credentials!: () -> void
+    def positive_number?: (untyped) -> bool
     def validate_numbers!: () -> void
     def validate_user_agent!: () -> void
     def validate_ssl_verify!: () -> void

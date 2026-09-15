@@ -252,9 +252,16 @@ module ZammadAPI
       raise ConfigurationError, 'missing password in config' if password.nil?
     end
 
+    # Numeric is not the whole test. Complex is one and answers neither
+    # `positive?` nor `>`, so `timeout: Complex(1, 2)` left a NoMethodError
+    # where every other rejected option raises ConfigurationError - the same
+    # escape normalize_adapter, normalize_proxy and validate_logger! were each
+    # written to close.
+    def positive_number?(value) = value.is_a?(Numeric) && value.respond_to?(:positive?) && value.positive?
+
     def validate_numbers!
       { timeout: timeout, open_timeout: open_timeout, retry_interval: retry_interval }.each do |name, value|
-        raise ConfigurationError, "config #{name} needs to be a positive number" if !value.is_a?(Numeric) || !value.positive?
+        raise ConfigurationError, "config #{name} needs to be a positive number" if !positive_number?(value)
       end
 
       raise ConfigurationError, 'config retries needs to be a non-negative integer' if !retries.is_a?(Integer) || retries.negative?

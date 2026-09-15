@@ -187,6 +187,14 @@ RSpec.describe ZammadAPI::Config do
   end
 
   describe 'numeric validation' do
+    # Complex is a Numeric and answers neither `positive?` nor `>`, so this
+    # left a NoMethodError where every other rejected option raises the error
+    # building a client is documented to need.
+    it 'rejects a Numeric that cannot be compared, as a configuration error' do
+      expect { build(timeout: Complex(1, 2)) }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config timeout needs to be a positive number')
+    end
+
     it 'rejects a zero timeout' do
       expect { build(timeout: 0) }
         .to raise_error(ZammadAPI::ConfigurationError, 'config timeout needs to be a positive number')
