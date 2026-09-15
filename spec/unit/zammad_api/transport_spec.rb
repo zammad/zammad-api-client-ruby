@@ -419,6 +419,27 @@ RSpec.describe ZammadAPI::Transport do
     it 'does not leak a Faraday error out of the client constructor' do
       expect { unit_client(adapter: :nonsense) }.to raise_error(ZammadAPI::ConfigurationError)
     end
+
+    # Only Faraday::Error used to be wrapped, so the failures that do not come
+    # from Faraday - the ones a caller is least equipped to place - escaped
+    # raw, past the `rescue ZammadAPI::ConfigurationError` the constructor is
+    # documented to need.
+    it 'reports a proxy that is not a url as a configuration error' do
+      expect { unit_transport(proxy: 'http://user:pa ss@host') }
+        .to raise_error(ZammadAPI::ConfigurationError, /URI::InvalidURIError/)
+    end
+
+    it 'reports a middleware that raises as a configuration error' do
+      expect { unit_transport(middleware: ->(_) { raise NameError, 'boom' }) }
+        .to raise_error(ZammadAPI::ConfigurationError, /NameError: boom/)
+    end
+
+    it 'does not relabel an error this gem raised itself' do
+      failure = ZammadAPI::NotFoundError.new(operation: 'test', resource_class: nil, detail: 'gone')
+
+      expect { unit_transport(middleware: ->(_) { raise failure }) }
+        .to raise_error(ZammadAPI::NotFoundError)
+    end
   end
 
   describe '#with_on_behalf_of' do

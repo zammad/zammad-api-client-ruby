@@ -283,10 +283,22 @@ module ZammadAPI
         config.middleware&.call(faraday)
         faraday.adapter(config.adapter || Faraday.default_adapter)
       end
-    rescue Faraday::Error => e
-      # An unregistered adapter or a middleware that rejects its options is a
-      # configuration mistake, and Faraday is not part of this gem's surface.
-      raise ConfigurationError, "config could not be used to build a connection: #{e.message}"
+    rescue ZammadAPI::Error
+      raise
+    rescue => e
+      # An unregistered adapter, a proxy that is not a URL, or a middleware
+      # that rejects its options is a configuration mistake, and neither
+      # Faraday nor URI is part of this gem's surface.
+      #
+      # Caught as StandardError rather than as Faraday::Error, because the
+      # failures that do not come from Faraday are the ones a caller is least
+      # equipped to place: `proxy: 'http://user:pa ss@host'` escaped as
+      # URI::InvalidURIError and a `middleware` callable that raises escaped
+      # as whatever it raised, both straight past the
+      # `rescue ZammadAPI::ConfigurationError` that building a client is
+      # documented to need. The class is named in the message because
+      # "bad URI (is not URI?)" on its own says nothing about where to look.
+      raise ConfigurationError, "config could not be used to build a connection: #{e.class}: #{e.message}"
     end
 
     def apply_authentication(faraday)
