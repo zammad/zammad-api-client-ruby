@@ -82,10 +82,33 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(group.name).to eq('Support')
     end
 
-    it 'drops the change when a previously unset attribute is set back to nil' do
+    it 'drops the change when an attribute the record carries is set back to its nil original' do
+      carrying_nil = client.group.new(name: 'Support', note: nil)
+      carrying_nil.note = 'Renamed'
+      carrying_nil.note = nil
+      expect(carrying_nil.changes).to be_empty
+    end
+
+    # An attribute the record does not carry is not an attribute whose value
+    # is nil: Zammad reduces the object it serializes for a permission-scoped
+    # client, so the key being absent says nothing about what is stored. Read
+    # as a nil original, writing nil to one compared equal, staged nothing and
+    # was still merged into the attributes - the write was dropped without a
+    # word and the record went on reporting a key Zammad never sent it.
+    it 'stages a write of an attribute the record does not carry' do
+      group.active = nil
+      expect(group.changes).to eq(active: [nil, nil])
+    end
+
+    it 'keeps that write staged when it is written twice' do
       group.active = true
       group.active = nil
-      expect(group.changes).to be_empty
+      expect(group.changes).to eq(active: [nil, nil])
+    end
+
+    it 'keeps the attributes it reports in step with the changes it staged' do
+      group.active = nil
+      expect(group.key?(:active)).to be(group.changes.key?(:active))
     end
   end
 

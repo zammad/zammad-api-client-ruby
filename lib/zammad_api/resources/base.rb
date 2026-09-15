@@ -238,6 +238,10 @@ module ZammadAPI
       def initialize(transport, attributes = {})
         @transport  = transport
         @attributes = frozen_attributes(attributes || {})
+        # What #changes measures against: the attributes this record arrived
+        # with, kept apart from the ones it currently holds. The two share the
+        # one frozen Hash until the first write copies it.
+        @baseline   = @attributes
         @changes    = {}
         @new_record = true
         @destroyed  = false
@@ -471,6 +475,7 @@ module ZammadAPI
       def replace_attributes!(response, operation:)
         @new_record = false
         @attributes = frozen_attributes(response.decoded(:object, operation: operation, resource_class: self.class))
+        @baseline   = @attributes
         reset_pending_state!
       end
 
@@ -489,15 +494,23 @@ module ZammadAPI
       # The baseline is the value this record was loaded with, not the value
       # the previous assignment happened to leave behind. Writing twice must
       # still report the original, and writing a value back to the original
-      # is not a change at all.
+      # is not a change at all - but only where the record was loaded
+      # carrying that attribute in the first place.
+      #
+      # That last part is why the baseline is held rather than read back out
+      # of @attributes: an attribute the record does not carry - Zammad
+      # reduces the object it serializes for a permission-scoped client -
+      # compared nil against nil on the way in, staged nothing, and was still
+      # merged into @attributes below. The write was dropped without a word,
+      # no request was ever sent for it, and the record went on reporting a
+      # key Zammad had never sent it, so #changes and #attributes disagreed.
       def write_attribute(key, value)
-        staged   = frozen_attributes(value)
-        original = @changes.key?(key) ? @changes[key].first : @attributes[key]
+        staged = frozen_attributes(value)
 
-        if original == staged
+        if @baseline.key?(key) && @baseline[key] == staged
           @changes.delete(key)
         else
-          @changes[key] = [original, staged].freeze
+          @changes[key] = [@baseline[key], staged].freeze
         end
 
         # Copy on write, because @attributes is frozen for the benefit of

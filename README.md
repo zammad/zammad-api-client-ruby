@@ -298,6 +298,12 @@ A `save` on a persisted record with nothing staged sends no request at all and r
 `true`. Zammad applies an empty update, bumping `updated_at` and `updated_by`, so a no-op
 save would otherwise rewrite the record's audit trail.
 
+Writing back the value a record was loaded with is not a change, so it stages nothing.
+Writing an attribute the record does not carry always is one, even when the value is `nil`:
+Zammad reduces the object it serializes for a permission-scoped client, so a key being
+absent says nothing about what is stored, and `group.note = nil` is a request to store
+`nil` rather than a write to drop.
+
 Or in one call:
 
 ```ruby
