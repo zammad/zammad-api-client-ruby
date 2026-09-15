@@ -31,6 +31,11 @@ module ZammadAPI
     # Records fetched per request, unless a call asks for another size.
     DEFAULT_PER_PAGE = 100
 
+    # Header Zammad's index endpoints report the size of the whole result in.
+    # Keys are downcased by the time a {Response} carries them.
+    TOTAL_COUNT_HEADER = 'x-total-count'
+    private_constant :TOTAL_COUNT_HEADER
+
     # Query parameters this collection owns. Passing them to {#where} would be
     # silently overridden, so they are rejected instead.
     #
@@ -248,8 +253,12 @@ module ZammadAPI
       page      = @page || 1
       previous  = nil
       page_size = 0
+      seen      = 0
+      total     = nil
       loop do
-        records = fetch(page, @per_page)
+        records, response = fetch(page, @per_page)
+        total = reported_total(response) if total.nil?
+        seen += records.size
 
         # Before the records are handed over, not after. Yielding first meant
         # an endpoint that ignores `page` had its repeated page imported,
@@ -270,6 +279,18 @@ module ZammadAPI
         # A collection limited to a single page never advances.
         break if @page
         break if records.empty?
+
+        # Where the endpoint reported how many records the query has, that is
+        # the answer to whether there is another page, and it arrived with the
+        # page already fetched. Without it the rule below has to see a short
+        # page before it can stop, so every collection smaller than one page -
+        # the ticket states, the priorities, most of what a script reads -
+        # paid for a second request that could only ever come back empty.
+        #
+        # Zammad's own count, not a guess: {#count} already answers from the
+        # total this endpoint reports, so a walk that stops on it stops where
+        # `count` says the records end.
+        break if reached_total?(seen, total)
 
         # How big a page this endpoint actually serves, learned from the first
         # one rather than assumed. The requested size is clamped to a per-
@@ -302,6 +323,9 @@ module ZammadAPI
       )
     end
 
+    # @return [Array(Array<Resources::Base>, Response)] the page and the
+    #   response it came in, which carries what the endpoint said about the
+    #   size of the whole result
     def fetch(page, per_page)
       response = @transport.get(
         @path,
@@ -310,7 +334,24 @@ module ZammadAPI
         query:          @query.merge(page: page, per_page: per_page)
       )
       records = response.decoded(:array, operation: @operation, resource_class: @resource_class)
-      records.map { @resource_class.from_response(@transport, it) }
+      [records.map { @resource_class.from_response(@transport, it) }, response]
+    end
+
+    # Whether the endpoint's own count says there is nothing after this page.
+    # A method rather than the guard written inline, so that the nil check
+    # narrows: `total` is assigned inside the loop, and the type checker will
+    # not narrow a local it sees reassigned there.
+    def reached_total?(seen, total) = !total.nil? && seen >= total
+
+    # How many records the endpoint says this query has.
+    #
+    # @return [Integer, nil] nil when the header was absent or not a count
+    def reported_total(response)
+      reported = response.headers[TOTAL_COUNT_HEADER]
+      return nil if reported.nil?
+
+      total = Integer(reported, 10, exception: false)
+      total if total&.>=(0)
     end
 
     # @return [Integer, nil] nil when the endpoint did not report a total

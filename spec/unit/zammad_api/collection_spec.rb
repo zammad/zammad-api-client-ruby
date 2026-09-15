@@ -26,6 +26,14 @@ RSpec.describe ZammadAPI::Collection do
     stub_page(page + 1, [], per_page: per_page)
   end
 
+  # An endpoint that reports the size of the whole result alongside the page,
+  # the way Zammad's index endpoints do.
+  def stub_counted_page(page, records, total:, per_page: ZammadAPI::Collection::DEFAULT_PER_PAGE)
+    stub_request(:get, url)
+      .with(query: { 'expand' => 'true', 'page' => page.to_s, 'per_page' => per_page.to_s })
+      .to_return(json_response(records, headers: { 'X-Total-Count' => total.to_s }))
+  end
+
   # Mirrors Zammad's CanPaginate::Pagination: the endpoint reduces per_page to
   # its own maximum and pages by that reduced size.
   def stub_capped_endpoint(url, total:, max:)
@@ -51,6 +59,33 @@ RSpec.describe ZammadAPI::Collection do
 
     it 'confirms the end of a short first page rather than assuming it' do
       stub_last_page(1, [{ id: 1 }])
+
+      expect(collection.map(&:id)).to eq([1])
+      expect(a_request(:get, url).with(query: hash_including('page' => '2'))).to have_been_made
+    end
+
+    # Only where the endpoint says nothing about the size of the result. It
+    # usually does, and the confirming request could then only ever come back
+    # empty - a second request for every collection smaller than one page.
+    it 'takes the endpoint at its word instead, when it reports a total' do
+      stub_counted_page(1, [{ id: 1 }, { id: 2 }], total: 2)
+
+      expect(collection.map(&:id)).to eq([1, 2])
+      expect(a_request(:get, url).with(query: hash_including('page' => '2'))).not_to have_been_made
+    end
+
+    it 'keeps walking past a full page towards a reported total' do
+      stub_counted_page(1, full_page, total: 101)
+      stub_counted_page(2, [{ id: 101 }], total: 101)
+
+      expect(collection.map(&:id)).to eq((1..101).to_a)
+      expect(a_request(:get, url).with(query: hash_including('page' => '3'))).not_to have_been_made
+    end
+
+    it 'falls back to confirming the end when the total is not a count' do
+      stub_request(:get, url).with(query: hash_including('page' => '1'))
+        .to_return(json_response([{ id: 1 }], headers: { 'X-Total-Count' => 'lots' }))
+      stub_page(2, [])
 
       expect(collection.map(&:id)).to eq([1])
       expect(a_request(:get, url).with(query: hash_including('page' => '2'))).to have_been_made
