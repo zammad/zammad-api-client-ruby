@@ -600,11 +600,15 @@ RSpec.describe ZammadAPI::Resources::Base do
         expect(group.name).to eq('Support')
       end
 
-      it 'drops the association readers, which would request a record that is gone' do
-        before_destroy = group.related
+      it 'refuses the association readers, which would request a record that is gone' do
         group.destroy
 
-        expect(group.related).not_to be(before_destroy)
+        # The guarantee, not the mechanism that was expected to deliver it.
+        # This compared the proxy against the one from before the destroy,
+        # which clearing the memo satisfied - while `related` went on
+        # rebuilding a working proxy on the very next call. It passed for as
+        # long as the behaviour it is named for was broken.
+        expect { group.related }.to raise_error(ZammadAPI::Error, /was destroyed/)
       end
 
       it 'drops the failure of a save that is over' do

@@ -256,9 +256,12 @@ A breaking release that modernises the whole gem. See
 - A list body that is not made of objects raises `ParseError` instead of failing later. An
   unexpanded search answering `[1, 2, 3]` stored an Integer as a record's attributes, and
   the first reader died with `TypeError: no implicit conversion of Symbol into Integer`.
-- `destroy` clears the staged changes, the last validation error and the association
-  readers. A destroyed record went on reporting `changed?` and a change set that can never
-  be sent, and `record.related` went on requesting a record that no longer exists.
+- `destroy` clears the staged changes and the last validation error, and refuses the
+  association readers. A destroyed record went on reporting `changed?` and a change set
+  that can never be sent, and `record.related` went on requesting a record that no longer
+  exists — dropping the memo was not enough on its own, because the reader rebuilt one on
+  the next call. `record.related`, `ticket.articles` and `ticket.article(…)` all raise
+  `ZammadAPI::Error` for a destroyed record now, rather than reaching the server for it.
 - `Config#redacted_url` no longer mangles a URL whose query string contains an `@`.
   `https://host?a=b@c` was rendered as `https://[REDACTED]@c`, a host that does not exist,
   in every `ConnectionError` and `TimeoutError` message.

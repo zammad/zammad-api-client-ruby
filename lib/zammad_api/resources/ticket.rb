@@ -41,9 +41,17 @@ module ZammadAPI
       #
       # @param attributes [Hash] article attributes, e.g. +body:+, +type:+
       # @return [TicketArticle] the created article
-      # @raise [Error] when the ticket has no id yet
+      # @raise [Error] when the ticket has no id yet, or was destroyed
       # @raise [ResponseError] when Zammad rejected the request
       def article(attributes = {})
+        # A destroyed ticket takes no articles, and says so here rather than
+        # one request later. `require_id!` passes on its own, because destroy
+        # leaves the id readable, so without this the POST went out naming a
+        # ticket that is gone and Zammad's 422 about ticket_id was the first
+        # news of it - the fourth state-changing path, after the three that
+        # already ask.
+        raise_if_destroyed!('add an article to')
+
         # An article belongs to a ticket by id, so ask for one here rather
         # than merging nil. Unchecked, this POSTed `ticket_id: null` and left
         # the caller reading Zammad's 422 to work out that the ticket they

@@ -33,6 +33,41 @@ RSpec.describe ZammadAPI::Resources::Ticket do
     end
   end
 
+  describe 'once destroyed' do
+    let(:ticket_url) { "#{ClientHelper::BASE_URL}api/v1/tickets/42" }
+
+    before do
+      stub_request(:delete, ticket_url).with(query: hash_including({})).to_return(json_response({}))
+      ticket.destroy
+    end
+
+    # Each of these says what the caller gets, not which ivar was cleared.
+    # `destroy` dropped the `related` memo and was taken to have closed this,
+    # but the reader rebuilt one on the next call, so every path below went
+    # on reaching a ticket that is gone.
+    it 'refuses the articles reader rather than fetching a deleted ticket' do
+      expect { ticket.articles }.to raise_error(ZammadAPI::Error, /was destroyed/)
+    end
+
+    it 'refuses the related proxy' do
+      expect { ticket.related }.to raise_error(ZammadAPI::Error, /was destroyed/)
+    end
+
+    it 'refuses to add an article rather than POSTing a dead ticket_id' do
+      expect { ticket.article(body: 'hello') }.to raise_error(ZammadAPI::Error, /was destroyed/)
+    end
+
+    it 'makes no request at all when an article is refused' do
+      stub = stub_request(:post, article_url).with(query: hash_including({}))
+      begin
+        ticket.article(body: 'hello')
+      rescue ZammadAPI::Error # rubocop:disable Lint/SuppressedException
+      end
+
+      expect(stub).not_to have_been_requested
+    end
+  end
+
   describe '#article' do
     it 'creates the article for this ticket' do
       stub = stub_request(:post, article_url)

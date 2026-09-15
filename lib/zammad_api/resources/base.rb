@@ -289,8 +289,19 @@ module ZammadAPI
       #   ticket.related.articles       # => [TicketArticle, ...]
       #
       # @return [Associations::Proxy]
+      # @raise [Error] when the record was destroyed
       # @see .associations
-      def related = @related ||= self.class.related_class.new(self)
+      def related
+        # Asked here rather than left to the request. `destroy` drops the memo,
+        # and that was taken to be the whole of it - but this reader rebuilds
+        # on the next call, so a destroyed record went on handing out a working
+        # proxy and `related.articles` fetched the articles of a ticket that is
+        # gone. Clearing a memo is not refusing a reader, and only the refusal
+        # is worth asserting: the spec that covered this compared proxy
+        # identity, so it passed throughout.
+        raise_if_destroyed!('read related records from')
+        @related ||= self.class.related_class.new(self)
+      end
 
       # Stages several attributes as changes, without saving.
       #
