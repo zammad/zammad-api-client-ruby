@@ -13,8 +13,12 @@ module ZammadAPI
     DEFAULT_RETRY_INTERVAL: Float
     REDACTED_ATTRIBUTES: Array[Symbol]
     REDACTION: String
+    DEFAULT_USER_AGENT: String
+    SCHEME_PATTERN: Regexp
     URL_PATTERN: Regexp
+    URL_SUFFIX_PATTERN: Regexp
     USERINFO_PATTERN: Regexp
+    USERINFO_REPLACEMENT: String
 
     def self.new: (**untyped) -> instance
 
@@ -61,10 +65,12 @@ module ZammadAPI
 
     private
 
+    def redact_userinfo: (String) -> String
     def render: (Symbol, untyped) -> String
     def normalize_url: (untyped) -> String
     def validate_credentials!: () -> void
     def validate_numbers!: () -> void
+    def validate_user_agent!: () -> void
     def validate_middleware!: () -> void
     def validate_logger!: () -> void
     def presence: (untyped) -> untyped

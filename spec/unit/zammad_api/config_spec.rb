@@ -28,6 +28,33 @@ RSpec.describe ZammadAPI::Config do
       expect { build(url: 'ftp://example.com') }
         .to raise_error(ZammadAPI::ConfigurationError, 'config url needs to start with http:// or https://')
     end
+
+    # Appended blindly, the slash landed behind the query string and every
+    # request was resolved against a base ending in `?tenant=acme/`.
+    it 'puts the trailing slash on the path, not behind a query string' do
+      expect(build(url: 'https://example.com/zammad?tenant=acme').url)
+        .to eq('https://example.com/zammad/?tenant=acme')
+    end
+
+    it 'puts the trailing slash on the path, not behind a fragment' do
+      expect(build(url: 'https://example.com/zammad#top').url)
+        .to eq('https://example.com/zammad/#top')
+    end
+
+    # Accepted, this failed deep inside the adapter on the first request
+    # instead of here.
+    it 'rejects a scheme with no host after it' do
+      expect { build(url: 'https://') }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config url needs a host after the scheme, got "https://"')
+    end
+
+    # URI(...) is what a caller reaches for, and it prints as the URL, so it
+    # reached String#end_with? and died there as a NoMethodError - past the
+    # ConfigurationError the constructor is documented to raise.
+    it 'rejects a url that is not a string' do
+      expect { build(url: URI('https://example.com/')) }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config url needs to be a string, got URI::HTTPS')
+    end
   end
 
   describe 'credentials' do
@@ -95,6 +122,24 @@ RSpec.describe ZammadAPI::Config do
 
     it 'installs no extra middleware' do
       expect(build.middleware).to be_nil
+    end
+  end
+
+  describe 'the user agent' do
+    # Handed to Faraday as a nil header, Faraday filled in its own, so the gem
+    # stopped identifying itself in the instance log an operator greps to find
+    # its requests - on every request, with nothing said about it.
+    it 'falls back to the default when it is nil' do
+      expect(build(user_agent: nil).user_agent).to eq("zammad_api-ruby/#{ZammadAPI::VERSION}")
+    end
+
+    it 'falls back to the default when it is empty' do
+      expect(build(user_agent: '').user_agent).to eq("zammad_api-ruby/#{ZammadAPI::VERSION}")
+    end
+
+    it 'rejects one that is not a string' do
+      expect { build(user_agent: 42) }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config user_agent needs to be a string')
     end
   end
 
@@ -236,6 +281,20 @@ RSpec.describe ZammadAPI::Config do
       expect(build(proxy: 'http://proxy.test:8080').inspect).to include('proxy="http://proxy.test:8080"')
     end
 
+    # The shape an http_proxy style setting is copied out of. Anchored on a
+    # `://` lookbehind, the redaction never fired and the password went into
+    # every log line and exception report this class promises to be safe in.
+    it 'redacts the credentials of a proxy configured without a scheme' do
+      rendered = build(proxy: 'puser:pproxy-s3cret@proxy.test:8080').inspect
+
+      expect(rendered).to include('proxy="[REDACTED]@proxy.test:8080"')
+      expect(rendered).not_to include('pproxy-s3cret')
+    end
+
+    it 'leaves a scheme-less proxy without credentials alone' do
+      expect(build(proxy: 'proxy.test:8080').inspect).to include('proxy="proxy.test:8080"')
+    end
+
     context 'with credentials in the instance url' do
       subject(:rendered) { build(url: 'https://admin:url-s3cret@zammad.example.com/').inspect }
 
@@ -279,12 +338,12 @@ RSpec.describe ZammadAPI::Config do
     # rendered a host that does not exist - into every ConnectionError message.
     it 'leaves an @ in a query string alone' do
       expect(build(url: 'https://zammad.example.com?tenant=a@acme').redacted_url)
-        .to eq('https://zammad.example.com?tenant=a@acme/')
+        .to eq('https://zammad.example.com/?tenant=a@acme')
     end
 
     it 'leaves an @ in a fragment alone' do
       expect(build(url: 'https://zammad.example.com#a@b').redacted_url)
-        .to eq('https://zammad.example.com#a@b/')
+        .to eq('https://zammad.example.com/#a@b')
     end
 
     it 'still blanks credentials on a url that also carries an @ later on' do

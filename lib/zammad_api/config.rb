@@ -82,7 +82,20 @@ module ZammadAPI
     # Placeholder rendered in place of a credential.
     REDACTION = '[REDACTED]'
 
-    URL_PATTERN = %r{\Ahttps?://}i
+    # Identifies this gem in the +User-Agent+ header.
+    DEFAULT_USER_AGENT = "zammad_api-ruby/#{ZammadAPI::VERSION}".freeze
+
+    SCHEME_PATTERN = %r{\Ahttps?://}i
+
+    # An absolute http(s) URL, authority included. The host is part of the
+    # pattern because a bare scheme - +https://+ - passed a scheme-only check
+    # and was accepted here, then failed deep inside the adapter on the first
+    # request instead of at construction, which is the opposite of the
+    # up-front validation the rest of this class exists for.
+    URL_PATTERN = %r{\Ahttps?://[^/?\#]+}i
+
+    # Where a URL stops being the part a trailing slash belongs on.
+    URL_SUFFIX_PATTERN = /[?\#]/
 
     # The +user:password@+ part of a URL. A proxy URL carries its credentials
     # inline, so {#inspect} has to blank them while keeping the host visible.
@@ -98,7 +111,15 @@ module ZammadAPI
     # as +https://[REDACTED]@c+, a host that does not exist - printed in every
     # ConnectionError and TimeoutError message and in {#inspect}, so the
     # operator debugging an outage was shown the wrong instance.
-    USERINFO_PATTERN = %r{(?<=://)[^/?\#]+(?=@)}
+    #
+    # The scheme is optional, and matched rather than looked behind, because a
+    # proxy is configured without one as often as with: +u:p@proxy:8080+ is
+    # the shape an +http_proxy+ style setting is copied out of, and a
+    # +://+ lookbehind left that password in {#inspect} in full.
+    USERINFO_PATTERN = %r{\A(?<scheme>[a-z][a-z0-9+.-]*://)?(?<userinfo>[^/?\#]+)(?=@)}i
+
+    # Replacement that keeps the scheme and drops the credential.
+    USERINFO_REPLACEMENT = "\\k<scheme>#{REDACTION}".freeze
 
     def initialize(
       url:,
@@ -106,7 +127,7 @@ module ZammadAPI
       password: nil,
       http_token: nil,
       oauth2_token: nil,
-      user_agent: "zammad_api-ruby/#{ZammadAPI::VERSION}",
+      user_agent: DEFAULT_USER_AGENT,
       timeout: DEFAULT_TIMEOUT,
       open_timeout: DEFAULT_OPEN_TIMEOUT,
       retries: DEFAULT_RETRIES,
@@ -126,7 +147,7 @@ module ZammadAPI
         password:       immutable(presence(password)),
         http_token:     immutable(presence(http_token)),
         oauth2_token:   immutable(presence(oauth2_token)),
-        user_agent:     immutable(user_agent),
+        user_agent:     immutable(presence(user_agent) || DEFAULT_USER_AGENT),
         timeout:        timeout,
         open_timeout:   open_timeout,
         retries:        retries,
@@ -140,6 +161,7 @@ module ZammadAPI
       # steep:ignore:end
       validate_credentials!
       validate_numbers!
+      validate_user_agent!
       validate_middleware!
       validate_logger!
     end
@@ -152,7 +174,7 @@ module ZammadAPI
     # credentials are replaced rather than the whole value.
     #
     # @return [String]
-    def redacted_url = url.sub(USERINFO_PATTERN, REDACTION)
+    def redacted_url = redact_userinfo(url)
 
     # @return [Symbol] +:http_token+, +:oauth2_token+ or +:basic+
     def authentication_scheme
@@ -171,6 +193,10 @@ module ZammadAPI
 
     private
 
+    # @param value [String] a URL that may carry inline credentials
+    # @return [String] the same URL with the credentials blanked
+    def redact_userinfo(value) = value.sub(USERINFO_PATTERN, USERINFO_REPLACEMENT)
+
     def render(key, value)
       return REDACTION if REDACTED_ATTRIBUTES.include?(key) && value
       # Loggers and procs have verbose default inspect output that would drown
@@ -178,19 +204,33 @@ module ZammadAPI
       return "#<#{value.class}>" if key == :logger
       return "#<#{value.class}>" if key == :middleware && value
       return redacted_url.inspect if key == :url
-      return value.sub(USERINFO_PATTERN, REDACTION).inspect if key == :proxy && value
+      return redact_userinfo(value).inspect if key == :proxy && value
 
       value.inspect
     end
 
+    # The type check comes before the pattern, because every check after it
+    # is a String method. A URI is the plausible mistake here - it is what
+    # `URI(...)` hands back and it prints as the URL - and it used to reach
+    # `end_with?` and die there as a NoMethodError, past the ConfigurationError
+    # a caller had wrapped the constructor in.
     def normalize_url(value)
       raise ConfigurationError, 'missing url in config' if presence(value).nil?
-      raise ConfigurationError, 'config url needs to start with http:// or https://' if !URL_PATTERN.match?(value)
+      raise ConfigurationError, "config url needs to be a string, got #{value.class}" if !value.is_a?(String)
+      raise ConfigurationError, 'config url needs to start with http:// or https://' if !SCHEME_PATTERN.match?(value)
+      raise ConfigurationError, "config url needs a host after the scheme, got #{value.inspect}" if !URL_PATTERN.match?(value)
 
       # A trailing slash keeps Zammad installations served from a sub-path
       # (e.g. https://example.com/zammad/) working, because request paths are
       # appended relative to this prefix.
-      value.end_with?('/') ? value : "#{value}/"
+      #
+      # Onto the path, not onto the end of the string. Appended blindly it
+      # landed behind a query string or fragment, so a url of
+      # `https://host/zammad?a=1` became `https://host/zammad?a=1/` - the base
+      # every request is resolved against, and the value {#redacted_url}
+      # prints in every ConnectionError and TimeoutError message.
+      path, separator, rest = value.partition(URL_SUFFIX_PATTERN)
+      path.end_with?('/') ? value : "#{path}/#{separator}#{rest}"
     end
 
     def validate_credentials!
@@ -206,6 +246,16 @@ module ZammadAPI
       end
 
       raise ConfigurationError, 'config retries needs to be a non-negative integer' if !retries.is_a?(Integer) || retries.negative?
+    end
+
+    # Not just a default: `user_agent: nil` reached Faraday as a nil header,
+    # and Faraday filled in its own, so the gem stopped identifying itself in
+    # the instance log an operator greps to find its requests - silently, and
+    # on every request.
+    def validate_user_agent!
+      return if user_agent.is_a?(String)
+
+      raise ConfigurationError, 'config user_agent needs to be a string'
     end
 
     def validate_middleware!
