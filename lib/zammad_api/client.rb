@@ -155,7 +155,12 @@ module ZammadAPI
     # @raise [AuthenticationError] when the credentials are not valid
     def me
       response = @transport.get(
-        'api/v1/users/me',
+        # Derived from the resource that declares the endpoint, not spelled
+        # out again: `member_path` exists for the same reason, and a path kept
+        # in two places is one that moves in one of them. Spelled out here,
+        # `client.user` would follow the users endpoint wherever it went and
+        # `client.me` would keep requesting the old one.
+        "#{Resources::User.resource_path}/me",
         operation:      'find current user',
         resource_class: Resources::User,
         query:          { expand: true }
