@@ -298,16 +298,75 @@ A breaking release that modernises the whole gem. See
 - A collection smaller than one page costs one request rather than two. The walk confirms
   the end of a short page with another request, which could only ever come back empty; it
   now stops on the total the endpoint reports alongside the page, and only falls back to
-  confirming when the endpoint reports none.
+  confirming when the endpoint reports none. The total has to be corroborated by the page
+  it arrived with — the page came back short of the size requested, and exactly as many
+  records were seen as the total names. It is the one stop condition not derived from the
+  records the endpoint served, and a total that under-reports (a count taken before
+  permission scoping, a stale cache, a proxy rewriting the header) ended the walk early:
+  100 of 150 records came back, nothing was raised, and nothing told that result apart
+  from a complete one.
 - The test kit records a request body by value. Held by reference, a test that built one
   payload, sent it, then changed it for a second call rewrote the first recorded request
   and asserted against a body that never went anywhere. `Test#inspect` also reads the
   recorded requests under the monitor that guards them.
+- A record is persisted because Zammad answered 2xx, not because the answer parsed. The
+  create response was decoded before the flag went down, so a 201 carrying something other
+  than a JSON object — an HTML error page from an intervening proxy — raised `ParseError`
+  with the record still looking new. The ticket existed in Zammad while the record here did
+  not, and a retried `save` POSTed a second one.
+- A `ConfigurationError` raised while building the connection no longer quotes the proxy
+  credentials. `proxy: 'http://user:pa ss@host:3128'` came back as
+  `URI::InvalidURIError` with the whole URL, password included, in a message that lands in
+  every log and exception report — the case `Config#inspect` exists to prevent, reached by
+  another route.
+- `Config` refuses a `proxy` that is not a String, an `adapter` that cannot be a Symbol,
+  and an `ssl_verify` that is not a boolean. A `URI` proxy was accepted and then died as a
+  `NoMethodError` inside `inspect`, so the object documented as safe to log raised at the
+  moment something logged it; `adapter: 1` and `adapter: true` escaped the constructor as
+  `NoMethodError`; and `ssl_verify: 'false'` — a plausible environment read — is the
+  truthy string `"false"`, so verification stayed on while the caller believed otherwise.
+- An `OpenSSL::SSL::SSLError` that an adapter did not wrap is mapped to `ConnectionError`
+  like its Faraday counterpart. Unlisted, a certificate mismatch through such an adapter —
+  and this gem lets a caller choose one — escaped `request` raw, past every
+  `rescue ZammadAPI::Error`. It is not retried: a rejected certificate is a fact about the
+  instance, not a transient failure.
+- A resource subclassed by a caller keeps its parent's API path. Class-level state is not
+  inherited, so `class MyTicket < Ticket; end` inherited all nine of Ticket's associations,
+  its page limit and its searchability, and lost only the path — `MyTicket.resource_path`
+  raised "does not declare an API path" from a class that plainly did.
+- The test kit answers a later page of a singly-stubbed list endpoint the way an endpoint
+  out of records would. A stub that kept serving the same records to every page tripped the
+  repeated-page guard, so the obvious `stub(:get, 'api/v1/groups', body: [...])` made every
+  full read of that collection raise `PaginationError`. Against a real Zammad the same code
+  works, because page 2 comes back empty; the stand-in was what differed. A stub that names
+  a `page` is still served exactly as written.
+- The test kit sequences stubs within an identical query scope rather than across every
+  scoped stub for an endpoint. Two stubs naming different parameters both match a request
+  carrying all of them, and they were read as a sequence: stubbing a search once for its
+  records and once for its count made `count` consume the records stub, hand back an Array
+  where a count belonged, and then report the endpoint as unstubbed. The most specific
+  scope now answers, and two that are equally specific raise
+  `ZammadAPI::Test::AmbiguousStubError` rather than one of them being picked.
+- `Collection#count` reads the total from the header when a search endpoint ignores
+  `only_total_count`. The probe came back as the usual page of records and was thrown away,
+  so the answer cost 1 + N requests instead of N.
 
 ### Changed
 
 - `client.<resource>.destroy(id)` deletes directly instead of fetching the record first.
 - Resource dispatch is explicit rather than `method_missing` plus `const_get`.
+- A resource declares what its endpoint does — `searchable true`, `max_per_page 100`,
+  `index_query_keys :sort_by` — the way it already declared `path`, rather than by setting
+  `SEARCHABLE`, `MAX_PER_PAGE` and `INDEX_QUERY_KEYS`. A misspelled constant was silently
+  ignored and the resource kept Base's default, so `SEARCHEABLE = true` left the resource
+  unsearchable and every `find_by` on it raised "Zammad routes no search endpoint" with no
+  hint that the declaration was the problem; a misspelled declaration is a `NoMethodError`
+  at load.
+- `client.<resource>` returns the same proxy each time rather than allocating one per call.
+  Clients from `#with` and `#on_behalf_of` start with proxies of their own, so none is
+  shared with the transport it was derived from.
+- The recursive copy behind frozen attributes, `to_h` and the test kit's recorded bodies
+  lives in one place (`ZammadAPI::DeepCopy`) instead of being written once per caller.
 - Unit specs (`rake spec:unit`) run without a Zammad instance; the specs that need a live
   server live in `spec/integration`.
 - CI runs RuboCop, Steep and the unit specs on every supported stable Ruby, and publishes

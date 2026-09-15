@@ -700,7 +700,7 @@ raises `NotFoundError`, and one with `status: 422` makes `save` return `false`.
 
 | Method | What it does |
 | ------ | ------------ |
-| `stub(verb, path, status:, body:, headers:, query:)` | Declares a response. Stubbing the same endpoint twice describes a sequence; the last stub answers every later request. `query:` matches a subset, so it need not repeat `expand`, `page` or `per_page`. |
+| `stub(verb, path, status:, body:, headers:, query:)` | Declares a response. Stubbing the same endpoint twice with the same scope describes a sequence; the last stub answers every later request. `query:` matches a subset, so it need not repeat `expand`, `page` or `per_page`. |
 | `client` | A client wired to this stand-in. |
 | `requests` | Every request made, oldest first, as `verb` / `path` / `query` / `body` / `on_behalf_of`. |
 | `reset` | Forgets the stubs and the recorded requests. |
@@ -710,6 +710,44 @@ what is stubbed, rather than answering with something empty. It is deliberately 
 `ZammadAPI::Error`: a forgotten stub means the test is wrong, not that Zammad refused
 something, so a `rescue ZammadAPI::Error` in the code under test lets it through instead of
 reporting it as an API failure.
+
+### Stubbing a list endpoint
+
+One stub is enough for a collection that fits in a page. The records it holds are one page
+of them, so a request for any later page is answered the way an endpoint out of records
+would answer it:
+
+```ruby
+zammad.stub(:get, 'api/v1/groups', body: [{id: 1, name: 'Users'}, {id: 2, name: 'Sales'}])
+
+client.group.all.map(&:name) # => ["Users", "Sales"]
+```
+
+Name a `page` to say what each one holds, and the stub is served exactly as written:
+
+```ruby
+zammad.stub(:get, 'api/v1/groups', body: first_hundred, query: {page: 1})
+zammad.stub(:get, 'api/v1/groups', body: [{id: 101}], query: {page: 2})
+```
+
+### Scopes that overlap
+
+A stub naming `query:` answers ahead of one that does not, so a scoped stub and a catch-all
+are two separate answers rather than a sequence:
+
+```ruby
+zammad.stub(:get, 'api/v1/tickets/search', body: {total_count: 42}, query: {only_total_count: true})
+zammad.stub(:get, 'api/v1/tickets/search', body: [{id: 1}])
+
+client.ticket.search('urgent').count # => 42, however often it is asked
+```
+
+Two stubs whose scopes match a request equally well raise
+`ZammadAPI::Test::AmbiguousStubError` rather than one of them being picked: `count` sends
+the search term and `only_total_count` together, so a records stub scoped to
+`{query: 'urgent'}` matches it just as well as the count stub does. Name what tells the
+requests apart — here, the search term on the count stub too — or leave the more general
+one unscoped as above.
 
 ## Type signatures
 
