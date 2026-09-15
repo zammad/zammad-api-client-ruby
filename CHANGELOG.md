@@ -313,7 +313,11 @@ A breaking release that modernises the whole gem. See
   create response was decoded before the flag went down, so a 201 carrying something other
   than a JSON object — an HTML error page from an intervening proxy — raised `ParseError`
   with the record still looking new. The ticket existed in Zammad while the record here did
-  not, and a retried `save` POSTed a second one.
+  not, and a retried `save` POSTed a second one. What that leaves behind is a record that
+  is persisted and has no id, and `save`, `reload` and `destroy` all refuse it by name
+  rather than pretending: a record built by `new` has nothing staged, so the retried `save`
+  took the "nothing changed, nothing to send" short circuit and returned `true` without
+  making a single request, for a record that may or may not be in Zammad.
 - A `ConfigurationError` raised while building the connection no longer quotes the proxy
   credentials. `proxy: 'http://user:pa ss@host:3128'` came back as
   `URI::InvalidURIError` with the whole URL, password included, in a message that lands in
@@ -350,6 +354,29 @@ A breaking release that modernises the whole gem. See
 - `Collection#count` reads the total from the header when a search endpoint ignores
   `only_total_count`. The probe came back as the usual page of records and was thrown away,
   so the answer cost 1 + N requests instead of N.
+- `update` and `update!` refuse a destroyed record before staging anything. They assigned
+  first and saved second, and `save!` is where the destroyed check lives, so `update` on a
+  destroyed record raised and left it `changed?` with a change set that can never be
+  sent — the state `destroy` clears the staged changes to prevent.
+- Writing an attribute the record does not carry is a change, and is sent. Zammad reduces
+  the object it serializes for a permission-scoped client, so a key being absent says
+  nothing about what is stored; read as a `nil` original, `group.note = nil` compared equal
+  to nil, staged nothing and was still merged into the attributes. The write was dropped
+  without a word, `save` returned `true` having sent no request, and the record went on
+  reporting a key Zammad never sent it, so `changes` and `attributes` disagreed.
+- `ticket.article(...)` refuses a ticket that has not been saved instead of POSTing
+  `ticket_id: null` and leaving the caller to read Zammad's 422 for the reason. Every other
+  path in the gem that needs a stored id says so locally.
+- A `has_many` reader refuses a response that is one page of several, with
+  `ZammadAPI::PaginationError`, rather than handing back a short list. These are the one
+  kind of list read in a single request, because the association endpoints Zammad routes
+  serve the whole thing; an endpoint that started paging would have returned its first page
+  and nothing to say so, while `all` and `search` walk to the end.
+- The documented page sizes are sizes the endpoints actually serve. Every `find_each` and
+  `in_batches` example used `of: 500` against `client.ticket`, which caps at 100, so each
+  headline example did something other than what it showed. The clamp itself stands — a
+  batch size says how much to fetch at a time, not which records you get, which is why
+  `page` refuses an oversize size and a walk reduces it.
 
 ### Changed
 
@@ -363,8 +390,10 @@ A breaking release that modernises the whole gem. See
   hint that the declaration was the problem; a misspelled declaration is a `NoMethodError`
   at load.
 - `client.<resource>` returns the same proxy each time rather than allocating one per call.
-  Clients from `#with` and `#on_behalf_of` start with proxies of their own, so none is
-  shared with the transport it was derived from.
+  The proxies are built with the client and frozen, so a client stays immutable once built
+  and safe to share between threads without locking, as documented. Clients from `#with`
+  and `#on_behalf_of` get proxies of their own, so none is shared with the transport it was
+  derived from.
 - The recursive copy behind frozen attributes, `to_h` and the test kit's recorded bodies
   lives in one place (`ZammadAPI::DeepCopy`) instead of being written once per caller.
 - Unit specs (`rake spec:unit`) run without a Zammad instance; the specs that need a live
