@@ -21,7 +21,7 @@ module ZammadAPI
   #   client.ticket.search('state.name:open').first(5)
   #
   # @example Work in batches, e.g. for an import
-  #   client.ticket.all.in_batches(of: 500) { |tickets| import(tickets) }
+  #   client.ticket.all.in_batches(of: 50) { |tickets| import(tickets) }
   #
   # @example One explicit page
   #   client.ticket.all.page(2, of: 50).to_a
@@ -400,6 +400,15 @@ module ZammadAPI
       reported_total(response)
     end
 
+    # Reduced rather than refused, unlike the size {#page} takes. The
+    # asymmetry is deliberate: a batch size says how much to fetch at a time,
+    # so a smaller one costs more requests and still walks to the same last
+    # record, while {#page}'s size also decides which records the page holds,
+    # and reducing that answers a different question than the one asked.
+    #
+    # It is also what lets one batch size be written against resources that
+    # cap differently - the index endpoints allow 1000, tickets 100, a search
+    # 200 - without the caller looking each of them up.
     def clamp_per_page(size)
       raise ArgumentError, 'per_page needs to be a positive integer' if !size.is_a?(Integer) || !size.positive?
 

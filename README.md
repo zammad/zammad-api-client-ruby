@@ -433,7 +433,7 @@ A resource proxy is itself `Enumerable` over `all`, so `.all` is optional:
 client.ticket.each { |ticket| puts ticket.title }
 client.ticket.first(5)
 client.ticket.pluck(:title)
-client.ticket.find_each(batch_size: 500) { |ticket| archive(ticket) }
+client.ticket.find_each(batch_size: 50) { |ticket| archive(ticket) }
 ```
 
 `find` keeps its own meaning there — `client.ticket.find(1)` is a lookup by id, not
@@ -452,12 +452,12 @@ first_five = client.ticket.all.first(5)
 client.ticket.all.lazy.select { |t| t.state == 'open' }.first(10)
 
 # One array of records per request, e.g. for a bulk import.
-client.ticket.all.in_batches(of: 500) do |tickets|
+client.ticket.all.in_batches(of: 50) do |tickets|
   import(tickets)
 end
 
 # Record by record, with the page size set inline.
-client.ticket.all.find_each(batch_size: 500) do |ticket|
+client.ticket.all.find_each(batch_size: 50) do |ticket|
   archive(ticket)
 end
 ```
@@ -529,23 +529,25 @@ A request fetches 100 records by default. Three calls take another size, each fo
 kind of work:
 
 ```ruby
-client.ticket.all.find_each(batch_size: 500) { |ticket| archive(ticket) }  # walking
-client.ticket.all.in_batches(of: 500) { |tickets| import(tickets) }        # batching
+client.ticket.all.find_each(batch_size: 50) { |ticket| archive(ticket) }  # walking
+client.ticket.all.in_batches(of: 50) { |tickets| import(tickets) }        # batching
 client.ticket.all.page(2, of: 100)                                         # one page
 ```
 
 `find_each` without a block is an Enumerator, so it is also how you read at a chosen page
-size: `client.ticket.all.find_each(batch_size: 500).first(7)`.
+size: `client.ticket.all.find_each(batch_size: 50).first(7)`.
 
 `page` and a batch size are two ways of naming the same thing, so combining them raises:
 `page(3, of: 50)` already says which records the collection holds, and re-sizing it would
 quietly hand back different ones. Size the page itself, or slice with `each_slice`.
 
 Zammad caps the page size per endpoint — 100 for `/api/v1/tickets`, 200 for a search, 1000
-for the other index endpoints. `find_each` and `in_batches` are reduced to that cap, which
-costs them nothing but an extra request; `page` raises instead, because a smaller page is a
-different set of records — `page(3, of: 500)` reduced to 100 hands back records 201 to 300
-rather than 1001 to 1500.
+for the other index endpoints. `find_each` and `in_batches` are reduced to that cap: a
+batch size is how much to fetch at a time, so a smaller one costs more requests and still
+yields every record. `page` raises instead, because a page size also says *which* records
+you get — `page(3, of: 500)` reduced to 100 hands back records 201 to 300 rather than 1001
+to 1500. So `in_batches(of: 500)` over tickets yields batches of 100, while
+`page(3, of: 500)` over tickets is refused.
 A walk learns the size the endpoint actually serves from the first page rather than trusting
 that cap, so an instance that pages smaller than expected is walked to the end rather than
 truncated at the first short page.
