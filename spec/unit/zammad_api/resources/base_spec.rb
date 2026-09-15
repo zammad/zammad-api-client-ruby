@@ -535,6 +535,26 @@ RSpec.describe ZammadAPI::Resources::Base do
 
         expect { group.save }.to raise_error(ZammadAPI::Error, /was destroyed/)
       end
+
+      # `reload` re-read a record that no longer exists and cleared the flag on
+      # the way back, so the record came back reporting itself as persisted and
+      # its next save issued a PUT against the deleted path.
+      it 'refuses a reload rather than resurrecting the record' do
+        expect { group.reload }
+          .to raise_error(ZammadAPI::Error, /was destroyed, there is nothing to reload/)
+      end
+
+      it 'stays destroyed after a refused reload' do
+        expect { group.reload }.to raise_error(ZammadAPI::Error)
+
+        expect(group).to be_destroyed
+        expect(group).not_to be_persisted
+      end
+
+      it 'refuses a second destroy rather than surfacing Zammad\'s 404' do
+        expect { group.destroy }
+          .to raise_error(ZammadAPI::Error, /was destroyed, there is nothing to destroy/)
+      end
     end
 
     context 'with state staged before it was destroyed' do

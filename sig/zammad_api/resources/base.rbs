@@ -49,6 +49,7 @@ module ZammadAPI
       private
 
       def mark_persisted!: () -> void
+      def raise_if_destroyed!: (String action) -> void
       def writable_attributes?: () -> bool
       def replace_attributes!: (Response, operation: String) -> void
       def reset_pending_state!: () -> void

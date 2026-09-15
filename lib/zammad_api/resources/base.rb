@@ -274,7 +274,7 @@ module ZammadAPI
       # @raise [ResponseError] when Zammad rejected the request
       # @see #save
       def save!
-        raise Error, "#{self.class.name} #{id} was destroyed, there is nothing to save" if destroyed?
+        raise_if_destroyed!('save')
 
         # Before the request, not after it. Only the success path and the
         # rescue in `save` used to clear this, so a save that raised anything
@@ -324,9 +324,12 @@ module ZammadAPI
       # Re-reads the record from Zammad, discarding unsaved changes.
       #
       # @return [self]
+      # @raise [Error] when the record was destroyed
       # @raise [ResponseError] when Zammad rejected the request
       # @raise [ParseError] when the response is not a JSON object
       def reload
+        raise_if_destroyed!('reload')
+
         response = transport.get(
           member_path,
           operation:      'reload object',
@@ -340,15 +343,18 @@ module ZammadAPI
       # Deletes the record.
       #
       # The record is marked {#destroyed?} rather than left looking live, so
-      # that a later {#save} fails here with the reason rather than one call
-      # later as a 404 from Zammad. The attributes stay readable, but the
-      # state that only meant something while the record existed does not:
-      # staged changes, the last validation failure, and the association
-      # readers all go.
+      # that a later {#save}, {#reload} or second {#destroy} fails here with
+      # the reason rather than one call later as a 404 from Zammad. The
+      # attributes stay readable, but the state that only meant something
+      # while the record existed does not: staged changes, the last validation
+      # failure, and the association readers all go.
       #
       # @return [true]
+      # @raise [Error] when the record was already destroyed
       # @raise [ResponseError] when Zammad rejected the request
       def destroy
+        raise_if_destroyed!('destroy')
+
         transport.delete(member_path, operation: 'destroy object', resource_class: self.class)
         @destroyed = true
         reset_pending_state!
@@ -363,6 +369,20 @@ module ZammadAPI
         @new_record = false
       end
 
+      # Refuses an operation on a record Zammad no longer holds.
+      #
+      # `destroyed?` is sticky, and all three state-changing paths ask here.
+      # Only `save!` used to: `reload` re-read a record that no longer exists
+      # and cleared the flag on the way back, so a destroyed record came back
+      # reporting itself as persisted and its next `save` issued a PUT against
+      # the deleted path, while a second `destroy` surfaced Zammad's 404
+      # instead of the local reason. A record that is gone is gone, and every
+      # path that acts on the server says so here rather than one request
+      # later.
+      def raise_if_destroyed!(action)
+        raise Error, "#{self.class.name} #{id} was destroyed, there is nothing to #{action}" if destroyed?
+      end
+
       def writable_attributes? = true
 
       # Everything a freshly loaded record has to forget, in the one place that
@@ -373,7 +393,6 @@ module ZammadAPI
       def replace_attributes!(response, operation:)
         @attributes = frozen_attributes(response.decoded(:object, operation: operation, resource_class: self.class))
         @new_record = false
-        @destroyed  = false
         reset_pending_state!
       end
 
