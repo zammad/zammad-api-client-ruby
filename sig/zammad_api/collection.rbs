@@ -55,7 +55,7 @@ module ZammadAPI
     def walk: () { (Array[untyped]) -> void } -> void
     def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped]) -> Collection
     def fetch: (Integer, Integer) -> [ Array[untyped], Response ]
-    def reached_total?: (Integer, Integer?) -> bool
+    def reached_total?: (Integer, Integer?, Integer) -> bool
     def reported_total: (Response) -> Integer?
     def total_count: () -> Integer?
     def clamp_per_page: (untyped) -> Integer

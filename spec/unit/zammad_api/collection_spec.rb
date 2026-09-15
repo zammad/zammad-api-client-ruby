@@ -603,4 +603,61 @@ RSpec.describe ZammadAPI::Collection do
       expect(collection.page(4).inspect).to include('page=4')
     end
   end
+
+  # The total is the one stop condition not derived from the records the
+  # endpoint served, and it can be wrong: a count taken before permission
+  # scoping, a stale cache, a proxy rewriting the header. Trusted on its own
+  # it ended the walk early and handed back a truncated result with nothing
+  # raised - and nothing to tell it apart from a complete one.
+  describe 'a total the endpoint under-reports' do
+    it 'does not truncate a walk that is still being served full pages' do
+      stub_counted_page(1, full_page, total: 5)
+      stub_page(2, [{ id: 200 }])
+      stub_page(3, [])
+
+      expect(collection.count).to eq(ZammadAPI::Collection::DEFAULT_PER_PAGE + 1)
+    end
+
+    it 'keeps walking when the endpoint has already served more than it counts' do
+      stub_counted_page(1, full_page, total: 5)
+      stub_page(2, [{ id: 200 }])
+      stub_page(3, [])
+
+      expect(collection.map(&:id).last).to eq(200)
+    end
+
+    # The header is still worth reading: an accurate total on a short page is
+    # what saves the confirming request, which is why it is consulted at all.
+    it 'still stops on one request when a short page matches the total' do
+      stub_counted_page(1, [{ id: 1 }, { id: 2 }], total: 2)
+
+      expect(collection.map(&:id)).to eq([1, 2])
+      expect(a_request(:get, url).with(query: hash_including('page' => '2'))).not_to have_been_made
+    end
+
+    # Over-reporting costs nothing: the walk runs on and stops on the empty
+    # page, which is what it did before there was a header to read.
+    it 'stops on the records when the total over-reports' do
+      stub_counted_page(1, [{ id: 1 }], total: 99)
+      stub_page(2, [])
+
+      expect(collection.map(&:id)).to eq([1])
+    end
+  end
+
+  describe 'counting a search endpoint that ignores only_total_count' do
+    let(:search_url) { "#{ClientHelper::BASE_URL}api/v1/users/search" }
+
+    # The probe comes back as the usual page of records, and that page still
+    # carries the size of the whole result. Thrown away, the probe was wasted
+    # and count walked every page on top of it - 1 + N requests for an answer
+    # that cost N.
+    it 'reads the total from the header the ignored probe came back with' do
+      stub_request(:get, search_url).with(query: hash_including('only_total_count' => 'true'))
+        .to_return(json_response([{ id: 1 }, { id: 2 }], headers: { 'X-Total-Count' => '37' }))
+
+      expect(client.user.search('smith').count).to eq(37)
+      expect(a_request(:get, search_url).with(query: hash_including('page' => '1'))).not_to have_been_made
+    end
+  end
 end

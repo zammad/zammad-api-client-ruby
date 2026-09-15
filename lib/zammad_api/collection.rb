@@ -287,14 +287,18 @@ module ZammadAPI
         # the ticket states, the priorities, most of what a script reads -
         # paid for a second request that could only ever come back empty.
         #
-        # Zammad's own count, not a guess: {#count} already answers from the
-        # total this endpoint reports, so a walk that stops on it stops where
-        # `count` says the records end.
-        break if reached_total?(seen, total)
+        # Only where the page it arrived with corroborates it, though. This is
+        # the one stop condition here not derived from the records the
+        # endpoint actually served, and a total that under-reports - a count
+        # taken before permission scoping, a stale cache, a proxy rewriting
+        # the header - used to end the walk early: 100 of 150 records came
+        # back, nothing was raised, and nothing told that result apart from a
+        # complete one.
+        break if reached_total?(seen, total, records.size)
 
         # How big a page this endpoint actually serves, learned from the first
         # one rather than assumed. The requested size is clamped to a per-
-        # resource MAX_PER_PAGE, and where that guess was higher than the
+        # resource page limit, and where that guess was higher than the
         # server's real cap - a lowered setting, a custom deployment, an
         # endpoint whose cap was never this generous - every page came back
         # short and the walk stopped on page one with a truncated result and
@@ -337,11 +341,29 @@ module ZammadAPI
       [records.map { @resource_class.from_response(@transport, it) }, response]
     end
 
-    # Whether the endpoint's own count says there is nothing after this page.
+    # Whether the endpoint's own count says there is nothing after this page,
+    # and the page agrees with it.
+    #
     # A method rather than the guard written inline, so that the nil check
     # narrows: `total` is assigned inside the loop, and the type checker will
     # not narrow a local it sees reassigned there.
-    def reached_total?(seen, total) = !total.nil? && seen >= total
+    #
+    # Two conditions, because a count can be wrong in both directions and only
+    # one of them is safe:
+    #
+    # * The page came back short of the size that was asked for, so the
+    #   endpoint had no more to give at this page size. A full page means it
+    #   may still be serving, whatever its count claims, and the cost of
+    #   asking is one request that comes back empty.
+    # * Exactly as many records were seen as the count names. Seeing more
+    #   means the endpoint has already contradicted its own header, and a
+    #   count contradicted once is not one to end a walk on - the remaining
+    #   stop conditions, which read the records themselves, take over.
+    #
+    # An over-reported total still costs nothing: the walk runs on and stops
+    # on the empty page, which is what it did before there was a header to
+    # read.
+    def reached_total?(seen, total, page_records) = !total.nil? && seen == total && page_records < @per_page
 
     # How many records the endpoint says this query has.
     #
@@ -363,12 +385,19 @@ module ZammadAPI
         query:          @query.merge(only_total_count: true)
       )
       # Not every search endpoint honours only_total_count; one that ignores it
-      # answers with the usual array of records, which is a shape to walk
-      # rather than a reason to raise.
-      return nil if !response.body.is_a?(Hash)
+      # answers with the usual array of records, which is a shape to read
+      # differently rather than a reason to raise.
+      if response.body.is_a?(Hash)
+        total = response.body[:total_count]
+        return total if total.is_a?(Integer)
+      end
 
-      total = response.body[:total_count]
-      total.is_a?(Integer) ? total : nil
+      # That array is still a page of the result, and it carries the size of
+      # the whole one in the same header every index endpoint sets. Read here,
+      # an endpoint that ignores the parameter costs the one request it just
+      # spent; unread, the probe was thrown away and `count` walked every page
+      # on top of it, so the answer cost 1 + N requests instead of N.
+      reported_total(response)
     end
 
     def clamp_per_page(size)
