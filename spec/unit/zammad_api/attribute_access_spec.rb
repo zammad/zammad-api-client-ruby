@@ -118,6 +118,14 @@ RSpec.describe ZammadAPI::AttributeAccess do
     it 'supports a default' do
       expect(record.fetch(:nope, 'fallback')).to eq('fallback')
     end
+
+    # Hash#fetch refuses a third argument, and so does this: collected with a
+    # splat and read as `default.first`, `fetch(:a, :b, :c)` - a multi-key read
+    # this has never been - was answered with `:b`.
+    it 'refuses more than one fallback, the way Hash#fetch does' do
+      expect { record.fetch(:nope, 'one', 'two') }
+        .to raise_error(ArgumentError, 'wrong number of arguments (given 3, expected 1..2)')
+    end
   end
 
   describe '#respond_to?' do

@@ -35,8 +35,16 @@ module ZammadAPI
     # @param default [Object] returned instead of raising
     # @yieldparam key [Symbol] called instead of raising
     # @return [Object]
+    # @raise [ArgumentError] when more than one fallback was given
     # @raise [KeyError] when the attribute is absent and no fallback was given
     def fetch(key, *default)
+      # Hash#fetch refuses a third argument, and so does this: collecting the
+      # fallback with a splat and reading `default.first` accepted
+      # `fetch(:a, :b, :c)` - a multi-key read that this has never been - and
+      # answered it with `:b`. A method whose whole point is that a missing
+      # attribute is an error has no business swallowing a mistyped call.
+      raise ArgumentError, "wrong number of arguments (given #{default.size + 1}, expected 1..2)" if default.size > 1
+
       symbol = key.to_sym
       # An explicit &block argument cannot be resolved against Hash#fetch's
       # overloads by the type checker, so the block is forwarded with yield.
