@@ -617,6 +617,46 @@ RSpec.describe ZammadAPI::Resources::Base do
         expect(group.error).to be_nil
       end
     end
+
+    # `update` stages before it saves, and `save!` is where the destroyed
+    # check used to live. That order left a destroyed record holding a change
+    # set that can never be sent - the state destroy clears the staged changes
+    # to prevent - so the refusal happens before anything is written.
+    context 'when an update is attempted after it was destroyed' do
+      before do
+        stub_request(:delete, "#{url}/1").to_return(status: 200, body: '')
+        group.destroy
+      end
+
+      it 'refuses the update' do
+        expect { group.update(name: 'Renamed') }.to raise_error(ZammadAPI::Error, /was destroyed/)
+      end
+
+      it 'refuses the raising update' do
+        expect { group.update!(name: 'Renamed') }.to raise_error(ZammadAPI::Error, /was destroyed/)
+      end
+
+      it 'leaves nothing staged behind the refusal' do
+        begin
+          group.update(name: 'Renamed')
+        rescue ZammadAPI::Error
+          nil
+        end
+
+        expect(group).not_to be_changed
+        expect(group.changes).to be_empty
+      end
+
+      it 'leaves the attributes as they were' do
+        begin
+          group.update(name: 'Renamed')
+        rescue ZammadAPI::Error
+          nil
+        end
+
+        expect(group.key?(:name)).to be(false)
+      end
+    end
   end
 
   describe 'equality' do

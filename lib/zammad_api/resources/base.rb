@@ -370,9 +370,16 @@ module ZammadAPI
       #
       # @param attributes [Hash] attribute names and their new values
       # @return [Boolean] whether the record was stored
+      # @raise [Error] when the record was destroyed
       # @raise [ResponseError] for any failure other than a validation error
       # @see #save
       def update(attributes)
+        # Before the attributes are staged, not after. `save!` asks the same
+        # question one line later, but by then `assign_attributes` has already
+        # written into @changes, so `update` on a destroyed record raised and
+        # left it dirty with a change set that can never be sent - exactly the
+        # state `destroy` clears the staged changes to prevent.
+        raise_if_destroyed!('save')
         assign_attributes(attributes)
         save
       end
@@ -382,9 +389,11 @@ module ZammadAPI
       #
       # @param attributes [Hash] attribute names and their new values
       # @return [true]
+      # @raise [Error] when the record was destroyed
       # @raise [ResponseError] when Zammad rejected the request
       # @see #save!
       def update!(attributes)
+        raise_if_destroyed!('save')
         assign_attributes(attributes)
         save!
       end

@@ -411,6 +411,7 @@ group.destroy # => true
 group.destroyed?  # => true
 group.persisted?  # => false, so this is not the inverse of new_record?
 group.save        # raises: the record is gone, and a PUT would only 404
+group.update(...) # raises too, and stages nothing, so the record stays unchanged
 
 client.group.destroy(42) # delete by id, without fetching first
 ```
