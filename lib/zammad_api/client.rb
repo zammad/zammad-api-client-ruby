@@ -329,6 +329,20 @@ module ZammadAPI
       @config    = config
       @transport = transport
       @resources = RESOURCES.values.to_h { [it, ResourceProxy.new(transport, it)] }.freeze
+
+      # For the reason the proxies above are built here and not on first use:
+      # both of these are lazy class-level memos, so the first `group.related`
+      # or the first attribute write in a worker is a write to shared state.
+      # CRuby's GVL makes that harmless, and a contract that only holds on one
+      # implementation is not the contract that was written down. A resource
+      # declaring an association builds its proxy class at definition time,
+      # because belongs_to and has_many both reach for it; the four that
+      # declare none - Group, Organization, TicketState, TicketPriority - had
+      # nothing to trigger it until a caller did.
+      RESOURCES.each_value do |resource_class|
+        resource_class.related_class
+        resource_class.belongs_to_foreign_keys
+      end
       self
     end
   end
