@@ -126,6 +126,20 @@ RSpec.describe ZammadAPI::AttributeAccess do
       expect { record.fetch(:nope, 'one', 'two') }
         .to raise_error(ArgumentError, 'wrong number of arguments (given 3, expected 1..2)')
     end
+
+    # Hash#fetch warns and then ignores the default. Silently picking one of
+    # two fallbacks a caller cannot have meant to pass together is the same
+    # swallowed mistyped call the arity check above refuses.
+    # rubocop:disable Lint/UselessDefaultValueArgument -- the call under test
+    it 'says so when a block supersedes the default, the way Hash#fetch does' do
+      expect { record.fetch(:nope, 'fallback') { 'block' } }
+        .to output(/block supersedes default value argument/).to_stderr
+    end
+
+    it 'still answers from the block when both were given' do
+      expect { expect(record.fetch(:nope, 'fallback') { 'block' }).to eq('block') }.to output.to_stderr
+    end
+    # rubocop:enable Lint/UselessDefaultValueArgument
   end
 
   describe '#respond_to?' do

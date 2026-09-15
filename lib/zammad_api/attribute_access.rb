@@ -47,6 +47,11 @@ module ZammadAPI
       # attribute is an error has no business swallowing a mistyped call.
       raise ArgumentError, "wrong number of arguments (given #{default.size + 1}, expected 1..2)" if default.size > 1
 
+      # Hash#fetch warns for this and then ignores the default, so this does
+      # too rather than silently picking one of the two fallbacks a caller
+      # cannot have meant to pass together.
+      warn 'warning: block supersedes default value argument' if block_given? && !default.empty?
+
       symbol = key.to_sym
       # An explicit &block argument cannot be resolved against Hash#fetch's
       # overloads by the type checker, so the block is forwarded with yield.
