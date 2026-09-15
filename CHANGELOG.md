@@ -291,10 +291,6 @@ A breaking release that modernises the whole gem. See
   `destroy` now all refuse a destroyed record with the same local error.
 - `record.fetch` refuses more than one fallback, the way `Hash#fetch` does. `fetch(:a, :b,
   :c)` — a multi-key read this has never been — was answered with `:b`.
-- `find_by` quotes a value that would otherwise be read as search syntax.
-  `find_by(note: 'a AND b')` went out as a boolean query, and a value carrying an
-  unbalanced bracket or quote went out as a query Zammad's parser rejects, so a method
-  documented to answer a miss with `nil` answered it with a 4xx.
 - A collection smaller than one page costs one request rather than two. The walk confirms
   the end of a short page with another request, which could only ever come back empty; it
   now stops on the total the endpoint reports alongside the page, and only falls back to

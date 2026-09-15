@@ -53,11 +53,6 @@ module ZammadAPI
     # The same, for a search endpoint.
     SEARCH_FILTER_HINT = 'Put the value in the search term instead.'
 
-    # Characters and words a Zammad search reads as query syntax rather than
-    # as something to look for. The boolean operators are matched in upper
-    # case only, which is the only case they are operators in.
-    SEARCH_SYNTAX_PATTERN = %r{[+\-=&|<>!(){}\[\]^"~*?:\\/]|\b(?:AND|OR|NOT)\b}
-
     # @return [Class] the resource class this proxy operates on
     attr_reader :resource_class
 
@@ -130,13 +125,20 @@ module ZammadAPI
     # values still have to match, so +find_by(email: ..., active: true)+
     # searches the email and then compares both.
     #
-    # A value carrying search syntax is quoted, so that it is looked for
-    # rather than obeyed. Joined in raw, +find_by(note: 'a AND b')+ went out
-    # as a boolean query and a value holding an unbalanced +(+ or +"+ went out
-    # as a query Zammad's parser rejects - so a method documented to answer a
-    # miss with nil answered it with a 4xx instead. A value with nothing
-    # special in it is passed through untouched, because quoting every value
-    # would change what an instance searching without Elasticsearch matches.
+    # Values go out as they are. Quoting one that carries search syntax, so
+    # that it is looked for rather than obeyed, sounds like an improvement and
+    # is not: an instance searching without Elasticsearch matches the term
+    # literally, through a SQL LIKE over the string columns, so the quotes
+    # become characters the value has to contain. That made
+    # +find_by(name: 'support-eu')+ - a hyphen is syntax - find nothing on
+    # every such instance, which is how this was found.
+    #
+    # So a value carrying syntax is searched as syntax, and what that surfaces
+    # depends on the backend. On Elasticsearch +find_by(note: 'a AND b')+ goes
+    # out as a boolean query, and a value Elasticsearch cannot parse at all -
+    # an unbalanced +(+ or +"+ - takes SearchIndexBackend#search_by_index down
+    # the branch that logs the error and returns no hits, so it arrives here
+    # as a miss rather than as a failure.
     #
     # What the search can surface is Zammad's business. A value the instance
     # has not indexed, or cannot index, is a record this does not find, so
@@ -163,7 +165,7 @@ module ZammadAPI
       searchable!
       raise ArgumentError, 'find_by needs at least one attribute to match' if params.empty?
 
-      term = params.values.grep(String).reject { it.strip.empty? }.map { search_term_value(it) }.join(' ')
+      term = params.values.grep(String).reject { it.strip.empty? }.join(' ')
       raise ArgumentError, unsearchable_values_message(params) if term.empty?
 
       search(term)
@@ -350,14 +352,6 @@ module ZammadAPI
     end
 
     def index_filter_hint = resource_class.searchable? ? INDEX_FILTER_HINT : UNSEARCHABLE_FILTER_HINT
-
-    # Quotes a value that would otherwise be read as query syntax, escaping the
-    # two characters that would end the quoting.
-    def search_term_value(value)
-      return value if !SEARCH_SYNTAX_PATTERN.match?(value)
-
-      %("#{value.gsub(/["\\]/) { "\\#{it}" }}")
-    end
 
     def unsearchable_values_message(params)
       given = params.map { |key, value| "#{key}: #{value.inspect}" }.join(', ')

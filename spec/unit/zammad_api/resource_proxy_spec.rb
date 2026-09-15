@@ -174,13 +174,24 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect(proxy.find_by(name: 'Users')).to be_nil
     end
 
-    # Joined in raw, a value carrying query syntax was obeyed rather than
-    # looked for: `a AND b` went out as a boolean query, and an unbalanced
-    # bracket or quote went out as a query Zammad's parser rejects - so a
-    # method documented to answer a miss with nil answered it with a 4xx.
-    it 'quotes a value that would otherwise be read as a boolean operator' do
+    # Quoting a value that carries search syntax, to have it looked for rather
+    # than obeyed, cost more than it bought: an instance searching without
+    # Elasticsearch matches the term literally through a SQL LIKE, so the
+    # quotes became characters the value had to contain, and a hyphen is
+    # syntax - so `find_by(name: 'support-eu')` found nothing at all there.
+    it 'sends a value carrying search syntax as it is' do
       stub = stub_request(:get, search_url)
-        .with(query: hash_including('query' => '"a AND b"'))
+        .with(query: hash_including('query' => 'support-eu'))
+        .to_return(json_response([]))
+
+      proxy.find_by(name: 'support-eu')
+
+      expect(stub).to have_been_requested
+    end
+
+    it 'sends a value that reads as a boolean query as it is' do
+      stub = stub_request(:get, search_url)
+        .with(query: hash_including('query' => 'a AND b'))
         .to_return(json_response([]))
 
       proxy.find_by(name: 'a AND b')
@@ -188,39 +199,8 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect(stub).to have_been_requested
     end
 
-    it 'quotes a value carrying unbalanced search syntax' do
-      stub = stub_request(:get, search_url)
-        .with(query: hash_including('query' => '"Users ("'))
-        .to_return(json_response([]))
-
-      proxy.find_by(name: 'Users (')
-
-      expect(stub).to have_been_requested
-    end
-
-    it 'escapes a quote inside a value it quotes' do
-      stub = stub_request(:get, search_url)
-        .with(query: hash_including('query' => '"say \\"hi\\""'))
-        .to_return(json_response([]))
-
-      proxy.find_by(name: 'say "hi"')
-
-      expect(stub).to have_been_requested
-    end
-
-    # Quoting every value would change what an instance searching without
-    # Elasticsearch matches, so a value with nothing special in it is left be.
-    it 'leaves a value with no search syntax in it untouched' do
-      stub = stub_request(:get, search_url)
-        .with(query: hash_including('query' => 'someone@example.com'))
-        .to_return(json_response([]))
-
-      proxy.find_by(name: 'someone@example.com')
-
-      expect(stub).to have_been_requested
-    end
-
-    it 'still matches the record exactly, quoting or not' do
+    # Whatever the term meant to the backend, the answer is decided here.
+    it 'still matches the record exactly' do
       stub_request(:get, search_url).with(query: hash_including({}))
         .to_return(json_response([{ id: 1, name: 'a AND b' }]))
 
