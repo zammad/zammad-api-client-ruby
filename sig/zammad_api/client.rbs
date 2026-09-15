@@ -7,7 +7,7 @@ module ZammadAPI
     attr_reader config: Config
 
     @transport: Transport
-    @resources: Hash[Class, ResourceProxy]
+    @resources: Hash[untyped, ResourceProxy]
 
     def self.from_env: (**untyped overrides) -> Client
     def self.build: (Config config, untyped transport) -> Client
@@ -43,5 +43,6 @@ module ZammadAPI
 
     def raw: (Symbol method, String path, ?query: Hash[untyped, untyped]?, ?body: untyped) -> Response
     def unknown_resource_message: (Symbol | String) -> String
+    def setup: (Config config, untyped transport) -> self
   end
 end

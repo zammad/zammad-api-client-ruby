@@ -117,11 +117,7 @@ module ZammadAPI
     # @param transport [Transport] anything with a {Transport} interface
     # @return [Client]
     def self.build(config, transport)
-      client = allocate
-      client.instance_variable_set(:@config, config)
-      client.instance_variable_set(:@transport, transport)
-      client.instance_variable_set(:@resources, {})
-      client
+      allocate.send(:setup, config, transport)
     end
 
     # @param options [Hash] see {Config} for every supported option
@@ -132,9 +128,8 @@ module ZammadAPI
     # @option options [String] :password password for basic authentication
     # @raise [ConfigurationError] when the options are incomplete or invalid
     def initialize(**options)
-      @config    = Config.new(**options)
-      @transport = Transport.new(@config)
-      @resources = {}
+      config = Config.new(**options)
+      setup(config, Transport.new(config))
     end
 
     # @param name [Symbol, String] a key of {RESOURCES}
@@ -142,13 +137,7 @@ module ZammadAPI
     # @raise [UnknownResourceError] when the resource is not known
     def resource(name)
       resource_class = RESOURCES.fetch(name.to_sym) { raise UnknownResourceError, unknown_resource_message(name) }
-      # Memoized, because a proxy holds nothing but this client's transport
-      # and the resource class, and `client.ticket` is the idiom every call
-      # in the README starts with - each one used to allocate a fresh proxy.
-      # The cache belongs to one transport, so {#with} and {#on_behalf_of}
-      # start their derived clients with an empty one rather than handing out
-      # proxies still wired to the transport they were built from.
-      @resources[resource_class] ||= ResourceProxy.new(@transport, resource_class)
+      @resources.fetch(resource_class)
     end
 
     # @return [Array<Symbol>] every resource name this client supports
@@ -267,11 +256,7 @@ module ZammadAPI
     # @raise [ConfigurationError] when the resulting options are invalid
     def with(**options)
       derived_config = config.with(**options)
-      derived        = dup
-      derived.instance_variable_set(:@config, derived_config)
-      derived.instance_variable_set(:@transport, @transport.with_config(derived_config))
-      derived.instance_variable_set(:@resources, {})
-      derived
+      dup.send(:setup, derived_config, @transport.with_config(derived_config))
     end
 
     # Performs requests on behalf of another user.
@@ -292,9 +277,7 @@ module ZammadAPI
     # @yieldparam scoped [Client]
     # @return [Client] when no block is given, otherwise the block's value
     def on_behalf_of(identifier)
-      scoped = dup
-      scoped.instance_variable_set(:@transport, @transport.with_on_behalf_of(identifier))
-      scoped.instance_variable_set(:@resources, {})
+      scoped = dup.send(:setup, config, @transport.with_on_behalf_of(identifier))
       return scoped if !block_given?
 
       yield scoped
@@ -325,5 +308,28 @@ module ZammadAPI
     end
 
     def unknown_resource_message(name) = "Unknown resource #{name}, available resources are: #{RESOURCES.keys.join(', ')}"
+
+    # Everything a client is, in the one place all four ways of making one go
+    # through: {.new}, {.build}, {#with} and {#on_behalf_of}. Held apart,
+    # `build` restated `initialize`'s list of instance variables by hand, and
+    # the fourth one added to `initialize` would have left every client built
+    # for a test unset where it mattered.
+    #
+    # The proxies are built here rather than memoized on first use, because a
+    # client is documented - and used, in examples/concurrent_sync.rb - as
+    # immutable once built and safe to share between threads without locking.
+    # A memo populated by the first `client.ticket` in each worker is a write
+    # to shared state, and while CRuby's GVL makes it harmless, a contract
+    # that only holds on one implementation is not the contract that was
+    # written down. Building all seven up front costs an allocation each and
+    # keeps the object finished the moment it is handed back.
+    #
+    # @return [self]
+    def setup(config, transport)
+      @config    = config
+      @transport = transport
+      @resources = RESOURCES.values.to_h { [it, ResourceProxy.new(transport, it)] }.freeze
+      self
+    end
   end
 end

@@ -520,6 +520,26 @@ RSpec.describe ZammadAPI::Client do
       expect(client.ticket).to be(first)
     end
 
+    # Built up front rather than memoized on first use. A client is documented
+    # as immutable once built and safe to share between threads without
+    # locking, and a memo filled in by the first `client.ticket` in each worker
+    # is a write to shared state - harmless under CRuby's GVL, but not the
+    # contract that was written down.
+    it 'is not mutated by reading a proxy off it' do
+      before_read = client.instance_variable_get(:@resources)
+      client.ticket
+
+      expect(client.instance_variable_get(:@resources)).to be(before_read)
+    end
+
+    it 'holds a proxy for every resource before any is asked for' do
+      expect(client.instance_variable_get(:@resources).size).to eq(client.resource_names.size)
+    end
+
+    it 'refuses to be written to after it is built' do
+      expect(client.instance_variable_get(:@resources)).to be_frozen
+    end
+
     it 'hands out a different proxy per resource' do
       expect(client.ticket).not_to be(client.user)
     end
