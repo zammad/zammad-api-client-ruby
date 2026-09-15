@@ -7,6 +7,7 @@ module ZammadAPI
     INDEX_FILTER_HINT: String
     UNSEARCHABLE_FILTER_HINT: String
     SEARCH_FILTER_HINT: String
+    SEARCH_SYNTAX_PATTERN: Regexp
 
     attr_reader resource_class: untyped
 
@@ -43,6 +44,7 @@ module ZammadAPI
     def collection: (String, String, ?query: Hash[Symbol, untyped], ?max_per_page: Integer, ?filterable: Array[Symbol], ?filter_hint: String, ?countable: bool) -> Collection
     def searchable!: () -> void
     def index_filter_hint: () -> String
+    def search_term_value: (String) -> String
     def unsearchable_values_message: (Hash[Symbol, untyped]) -> String
     def path: () -> String
     def member_path: (Integer | String id) -> String
