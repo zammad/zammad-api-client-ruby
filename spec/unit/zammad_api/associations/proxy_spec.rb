@@ -133,6 +133,40 @@ RSpec.describe ZammadAPI::Associations::Proxy do
         .to raise_error(ZammadAPI::ParseError, /Can't get articles \(ZammadAPI::Resources::TicketArticle\)/)
     end
 
+    # This is the one list in the gem read in a single request, because the
+    # association endpoints Zammad routes serve the whole thing. An endpoint
+    # that turned out to page would have handed back its first page with
+    # nothing to say so, while `all` and `search` walk to the end.
+    context 'when the endpoint answers with one page of several' do
+      before do
+        stub_request(:get, articles_url).with(query: hash_including({}))
+          .to_return(json_response([{ id: 1 }, { id: 2 }], headers: { 'X-Total-Count' => '7' }))
+      end
+
+      it 'refuses rather than handing back a short list' do
+        expect { ticket.related.articles }.to raise_error(ZammadAPI::PaginationError, /served 2 of 7 records/)
+      end
+
+      it 'names the association it could not read whole' do
+        expect { ticket.related.articles }
+          .to raise_error(ZammadAPI::PaginationError, /Can't get articles \(ZammadAPI::Resources::TicketArticle\)/)
+      end
+    end
+
+    it 'accepts a list the endpoint reports in full' do
+      stub_request(:get, articles_url).with(query: hash_including({}))
+        .to_return(json_response([{ id: 1 }, { id: 2 }], headers: { 'X-Total-Count' => '2' }))
+
+      expect(ticket.related.articles.size).to eq(2)
+    end
+
+    it 'accepts a list from an endpoint that reports no total at all' do
+      stub_request(:get, articles_url).with(query: hash_including({}))
+        .to_return(json_response([{ id: 1 }, { id: 2 }]))
+
+      expect(ticket.related.articles.size).to eq(2)
+    end
+
     it 'says to save an unsaved record rather than requesting a path without an id' do
       unsaved = ZammadAPI::Resources::Ticket.new(unit_transport, title: 'Help')
 

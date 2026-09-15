@@ -24,6 +24,7 @@ module ZammadAPI
 
   class PaginationError < Error
     def self.build: (operation: String, page: Integer, ?resource_class: Class?) -> PaginationError
+    def self.truncated: (operation: String, served: Integer, total: Integer, ?resource_class: Class?) -> PaginationError
   end
 
   class ResponseError < Error

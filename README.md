@@ -365,6 +365,12 @@ ticket.related.created_by.email
 client.user.find(7).related.organization
 ```
 
+A `has_many` reader such as `articles` is the one list here that is read in a single
+request and comes back as an Array rather than a paginating collection, because the
+association endpoints Zammad routes serve the whole list. If one ever answers with a page
+of several, the reader raises `ZammadAPI::PaginationError` rather than quietly handing back
+a short list.
+
 The readers live under `related` rather than on the record so that `ticket.customer` keeps
 returning the name it always did — an attribute read that silently became an HTTP request
 would be a poor trade. `belongs_to` targets are memoized, and `reload` or a save drops the

@@ -217,6 +217,12 @@ module ZammadAPI
         # Declares that this resource points at a list of other records,
         # served by an endpoint of its own.
         #
+        # The path has to name an endpoint that serves the whole list in one
+        # response, which is what the association endpoints Zammad routes do.
+        # The reader spends one request and hands back an Array rather than a
+        # walking {Collection}, and refuses a response that turns out to be
+        # one page of several rather than returning a short list quietly.
+        #
         # @param name [Symbol] name of the reader on {Base#related}
         # @param class_name [String] the target resource
         # @param path [Proc] called with the record id, already escaped for
