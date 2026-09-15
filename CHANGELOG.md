@@ -383,6 +383,10 @@ A breaking release that modernises the whole gem. See
 
 ### Changed
 
+- `Response#headers` is frozen, and each response carries its own. Writing through it
+  changed nothing on the wire and, in `ZammadAPI::Test`, rewrote the stub for every later
+  request in the example.
+
 - `client.<resource>.destroy(id)` deletes directly instead of fetching the record first.
 - Resource dispatch is explicit rather than `method_missing` plus `const_get`.
 - A resource declares what its endpoint does — `searchable true`, `max_per_page 100`,

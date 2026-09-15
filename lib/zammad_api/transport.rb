@@ -381,7 +381,7 @@ module ZammadAPI
     end
 
     def decode(faraday_response)
-      headers    = faraday_response.headers.to_h.transform_keys { it.to_s.downcase }
+      headers    = faraday_response.headers.to_h.transform_keys { it.to_s.downcase }.freeze
       raw_body   = faraday_response.body.to_s
       body, json = decode_body(headers['content-type'], raw_body)
 

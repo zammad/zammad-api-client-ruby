@@ -325,8 +325,14 @@ module ZammadAPI
       end
     end
 
+    # A copy, because the stub keeps serving after this response is built and
+    # Response is a value. Handing out the stub's own Hash made every response
+    # from one stub share it, so a test that wrote to `response.headers` -
+    # bumping an x-total-count to check a walk, say - rewrote the stand-in for
+    # every later request in the example. The real transport builds a fresh
+    # hash per response, and this exists to behave like it.
     def build_response(stub, body, raw_body, json:)
-      Response.new(status: stub[:status], headers: stub[:headers], body: body, raw_body: raw_body, json: json)
+      Response.new(status: stub[:status], headers: stub[:headers].dup.freeze, body: body, raw_body: raw_body, json: json)
     end
 
     def unstubbed_message(method, path)

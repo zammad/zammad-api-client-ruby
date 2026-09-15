@@ -134,6 +134,25 @@ RSpec.describe ZammadAPI::Test do
       expect(client.get('api/v1/groups').headers['x-total-count']).to eq('7')
     end
 
+    # The stub keeps serving after a response is built, and Response is a
+    # value. Handing out the stub's own Hash made every response from one stub
+    # share it, so writing to `response.headers` in one example rewrote the
+    # stand-in for every later request in it.
+    it 'gives each response its own headers rather than the stub\'s' do
+      zammad.stub(:get, 'api/v1/groups', body: [], headers: { 'X-Total-Count' => '7' })
+
+      first  = client.get('api/v1/groups')
+      second = client.get('api/v1/groups')
+
+      expect(first.headers).not_to be(second.headers)
+    end
+
+    it 'hands out headers a caller cannot write through' do
+      zammad.stub(:get, 'api/v1/groups', body: [], headers: { 'X-Total-Count' => '7' })
+
+      expect { client.get('api/v1/groups').headers['x-total-count'] = '999' }.to raise_error(FrozenError)
+    end
+
     describe 'a sequence' do
       it 'serves stubs in the order they were declared' do
         zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'First' })
