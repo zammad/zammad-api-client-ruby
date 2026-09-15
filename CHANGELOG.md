@@ -263,6 +263,46 @@ A breaking release that modernises the whole gem. See
   failed for every consumer with `Could not find Faraday::Connection`.
 - `ZammadAPI::Test.new` no longer builds a Faraday stack it immediately discards, which a
   suite using `let(:zammad) { ZammadAPI::Test.new }` paid for once per example.
+- The trailing slash a base URL is normalised with lands on the path rather than at the end
+  of the string. `https://host/zammad?tenant=acme` became `https://host/zammad?tenant=acme/`,
+  which every request was then resolved against and every `ConnectionError` printed.
+- `Config` refuses a URL with a scheme and no host, and one that is not a String. Both used
+  to be accepted: `'https://'` failed deep inside the adapter on the first request, and a
+  `URI` — what `URI(...)` hands back, and it prints as the URL — died as a `NoMethodError`
+  past the `ConfigurationError` the constructor is documented to raise.
+- `user_agent: nil` falls back to the gem's own value instead of reaching Faraday as a nil
+  header, which Faraday filled in with its own — so the gem silently stopped identifying
+  itself in the instance log an operator greps to find its requests. A `user_agent` that is
+  not a String raises `ConfigurationError`.
+- Proxy credentials are redacted whether or not the proxy URL carries a scheme.
+  `proxy: 'user:secret@proxy:8080'` — the shape an `http_proxy` setting is copied out of —
+  rendered in `Config#inspect` in full.
+- A `proxy` that is not a URL, and a `middleware` callable that raises, are reported as
+  `ConfigurationError`. Only `Faraday::Error` was wrapped, so these escaped as
+  `URI::InvalidURIError` and as whatever the callable raised, past the
+  `rescue ZammadAPI::ConfigurationError` around building a client.
+- The debug log redacts `api_key`, `apikey`, `passwd`, `pwd` and a bare `key` as well. The
+  pattern matched `private_key` but not the other key spellings, and `password` but not its
+  short forms, so those payload values were written out in full.
+- `destroyed?` is sticky. `reload` re-read a record that no longer exists and cleared the
+  flag on the way back, so a destroyed record came back reporting itself as `persisted?`
+  and its next `save` issued a `PUT` against the deleted path; a second `destroy` surfaced
+  Zammad's 404 rather than saying the record was already gone. `save`, `reload` and
+  `destroy` now all refuse a destroyed record with the same local error.
+- `record.fetch` refuses more than one fallback, the way `Hash#fetch` does. `fetch(:a, :b,
+  :c)` — a multi-key read this has never been — was answered with `:b`.
+- `find_by` quotes a value that would otherwise be read as search syntax.
+  `find_by(note: 'a AND b')` went out as a boolean query, and a value carrying an
+  unbalanced bracket or quote went out as a query Zammad's parser rejects, so a method
+  documented to answer a miss with `nil` answered it with a 4xx.
+- A collection smaller than one page costs one request rather than two. The walk confirms
+  the end of a short page with another request, which could only ever come back empty; it
+  now stops on the total the endpoint reports alongside the page, and only falls back to
+  confirming when the endpoint reports none.
+- The test kit records a request body by value. Held by reference, a test that built one
+  payload, sent it, then changed it for a second call rewrote the first recorded request
+  and asserted against a body that never went anywhere. `Test#inspect` also reads the
+  recorded requests under the monitor that guards them.
 
 ### Changed
 
