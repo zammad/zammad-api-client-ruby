@@ -28,8 +28,8 @@ RSpec.describe ZammadAPI::Test do
     end
 
     # Going through Client.new assembled a Faraday stack - auth, JSON,
-    # retries, adapter - for `with_transport` to discard one line later, once
-    # per stand-in.
+    # retries, adapter - only for it to be swapped straight back out, once per
+    # stand-in.
     it 'builds no HTTP stack on the way to the stand-in transport' do
       allow(ZammadAPI::Transport).to receive(:new).and_call_original
 

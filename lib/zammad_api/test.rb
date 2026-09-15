@@ -73,9 +73,9 @@ module ZammadAPI
       @transport = Transport.new(self)
       # Built once, and built straight onto the stand-in. Going through
       # `Client.new` re-validated the config assembled one line above and then
-      # assembled a whole Faraday stack - auth, JSON, retries, adapter - for
-      # `with_transport` to throw away, which is the cost the comment here
-      # used to claim it was avoiding. A suite writing
+      # assembled a whole Faraday stack - auth, JSON, retries, adapter - only
+      # to swap it straight back out, which is the cost the comment here used
+      # to claim it was avoiding. A suite writing
       # `let(:zammad) { ZammadAPI::Test.new }` paid it once per example.
       @client    = Client.build(@config, @transport)
     end

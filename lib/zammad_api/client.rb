@@ -108,8 +108,9 @@ module ZammadAPI
     # Transport, and building a Transport means building a Faraday stack:
     # authentication, JSON, the retry middleware, adapter resolution. Anything
     # holding a transport of its own - {Test} - threw all of that away one
-    # line later with {#with_transport}, and paid for it again for every
-    # stand-in a suite builds.
+    # line later, and paid for it again for every stand-in a suite builds.
+    # This is the way in for those, and the reason there is no public
+    # `with_transport` to swap one in after the fact.
     #
     # @api private
     # @param config [Config] an already validated configuration
@@ -261,19 +262,6 @@ module ZammadAPI
       derived        = dup
       derived.instance_variable_set(:@config, derived_config)
       derived.instance_variable_set(:@transport, @transport.with_config(derived_config))
-      derived
-    end
-
-    # Returns a new client that performs its requests through +transport+.
-    #
-    # The seam the test kit uses to put a double in place of the HTTP stack.
-    #
-    # @api private
-    # @param transport [Transport] anything with a {Transport} interface
-    # @return [Client]
-    def with_transport(transport)
-      derived = dup
-      derived.instance_variable_set(:@transport, transport)
       derived
     end
 
