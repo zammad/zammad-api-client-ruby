@@ -392,5 +392,17 @@ RSpec.describe ZammadAPI::Test do
 
       expect(zammad.inspect).to eq('#<ZammadAPI::Test stubbed=1 requests=1>')
     end
+
+    # The request count used to be read outside the monitor, so printing a
+    # stand-in from a failure message or a debugger raced a thread under test
+    # appending to it - which is the one thing the monitor is here to prevent.
+    it 'reads the recorded requests under the monitor' do
+      zammad.stub(:get, 'api/v1/groups', body: [])
+      writers = Array.new(4) { Thread.new { 25.times { client.group.all.to_a } } }
+      readers = Array.new(4) { Thread.new { 25.times { zammad.inspect } } }
+
+      expect { (writers + readers).each(&:join) }.not_to raise_error
+      expect(zammad.requests.size).to eq(100)
+    end
   end
 end

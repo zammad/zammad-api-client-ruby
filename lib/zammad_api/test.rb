@@ -147,7 +147,13 @@ module ZammadAPI
     # @return [Array<String>] one +"GET api/v1/groups"+ per stubbed endpoint
     def stubbed = @monitor.synchronize { @stubs.keys.map { |method, path| "#{method.to_s.upcase} #{path}" } }
 
-    def inspect = "#<#{self.class.name} stubbed=#{stubbed.size} requests=#{@requests.size}>"
+    # Reads both collections under the monitor, and reaches for @stubs rather
+    # than {#stubbed} because the monitor is a plain Mutex and would deadlock
+    # on the way back in. The counts used to be read outside it, so printing a
+    # stand-in from a failure message or a debugger raced the thread under
+    # test appending to @requests - which is the one thing the monitor is here
+    # to prevent.
+    def inspect = @monitor.synchronize { "#<#{self.class.name} stubbed=#{@stubs.size} requests=#{@requests.size}>" }
 
     # Answers a request from the stubs, recording it first.
     #
