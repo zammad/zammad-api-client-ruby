@@ -732,7 +732,9 @@ RSpec.describe ZammadAPI::Resources::Base do
   # answer parsed. Decoded first, a create whose 201 carried an HTML error
   # page from an intervening proxy raised ParseError with the record still
   # looking new - so the ticket existed in Zammad and a retried save POSTed a
-  # second one.
+  # second one. Marked persisted, the record has no id to be addressed by
+  # either, and nothing staged to send, so the retry has to say so rather than
+  # take the "nothing to send" short circuit and report success.
   describe 'a create whose success body cannot be parsed' do
     subject(:group) { client.group.new(name: 'Support') }
 
@@ -755,11 +757,41 @@ RSpec.describe ZammadAPI::Resources::Base do
     it 'does not create a second record when the save is retried' do
       2.times do
         group.save
-      rescue ZammadAPI::ParseError
+      rescue ZammadAPI::Error
         nil
       end
 
       expect(a_request(:post, url).with(query: hash_including({}))).to have_been_made.once
+    end
+
+    it 'refuses the retried save rather than reporting it stored' do
+      begin
+        group.save
+      rescue ZammadAPI::ParseError
+        nil
+      end
+
+      expect { group.save }.to raise_error(ZammadAPI::Error, /carried no id/)
+    end
+
+    it 'refuses to reload a record it cannot address' do
+      begin
+        group.save
+      rescue ZammadAPI::ParseError
+        nil
+      end
+
+      expect { group.reload }.to raise_error(ZammadAPI::Error, /carried no id/)
+    end
+
+    it 'does not tell the caller to save a record that was already saved' do
+      begin
+        group.save
+      rescue ZammadAPI::ParseError
+        nil
+      end
+
+      expect { group.destroy }.to raise_error(ZammadAPI::Error, /was saved/)
     end
   end
 end

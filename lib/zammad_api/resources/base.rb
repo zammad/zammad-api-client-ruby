@@ -337,12 +337,21 @@ module ZammadAPI
         # caller reading #error to report the failure read the wrong cause.
         @error = nil
 
-        # An unchanged record has nothing to send. The empty PUT this used to
-        # issue was not just a wasted round trip: Zammad applies it, bumping
-        # updated_at and updated_by, so re-saving a record that nobody touched
-        # rewrote its audit trail and moved the timestamp that other callers
-        # use to tell whether it changed under them.
-        return true if !new_record? && !changed?
+        if !new_record?
+          # An existing record is addressed by its id, so establish there is
+          # one before anything here can report success. Only a record left
+          # behind by a 2xx that did not decode reaches this without one, and
+          # for that record the short circuit below is a lie: nothing is
+          # staged, so `save` answered true without sending a request.
+          require_id!
+
+          # An unchanged record has nothing to send. The empty PUT this used
+          # to issue was not just a wasted round trip: Zammad applies it,
+          # bumping updated_at and updated_by, so re-saving a record that
+          # nobody touched rewrote its audit trail and moved the timestamp
+          # that other callers use to tell whether it changed under them.
+          return true if !changed?
+        end
 
         response = new_record? ? create_record : update_record
 
@@ -451,9 +460,14 @@ module ZammadAPI
       # a JSON object - an HTML error page from an intervening proxy - raised
       # ParseError with @new_record still true, so the ticket existed in
       # Zammad while the record here still looked unsaved and a retried `save`
-      # POSTed a second one. The staged changes stay put on that path, so the
-      # retry is a PUT of what was never confirmed rather than a second
-      # create.
+      # POSTed a second one.
+      #
+      # What that leaves behind is a record which is persisted and carries no
+      # id, and the rest of this class has to treat it as the unusable thing
+      # it is: a record built by `new` has nothing staged, so without a word
+      # from {#require_id!} the retried `save` would have taken the "nothing
+      # to send" short circuit and reported true, having made no request at
+      # all, for a record that may or may not be in Zammad.
       def replace_attributes!(response, operation:)
         @new_record = false
         @attributes = frozen_attributes(response.decoded(:object, operation: operation, resource_class: self.class))
@@ -520,14 +534,34 @@ module ZammadAPI
         )
       end
 
-      def member_path
+      def member_path = self.class.member_path(require_id!)
+
+      # This record's id, for the paths and bodies that cannot be built
+      # without one.
+      #
+      # @return [Integer] the id
+      # @raise [Error] when the record has none
+      def require_id!
         # Read once into a local, so that the guard below narrows what is
         # handed on - `id` is an attribute reader, and the type checker cannot
         # tell that two calls to one answer the same thing.
         record_id = id
-        raise Error, "#{self.class.name} has no id, save it first" if record_id.nil?
+        raise Error, no_id_message if record_id.nil?
 
-        self.class.member_path(record_id)
+        record_id
+      end
+
+      # A record has no id in two quite different situations, and one message
+      # for both sent people looking in the wrong place. Before the first save
+      # there is simply nothing to address yet. After one there is - Zammad
+      # answered 2xx, so the record is in Zammad - but the response carried no
+      # id to address it by, which is what {#replace_attributes!} leaves
+      # behind when a 2xx body does not decode as the object it claims to be.
+      def no_id_message
+        return "#{self.class.name} has no id, save it first" if new_record?
+
+        "#{self.class.name} was saved, but the response carried no id to address it by, " \
+          'so this record cannot act on the server. Look it up again to get one that can.'
       end
     end
   end

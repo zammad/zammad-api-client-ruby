@@ -68,6 +68,8 @@ module ZammadAPI
       def create_record: () -> Response
       def update_record: () -> Response
       def member_path: () -> String
+      def require_id!: () -> Integer
+      def no_id_message: () -> String
     end
   end
 end
