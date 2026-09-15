@@ -507,4 +507,44 @@ RSpec.describe ZammadAPI::Client do
       expect(client.inspect).to include('https://[REDACTED]@zammad.example.com/')
     end
   end
+
+  # A proxy holds nothing but the client's transport and the resource class,
+  # and `client.ticket` is the idiom every call starts with - each one used to
+  # allocate a fresh one.
+  describe 'resource proxies' do
+    subject(:client) { unit_client }
+
+    it 'hands out the same proxy for the same resource' do
+      first = client.ticket
+
+      expect(client.ticket).to be(first)
+    end
+
+    it 'hands out a different proxy per resource' do
+      expect(client.ticket).not_to be(client.user)
+    end
+
+    # The cache belongs to one transport, so a derived client must not be
+    # handed proxies still wired to the transport it was derived from.
+    it 'does not carry a proxy over to an on_behalf_of client' do
+      expect(client.on_behalf_of('agent@example.com').ticket).not_to be(client.ticket)
+    end
+
+    it 'does not carry a proxy over to a client built with #with' do
+      expect(client.with(timeout: 5).ticket).not_to be(client.ticket)
+    end
+
+    # The point of not sharing the cache: a proxy from the derived client has
+    # to send that client's From header, not the original's.
+    it 'gives a derived client a proxy that carries its own scope' do
+      stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/tickets/1")
+        .with(query: hash_including({})).to_return(json_response({ id: 1 }))
+
+      client.ticket
+      client.on_behalf_of('agent@example.com').ticket.find(1)
+
+      expect(a_request(:get, "#{ClientHelper::BASE_URL}api/v1/tickets/1")
+        .with(query: hash_including({}), headers: { 'From' => 'agent@example.com' })).to have_been_made
+    end
+  end
 end

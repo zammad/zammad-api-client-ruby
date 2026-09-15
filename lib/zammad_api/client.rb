@@ -120,6 +120,7 @@ module ZammadAPI
       client = allocate
       client.instance_variable_set(:@config, config)
       client.instance_variable_set(:@transport, transport)
+      client.instance_variable_set(:@resources, {})
       client
     end
 
@@ -133,6 +134,7 @@ module ZammadAPI
     def initialize(**options)
       @config    = Config.new(**options)
       @transport = Transport.new(@config)
+      @resources = {}
     end
 
     # @param name [Symbol, String] a key of {RESOURCES}
@@ -140,7 +142,13 @@ module ZammadAPI
     # @raise [UnknownResourceError] when the resource is not known
     def resource(name)
       resource_class = RESOURCES.fetch(name.to_sym) { raise UnknownResourceError, unknown_resource_message(name) }
-      ResourceProxy.new(@transport, resource_class)
+      # Memoized, because a proxy holds nothing but this client's transport
+      # and the resource class, and `client.ticket` is the idiom every call
+      # in the README starts with - each one used to allocate a fresh proxy.
+      # The cache belongs to one transport, so {#with} and {#on_behalf_of}
+      # start their derived clients with an empty one rather than handing out
+      # proxies still wired to the transport they were built from.
+      @resources[resource_class] ||= ResourceProxy.new(@transport, resource_class)
     end
 
     # @return [Array<Symbol>] every resource name this client supports
@@ -262,6 +270,7 @@ module ZammadAPI
       derived        = dup
       derived.instance_variable_set(:@config, derived_config)
       derived.instance_variable_set(:@transport, @transport.with_config(derived_config))
+      derived.instance_variable_set(:@resources, {})
       derived
     end
 
@@ -285,6 +294,7 @@ module ZammadAPI
     def on_behalf_of(identifier)
       scoped = dup
       scoped.instance_variable_set(:@transport, @transport.with_on_behalf_of(identifier))
+      scoped.instance_variable_set(:@resources, {})
       return scoped if !block_given?
 
       yield scoped
@@ -302,11 +312,8 @@ module ZammadAPI
 
     private
 
-    # The path is joined onto Config#url, which always ends in a slash, so a
-    # leading slash would resolve against the host and drop the sub-path of a
-    # Zammad served from one.
     def raw(method, path, query: nil, body: nil)
-      relative = path.to_s.sub(%r{\A/+}, '')
+      relative = Transport.relative_path(path)
 
       @transport.request(
         method,

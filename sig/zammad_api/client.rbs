@@ -7,6 +7,7 @@ module ZammadAPI
     attr_reader config: Config
 
     @transport: Transport
+    @resources: Hash[Class, ResourceProxy]
 
     def self.from_env: (**untyped overrides) -> Client
     def self.build: (Config config, untyped transport) -> Client
