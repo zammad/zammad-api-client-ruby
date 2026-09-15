@@ -57,6 +57,7 @@ module ZammadAPI
     ) -> void
 
     def redacted_url: () -> String
+    def redacted: (String value) -> String
     def authentication_scheme: () -> Symbol
     def with: (**untyped) -> Config
     def inspect: () -> String
@@ -66,11 +67,14 @@ module ZammadAPI
     private
 
     def redact_userinfo: (String) -> String
+    def normalize_proxy: (untyped) -> String?
+    def normalize_adapter: (untyped) -> Symbol?
     def render: (Symbol, untyped) -> String
     def normalize_url: (untyped) -> String
     def validate_credentials!: () -> void
     def validate_numbers!: () -> void
     def validate_user_agent!: () -> void
+    def validate_ssl_verify!: () -> void
     def validate_middleware!: () -> void
     def validate_logger!: () -> void
     def presence: (untyped) -> untyped

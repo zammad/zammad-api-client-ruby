@@ -390,4 +390,56 @@ RSpec.describe ZammadAPI::Config do
   it 'is immutable' do
     expect(build).to be_frozen
   end
+
+  # Every other option is checked up front; these three were not, so a bad
+  # value escaped the ConfigurationError that building a client is documented
+  # to need - two as a bare NoMethodError, one by silently staying on.
+  describe 'option validation' do
+    it 'rejects a proxy that is not a string' do
+      expect { build(proxy: URI('http://user:secret@proxy:3128')) }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config proxy needs to be a string, got URI::HTTP')
+    end
+
+    # The whole point of refusing it: a URI reached String#sub inside #inspect
+    # and died there, so the object this class documents as safe to log raised
+    # at the moment something logged it.
+    it 'keeps a proxy-bearing config renderable' do
+      expect { build(proxy: 'http://user:secret@proxy:3128').inspect }.not_to raise_error
+    end
+
+    it 'redacts the credentials in a proxy it renders' do
+      rendered = build(proxy: 'http://user:secret@proxy:3128').inspect
+
+      expect(rendered).to include('proxy="http://[REDACTED]@proxy:3128"')
+      expect(rendered).not_to include('secret')
+    end
+
+    it 'rejects an adapter that cannot be a symbol' do
+      expect { build(adapter: 1) }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config adapter needs to be a symbol or a string, got Integer')
+    end
+
+    # `adapter: true` is the 1.x-flavoured mistake: it answered to_sym on
+    # nothing and raised NoMethodError from inside the constructor.
+    it 'rejects a boolean adapter' do
+      expect { build(adapter: true) }
+        .to raise_error(ZammadAPI::ConfigurationError, /config adapter needs to be a symbol or a string/)
+    end
+
+    it 'accepts an adapter named as a string' do
+      expect(build(adapter: 'net_http').adapter).to eq(:net_http)
+    end
+
+    # Read from an environment variable this is the string "false", which is
+    # truthy, so verification stayed on while the caller believed they had
+    # turned it off.
+    it 'rejects an ssl_verify that is not a boolean' do
+      expect { build(ssl_verify: 'false') }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config ssl_verify needs to be true or false, got "false"')
+    end
+
+    it 'accepts ssl_verify: false' do
+      expect(build(ssl_verify: false).ssl_verify).to be(false)
+    end
+  end
 end

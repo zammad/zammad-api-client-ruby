@@ -153,8 +153,8 @@ module ZammadAPI
         retries:        retries,
         retry_interval: retry_interval,
         ssl_verify:     ssl_verify,
-        proxy:          immutable(presence(proxy)),
-        adapter:        adapter&.to_sym,
+        proxy:          immutable(normalize_proxy(proxy)),
+        adapter:        normalize_adapter(adapter),
         middleware:     middleware,
         logger:         logger || Logger.new(IO::NULL)
       )
@@ -162,6 +162,7 @@ module ZammadAPI
       validate_credentials!
       validate_numbers!
       validate_user_agent!
+      validate_ssl_verify!
       validate_middleware!
       validate_logger!
     end
@@ -174,7 +175,18 @@ module ZammadAPI
     # credentials are replaced rather than the whole value.
     #
     # @return [String]
-    def redacted_url = redact_userinfo(url)
+    def redacted_url = redacted(url)
+
+    # Blanks the credentials in any URL this configuration holds.
+    #
+    # Public because {Transport} has to scrub the values it configured out of
+    # an error message raised from deep inside Faraday or URI, which quotes
+    # the proxy URL it rejected - credentials and all.
+    #
+    # @api private
+    # @param value [String] a URL that may carry inline credentials
+    # @return [String] the same URL with the credentials blanked
+    def redacted(value) = redact_userinfo(value)
 
     # @return [Symbol] +:http_token+, +:oauth2_token+ or +:basic+
     def authentication_scheme
@@ -256,6 +268,46 @@ module ZammadAPI
       return if user_agent.is_a?(String)
 
       raise ConfigurationError, 'config user_agent needs to be a string'
+    end
+
+    # A proxy is the second string here that may carry credentials, and the
+    # only other one rendered rather than replaced wholesale. Unchecked, a
+    # URI - what `URI(...)` hands back, and what prints as the URL - was
+    # accepted here and reached String#sub inside {#inspect}, so the object
+    # this class documents as safe to log raised NoMethodError at exactly the
+    # moment something tried to log it. The same mistake {#normalize_url}
+    # already refuses for the instance URL.
+    def normalize_proxy(value)
+      return nil if presence(value).nil?
+      raise ConfigurationError, "config proxy needs to be a string, got #{value.class}" if !value.is_a?(String)
+
+      value
+    end
+
+    # `adapter&.to_sym` accepted anything that answered to_sym and died with
+    # a bare NoMethodError on anything that did not - `adapter: 1` and
+    # `adapter: true` both escaped the ConfigurationError that building a
+    # client is documented to need, from inside the constructor, before any
+    # of the validators below ran.
+    def normalize_adapter(value)
+      return nil if presence(value).nil?
+      raise ConfigurationError, "config adapter needs to be a symbol or a string, got #{value.class}" if !value.is_a?(Symbol) && !value.is_a?(String)
+
+      value.to_sym
+    end
+
+    # The one option that fails open. Every other value here is checked up
+    # front, while ssl_verify was passed to Faraday as it arrived: read from
+    # an environment variable, `ssl_verify: 'false'` is the string "false",
+    # which is truthy, so the setting a caller believed they had turned off
+    # was silently still on. That direction is the safe one, which is why it
+    # went unnoticed - `ssl_verify: 'no'` disables nothing either way, but a
+    # caller who cannot tell which of their settings took effect has no way
+    # to find out.
+    def validate_ssl_verify!
+      return if [true, false].include?(ssl_verify)
+
+      raise ConfigurationError, "config ssl_verify needs to be true or false, got #{ssl_verify.inspect}"
     end
 
     def validate_middleware!
