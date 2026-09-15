@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'forwardable'
+
 require_relative 'collection'
 require_relative 'errors'
 
@@ -29,6 +31,7 @@ module ZammadAPI
   # block form.
   class ResourceProxy
     include Enumerable
+    extend Forwardable
 
     # Largest page size Zammad's search endpoints serve, from
     # ApplicationController#model_search_render.
@@ -216,76 +219,82 @@ module ZammadAPI
       collection(path, 'get .all of object')
     end
 
-    # Records narrowed by the query parameters this endpoint honours, as a
-    # lazily paginated collection. Shorthand for +all.where(...)+.
-    #
-    # An index endpoint does not filter by attribute value - see
-    # {Collection#where} - so this is for sorting, and {#find_by} or {#search}
-    # are how a value narrows anything.
-    #
-    # @param params [Hash] query parameters the endpoint honours
-    # @return [Collection]
-    # @raise [ArgumentError] for a parameter the endpoint would ignore
-    def where(**params) = all.where(**params)
-
     # @!group Collection shorthands
 
-    # Each of these forwards to {Collection}, which decides for itself what a
-    # missing block means. The type checker cannot pick between the with-block
-    # and without-block signatures while forwarding one that may be nil, hence
-    # the annotations.
-
-    # Yields every record of this kind, fetching pages as needed.
+    # Everything below forwards to {#all}, the {Collection} that decides for
+    # itself what a missing block means and what a page size is measured
+    # against.
     #
-    # This is what makes a proxy +Enumerable+, so +first+, +map+, +lazy+ and
-    # the rest work straight off +client.group+.
+    # Named once rather than written out one +def+ at a time. Each was a body
+    # that did nothing but pass its arguments on, and three carried a
+    # +steep:ignore+ because forwarding into {Collection}'s with-block and
+    # without-block overloads cannot be resolved - forwarded by name there is
+    # no call site left to resolve. What callers are checked against is
+    # sig/zammad_api/resource_proxy.rbs, where each of these is declared with
+    # the types {Collection} gives it.
+
+    # @!method where(**params)
+    #   Records narrowed by the query parameters this endpoint honours, as a
+    #   lazily paginated collection. Shorthand for +all.where(...)+.
     #
-    # @yieldparam record [Resources::Base]
-    # @return [Enumerator] when no block is given
-    # @see Collection#each
-    def each(&block) = all.each(&block) # steep:ignore BlockTypeMismatch
+    #   An index endpoint does not filter by attribute value - see
+    #   {Collection#where} - so this is for sorting, and {#find_by} or
+    #   {#search} are how a value narrows anything.
+    #   @param params [Hash] query parameters the endpoint honours
+    #   @return [Collection]
+    #   @raise [ArgumentError] for a parameter the endpoint would ignore
 
-    # @param batch_size [Integer, nil] records fetched per request
-    # @yieldparam record [Resources::Base]
-    # @return [Enumerator] when no block is given
-    # @see Collection#find_each
-    def find_each(batch_size: nil, &block) = all.find_each(batch_size: batch_size, &block) # steep:ignore BlockTypeMismatch
-
-    # @param of [Integer, nil] records fetched per request
-    # @yieldparam records [Array<Resources::Base>]
-    # @return [Enumerator] when no block is given
-    # @see Collection#in_batches
-    def in_batches(of: nil, &block) = all.in_batches(of: of, &block) # steep:ignore BlockTypeMismatch
-
-    # @param number [Integer] one-based page number
-    # @param of [Integer, nil] records on the page
-    # @return [Collection]
-    # @see Collection#page
-    def page(number, of: nil) = all.page(number, of: of)
-
-    # @param keys [Array<Symbol, String>] attribute names
-    # @return [Array]
-    # @see Collection#pluck
-    def pluck(*keys) = all.pluck(*keys)
-
-    # Overrides +Enumerable#count+ so that a collection counts the way it
-    # knows how.
+    # @!method each(&block)
+    #   Yields every record of this kind, fetching pages as needed.
     #
-    # @return [Integer]
-    # @see Collection#count
-    def count(*args, &block) = all.count(*args, &block)
+    #   This is what makes a proxy +Enumerable+, so +first+, +map+, +lazy+
+    #   and the rest work straight off +client.group+.
+    #   @yieldparam record [Resources::Base]
+    #   @return [Enumerator] when no block is given
+    #   @see Collection#each
 
-    # @return [Integer]
-    # @see Collection#size
-    def size = all.size
+    # @!method find_each(batch_size: nil, &block)
+    #   @param batch_size [Integer, nil] records fetched per request
+    #   @yieldparam record [Resources::Base]
+    #   @return [Enumerator] when no block is given
+    #   @see Collection#find_each
 
-    # @return [Integer]
-    # @see Collection#size
-    def length = all.length
+    # @!method in_batches(of: nil, &block)
+    #   @param of [Integer, nil] records fetched per request
+    #   @yieldparam records [Array<Resources::Base>]
+    #   @return [Enumerator] when no block is given
+    #   @see Collection#in_batches
 
-    # @return [Boolean]
-    # @see Collection#empty?
-    def empty? = all.empty?
+    # @!method page(number, of: nil)
+    #   @param number [Integer] one-based page number
+    #   @param of [Integer, nil] records on the page
+    #   @return [Collection]
+    #   @see Collection#page
+
+    # @!method pluck(*keys)
+    #   @param keys [Array<Symbol, String>] attribute names
+    #   @return [Array]
+    #   @see Collection#pluck
+
+    # @!method count(*args, &block)
+    #   Overrides +Enumerable#count+ so that a collection counts the way it
+    #   knows how.
+    #   @return [Integer]
+    #   @see Collection#count
+
+    # @!method size
+    #   @return [Integer]
+    #   @see Collection#size
+
+    # @!method length
+    #   @return [Integer]
+    #   @see Collection#size
+
+    # @!method empty?
+    #   @return [Boolean]
+    #   @see Collection#empty?
+
+    def_delegators :all, :where, :each, :find_each, :in_batches, :page, :pluck, :count, :size, :length, :empty?
 
     # @!endgroup
 

@@ -24,8 +24,9 @@ Gem::Specification.new do |spec|
   spec.metadata['documentation_uri']      = "https://rubydoc.info/gems/zammad_api/#{ZammadAPI::VERSION}"
   spec.metadata['rubygems_mfa_required']  = 'true'
 
-  # sig/vendor holds stand-in signatures for dependencies that ship none; they
-  # are for this repository's own type checking and must not be published.
+  # sig/vendor holds the declarations that exist only for this repository's own
+  # type checking - stand-ins for dependencies that ship none, and the internal
+  # ones in sig/vendor/internal.rbs - and must not be published.
   spec.files = Dir['lib/**/*.rb', 'sig/**/*.rbs'].grep_v(%r{\Asig/vendor/}) + %w[
     CHANGELOG.md
     LICENSE.AGPL.txt
