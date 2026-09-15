@@ -183,6 +183,21 @@ check('find_by returns a record that matches') do
   "id=#{found.id}"
 end
 
+# Two string attributes, because one is the shape that works whatever the
+# search term looks like. Joined into a single term - which is what this used
+# to send - the query asks every string column to contain the whole of it, and
+# on an instance searching through SQL LIKE rather than Elasticsearch no
+# column does, so a record that exists comes back as nil. A stubbed unit spec
+# cannot see that; it answers whatever term it is handed.
+check('find_by matches on two string attributes') do
+  group = CLIENT.group.find(@group.id)
+  found = CLIENT.group.find_by(name: group.name, note: group.note)
+  raise 'no record found' if found.nil?
+  raise "found the wrong record: #{found.name}" if found.id != group.id
+
+  "id=#{found.id}"
+end
+
 check('find_by returns nil for no match') do
   found = CLIENT.group.find_by(name: "no-such-group-#{SUFFIX}")
   raise "expected nil, got #{found.inspect}" if !found.nil?

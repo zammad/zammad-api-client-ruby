@@ -117,13 +117,23 @@ module ZammadAPI
     # +find_by(email: 'Someone@Example.com')+ does not match a login Zammad
     # downcased.
     #
-    # The search term is built from the string values only. Zammad searches by
-    # word, so a value of another type went out as the word it prints as:
-    # +find_by(active: true)+ searched for "true" and matched records carrying
-    # that word, which is essentially none of them, and then reported the miss
-    # as nil. A call with nothing to search for says so instead. The other
-    # values still have to match, so +find_by(email: ..., active: true)+
-    # searches the email and then compares both.
+    # The search term is one string value. Zammad searches by word, so a value
+    # of another type went out as the word it prints as: +find_by(active:
+    # true)+ searched for "true" and matched records carrying that word, which
+    # is essentially none of them, and then reported the miss as nil. A call
+    # with nothing to search for says so instead.
+    #
+    # One value, never all of them joined. An instance searching without
+    # Elasticsearch matches the term literally, through a SQL LIKE over the
+    # string columns, so a joined term asks every column to contain the whole
+    # of it: +find_by(firstname: 'Jane', lastname: 'Doe')+ went out as "Jane
+    # Doe" and no column of Jane Doe's holds that, so a user that exists came
+    # back as nil and the +find_by(...) || create(...)+ this documents made a
+    # duplicate on every run. Single-attribute lookups were unaffected, which
+    # is why it stood. The longest value goes out, as the most selective of
+    # them, and every other value is compared here - which is where the
+    # non-string ones are compared anyway, so +find_by(email: ..., active:
+    # true)+ searches the email and then checks both.
     #
     # Values go out as they are. Quoting one that carries search syntax, so
     # that it is looked for rather than obeyed, sounds like an improvement and
@@ -165,8 +175,8 @@ module ZammadAPI
       searchable!
       raise ArgumentError, 'find_by needs at least one attribute to match' if params.empty?
 
-      term = params.values.grep(String).reject { it.strip.empty? }.join(' ')
-      raise ArgumentError, unsearchable_values_message(params) if term.empty?
+      term = search_term_for(params)
+      raise ArgumentError, unsearchable_values_message(params) if term.nil?
 
       search(term)
         .page(1, of: SEARCH_MAX_PER_PAGE)
@@ -352,6 +362,17 @@ module ZammadAPI
     end
 
     def index_filter_hint = resource_class.searchable? ? INDEX_FILTER_HINT : UNSEARCHABLE_FILTER_HINT
+
+    # The one value {#find_by} searches on: the longest, as the most selective
+    # of them, which matters because only the first {SEARCH_MAX_PER_PAGE} hits
+    # are examined.
+    #
+    # One value rather than all of them joined, and unquoted - both spellings
+    # find nothing on an instance without Elasticsearch, for the same reason.
+    # See {#find_by}.
+    #
+    # @return [String, nil] nil when no value can be searched on
+    def search_term_for(params) = params.values.grep(String).reject { it.strip.empty? }.max_by(&:length)
 
     def unsearchable_values_message(params)
       given = params.map { |key, value| "#{key}: #{value.inspect}" }.join(', ')

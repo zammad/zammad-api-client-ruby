@@ -220,12 +220,35 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect(proxy.find_by(name: 'Users', active: true).id).to eq(2)
     end
 
-    it 'puts every string value in the search term' do
+    # What a caller is promised: a record carrying both values comes back.
+    # The spec here asserted the query string instead - that "Users Support"
+    # went out - which a stub answers whatever it is handed, so nothing could
+    # see that an instance without Elasticsearch matches that term through a
+    # SQL LIKE per column and so finds neither of them.
+    it 'finds a record by two string attributes' do
+      stub_request(:get, search_url).with(query: hash_including({}))
+        .to_return(json_response([{ id: 1, name: 'Users', note: 'Other' }, { id: 2, name: 'Users', note: 'Support' }]))
+
+      expect(proxy.find_by(name: 'Users', note: 'Support').id).to eq(2)
+    end
+
+    # The fence for the above: one value goes out, never the values joined.
+    # Joined, the term is one no single column holds.
+    it 'searches a single value rather than joining them' do
       stub = stub_request(:get, search_url)
-        .with(query: hash_including('query' => 'Users Support'))
+        .with(query: hash_including('query' => 'Support'))
         .to_return(json_response([]))
 
       proxy.find_by(name: 'Users', note: 'Support')
+      expect(stub).to have_been_requested
+    end
+
+    it 'searches the longest value, as the most selective within the capped scan' do
+      stub = stub_request(:get, search_url)
+        .with(query: hash_including('query' => 'a-very-specific-note'))
+        .to_return(json_response([]))
+
+      proxy.find_by(name: 'Users', note: 'a-very-specific-note')
       expect(stub).to have_been_requested
     end
 

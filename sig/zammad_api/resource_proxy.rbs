@@ -43,6 +43,7 @@ module ZammadAPI
     def collection: (String, String, ?query: Hash[Symbol, untyped], ?max_per_page: Integer, ?filterable: Array[Symbol], ?filter_hint: String, ?countable: bool) -> Collection
     def searchable!: () -> void
     def index_filter_hint: () -> String
+    def search_term_for: (Hash[Symbol, untyped]) -> String?
     def unsearchable_values_message: (Hash[Symbol, untyped]) -> String
     def path: () -> String
     def member_path: (Integer | String id) -> String

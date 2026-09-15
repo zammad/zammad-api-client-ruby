@@ -225,16 +225,21 @@ cannot filter — see [Filters](#filters). A record it returns genuinely carries
 attributes you asked for, compared exactly and against the value as Zammad stores it, so
 `find_by(email: 'Someone@Example.com')` does not match a login Zammad downcased.
 
-The search term is built from the string values only, because Zammad matches words: a
-value of another type would go out as the word it prints as, so `find_by(active: true)`
-would look for records containing `"true"` and find none. Give at least one string value
-to search on — the rest are still matched exactly:
+The search term is one string value, because Zammad matches words: a value of another type
+would go out as the word it prints as, so `find_by(active: true)` would look for records
+containing `"true"` and find none. Give at least one string value to search on — every
+other value is matched exactly against the record:
 
 ```ruby
 client.user.find_by(email: 'someone@example.com', active: true) # searches the email, matches both
+client.user.find_by(firstname: 'Jane', lastname: 'Doe')         # searches "Jane", matches both
 client.user.find_by(active: true)                               # raises ArgumentError
 client.ticket_state.all.detect { it.name == 'open' }            # short list, no search needed
 ```
+
+The values are never joined into one term. An instance searching without Elasticsearch
+matches the term literally, through a SQL `LIKE` over each string column, so `"Jane Doe"`
+would ask for a single column containing the whole of it and match nobody.
 
 What the search can surface is Zammad's business: a value the instance has not indexed, or
 cannot index, is a record `find_by` will not find. `find_by(...) || create(...)` can

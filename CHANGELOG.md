@@ -89,10 +89,14 @@ A breaking release that modernises the whole gem. See
   number re-read what it had already handled. `find_each(batch_size:)` and
   `in_batches(of:)` are still reduced, because a batch size names how much to fetch per
   request, not which records the call is about.
-- `find_by` builds its search term from the string values only, and raises `ArgumentError`
-  when none of the values is a string. Zammad matches words, so `find_by(active: true)`
-  searched for `"true"` and found nothing. Non-string values are still matched exactly, so
-  `find_by(email: '…', active: true)` searches the email and compares both.
+- `find_by` searches one string value — the longest — and raises `ArgumentError` when none
+  of the values is a string. Zammad matches words, so `find_by(active: true)` searched for
+  `"true"` and found nothing. Every other value is compared against the record, so
+  `find_by(email: '…', active: true)` searches the email and compares both. The values are
+  never joined into a single term: an instance searching without Elasticsearch matches the
+  term literally, through a SQL `LIKE` over each string column, so
+  `find_by(firstname: 'Jane', lastname: 'Doe')` asked for one column containing
+  `"Jane Doe"` and reported a user that exists as `nil`.
 - `search` and `find_by` raise `ZammadAPI::Error` on a resource Zammad routes no search
   endpoint for — `ticket_state`, `ticket_priority` and `ticket_article`. Those endpoints
   answered 404, which reached `find_by` as a `NotFoundError` from a method documented to
