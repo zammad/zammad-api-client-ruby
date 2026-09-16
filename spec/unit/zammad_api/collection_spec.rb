@@ -5,6 +5,9 @@ RSpec.describe ZammadAPI::Collection do
 
   let(:client) { unit_client }
   let(:url) { "#{ClientHelper::BASE_URL}api/v1/groups" }
+  # `condition` is only honoured by a search endpoint, so the nested-filter
+  # examples need one.
+  let(:search_collection) { client.ticket.search('x') }
 
   def stub_page(page, records, per_page: ZammadAPI::Collection::DEFAULT_PER_PAGE)
     stub_request(:get, url)
@@ -199,6 +202,53 @@ RSpec.describe ZammadAPI::Collection do
 
       expect { collection.each { seen += 1 } }.to raise_error(ZammadAPI::PaginationError)
       expect(seen).to eq(ZammadAPI::Collection::DEFAULT_PER_PAGE)
+    end
+
+    it 'refuses two spellings of one filter rather than dropping a value' do
+      expect { collection.where('sort_by' => 'name', :sort_by => 'id') }
+        .to raise_error(ArgumentError, /sort_by was given twice, as "sort_by" and as :sort_by/)
+    end
+
+    # `condition` is a Hash the search endpoints read. Transport refuses the
+    # pair too, but not until the collection is enumerated, and every other
+    # refusal `where` makes happens at the call that wrote it.
+    it 'refuses a collision nested inside a structured filter' do
+      expect { search_collection.where(condition: { 'state_id' => 1, :state_id => 2 }) }
+        .to raise_error(ArgumentError, /parameter condition\[state_id\] was given twice/)
+    end
+
+    it 'still accepts a structured filter whose keys only look alike' do
+      expect(search_collection.where(condition: { 'ticket.state_id' => { operator: 'is' } }))
+        .to be_a(described_class)
+    end
+
+    it 'still accepts a filter given once by either spelling' do
+      expect(collection.where('sort_by' => 'name')).to be_a(described_class)
+      expect(collection.where(sort_by: 'name')).to be_a(described_class)
+    end
+
+    # The guard compares the decoded payload, not the bytes it arrived as.
+    # Hashing raw_body is cheaper and looks equivalent - identical bytes do
+    # mean identical records - but the implication that matters runs the other
+    # way: an endpoint that ignores `page` and re-serializes the same records
+    # with a different key order produces different bytes every time, so the
+    # guard never fires. Every page is full, so neither the short-page break
+    # nor the total break fires either, and the walk never ends.
+    it 'raises PaginationError when a repeated page is re-serialized differently' do
+      forwards  = Array.new(ZammadAPI::Collection::DEFAULT_PER_PAGE) { { id: it, name: "a#{it}" } }
+      backwards = forwards.map { { name: it[:name], id: it[:id] } }
+      # Every page differs from the one before it in bytes and from none of
+      # them in records, which a fixed sequence cannot express: WebMock repeats
+      # its last response, so two pages running would come back byte-identical
+      # and a byte digest would catch them one page later.
+      order = [forwards, backwards].cycle
+      stub_request(:get, url).with(query: hash_including({})).to_return { json_response(order.next) }
+
+      # Bounded, because what this guards against is a walk that never ends
+      # rather than one that ends wrongly - unbounded, a regression here hangs
+      # the suite instead of failing it.
+      expect { Timeout.timeout(5) { collection.to_a } }
+        .to raise_error(ZammadAPI::PaginationError, /ignoring the page parameter/)
     end
 
     it 'raises PaginationError when records without an id repeat' do

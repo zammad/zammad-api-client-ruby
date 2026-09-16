@@ -139,7 +139,56 @@ RSpec.describe ZammadAPI::AttributeAccess do
     it 'still answers from the block when both were given' do
       expect { expect(record.fetch(:nope, 'fallback') { 'block' }).to eq('block') }.to output.to_stderr
     end
+
+    # Hash#fetch names the line that made the call. A bare Kernel#warn named
+    # nothing at all - neither the call site nor the library it came from,
+    # which in an application with several such calls is everything the reader
+    # needs. `uplevel` supplies both that location and the `warning: ` prefix.
+    it 'names the line that made the call, the way Hash#fetch does' do
+      expect { record.fetch(:nope, 'fallback') { 'block' } }
+        .to output(/attribute_access_spec\.rb:\d+: warning: block supersedes/).to_stderr
+    end
     # rubocop:enable Lint/UselessDefaultValueArgument
+  end
+
+  # `record[:x] = v` reached method_missing as `:[]=`, which the writer branch
+  # took for an attribute called `[]` - it staged the index as the value, lost
+  # the write, and sent `{"[]": "x"}` on the next save. Ruby's operators end in
+  # `=` too, so `record <= 5` did the same for an attribute called `<`.
+  describe '#[]=' do
+    it 'goes through the same refusal a named writer does on a read-only record' do
+      expect { record[:note] = 'x' }.to raise_error(NoMethodError, /attributes are read-only/)
+    end
+
+    it 'names the attribute that was tried, not the operator' do
+      expect { record[:note] = 'x' }.to raise_error(NoMethodError, /tried to set note/)
+    end
+
+    # `[]=` is a defined method, so respond_to_missing? never sees it: a
+    # read-only record claimed the one writer it has while denying every named
+    # one, then raised when it was called - the invariant the writer branch of
+    # respond_to_missing? is conditional for.
+    it 'is not claimed by a record that would refuse it' do
+      expect(record).not_to respond_to(:[]=)
+    end
+
+    it 'agrees with the named writers on the same record' do
+      expect(record.respond_to?(:[]=)).to eq(record.respond_to?(:name=))
+    end
+  end
+
+  describe 'a name that only looks like a writer' do
+    it 'does not invent an attribute from a comparison operator' do
+      # Sent rather than written as `record <= 5`, which RuboCop reads as a
+      # void literal and rewrites away, taking the spec with it.
+      record.public_send(:<=, 5)
+
+      expect(record.attributes.keys).not_to include(:<)
+    end
+
+    it 'is not claimed as a writer' do
+      expect(record).not_to respond_to(:<=)
+    end
   end
 
   describe '#respond_to?' do

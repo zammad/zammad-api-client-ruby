@@ -9,8 +9,13 @@ module ZammadAPI
 
     def self.new: (status: Integer, headers: Hash[String, String], body: untyped, raw_body: String, json: bool) -> instance
     SUCCESS_STATUSES: Range[Integer]
+    # private_constant in the source; RBS has no way to say so.
+    TOTAL_COUNT_HEADER: String
+
+    def self.decode_body: (String?, String) -> [untyped, bool]
 
     def success?: () -> bool
+    def reported_total: () -> Integer?
     def json?: () -> bool
     def decoded: (Symbol shape, operation: String, ?resource_class: Class?) -> untyped
 

@@ -19,6 +19,40 @@ RSpec.describe ZammadAPI::Response do
     end
   end
 
+  # Read by the collection walk and by the has_many guard, which each used to
+  # carry their own copy: one kept the header name in a private constant and
+  # refused a negative count, the other hardcoded the string and accepted any
+  # Integer.
+  describe '#reported_total' do
+    it 'reads the count the endpoint reported' do
+      expect(build(headers: { 'x-total-count' => '7' }).reported_total).to eq(7)
+    end
+
+    it 'is nil when the endpoint reported none' do
+      expect(build.reported_total).to be_nil
+    end
+
+    it 'is nil for a header that is not a count' do
+      expect(build(headers: { 'x-total-count' => 'many' }).reported_total).to be_nil
+    end
+
+    it 'is nil for a count that cannot describe a result' do
+      expect(build(headers: { 'x-total-count' => '-1' }).reported_total).to be_nil
+    end
+
+    # `Integer(5, 10, exception: false)` is nil - a base cannot be given for a
+    # non-String and the exception is swallowed - so a count on a Response
+    # built by hand would read as no count at all, which is the one answer that
+    # turns the guard off silently.
+    it 'reads a count given as an Integer' do
+      expect(build(headers: { 'x-total-count' => 7 }).reported_total).to eq(7)
+    end
+
+    it 'reads a zero as the count it is, not as no count at all' do
+      expect(build(headers: { 'x-total-count' => '0' }).reported_total).to eq(0)
+    end
+  end
+
   describe '#json?' do
     it 'is true when the body was decoded' do
       expect(build).to be_json

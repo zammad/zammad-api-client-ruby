@@ -38,6 +38,14 @@ module ZammadAPI
     # so never sent. Strings are copied before being frozen, so freezing a
     # value the caller passed in does not reach back into their own variable.
     #
+    # Keys are left alone. Ruby copies and freezes an unfrozen String key on
+    # insertion, so a Hash built here never holds the caller's own String, and
+    # symbolizing produces an immutable key anyway - which leaves only an
+    # Array or a custom object as a key that this walk would change. `JSON`
+    # cannot build one, so it could only come from a caller's own attribute
+    # hash, and paying a call per key on the record-building path for it is
+    # the cost this module's own note above weighs and declines.
+    #
     # @param value [Object]
     # @param symbolize_keys [Boolean] whether Hash keys become Symbols, so
     #   that caller-supplied attributes behave the same as decoded responses

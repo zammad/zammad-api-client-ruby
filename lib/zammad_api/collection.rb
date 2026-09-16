@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'duplicate_keys'
 require_relative 'errors'
 
 module ZammadAPI
@@ -30,11 +31,6 @@ module ZammadAPI
 
     # Records fetched per request, unless a call asks for another size.
     DEFAULT_PER_PAGE = 100
-
-    # Header Zammad's index endpoints report the size of the whole result in.
-    # Keys are downcased by the time a {Response} carries them.
-    TOTAL_COUNT_HEADER = 'x-total-count'
-    private_constant :TOTAL_COUNT_HEADER
 
     # Query parameters this collection owns. Passing them to {#where} would be
     # silently overridden, so they are rejected instead.
@@ -149,7 +145,7 @@ module ZammadAPI
       # endpoint honours sort_by" in one breath, and `where('page' => 2)`
       # missed the reserved-key check entirely and was refused with a message
       # that never mentioned paging.
-      filters = params.transform_keys { it.to_s.to_sym }
+      filters = normalized_filters(params)
 
       reserved = filters.keys & RESERVED_QUERY_KEYS
       raise ArgumentError, "#{reserved.join(', ')} cannot be passed to where: use page, in_batches or find_each for paging, pass a search term to search, and leave expand and only_total_count to the collection" if !reserved.empty?
@@ -256,8 +252,8 @@ module ZammadAPI
       seen      = 0
       total     = nil
       loop do
-        records, response = fetch(page, @per_page)
-        total = reported_total(response) if total.nil?
+        records, response, digest = fetch(page, @per_page)
+        total = response.reported_total if total.nil?
         seen += records.size
 
         # Before the records are handed over, not after. Yielding first meant
@@ -271,8 +267,20 @@ module ZammadAPI
         # payloads themselves, because holding the previous page across the
         # next fetch doubled a walk's peak memory for a guard that only ever
         # asks whether two pages are equal.
-        current = records.map(&:attributes).hash
-        raise PaginationError.build(operation: @operation, page: page, resource_class: @resource_class) if current == previous
+        #
+        # The decoded payload, not the bytes it arrived as. Hashing raw_body
+        # is cheaper and looks equivalent - identical bytes do mean identical
+        # records - but the implication that matters here runs the other way:
+        # an endpoint that ignores `page` and re-serializes the same records
+        # with a different key order produces different bytes every time, so
+        # the guard never fires, and because every page is full neither the
+        # short-page break nor the total break fires either. A missed repeat
+        # is not a missed error, it is a walk that never ends. `Hash#hash`
+        # ignores key order and whitespace, which is exactly the insensitivity
+        # this needs - and taking it from the decoded payload rather than from
+        # the built records costs nothing extra, because that payload is what
+        # the records were built from one line earlier.
+        raise PaginationError.build(operation: @operation, page: page, resource_class: @resource_class) if digest == previous
 
         yield records if !records.empty?
 
@@ -306,7 +314,7 @@ module ZammadAPI
         page_size = records.size if page_size.zero?
         break if records.size < page_size
 
-        previous = current
+        previous = digest
         page += 1
       end
     end
@@ -327,9 +335,40 @@ module ZammadAPI
       )
     end
 
-    # @return [Array(Array<Resources::Base>, Response)] the page and the
-    #   response it came in, which carries what the endpoint said about the
-    #   size of the whole result
+    # Normalises the keys, refusing two spellings of one parameter rather than
+    # letting the normalisation merge them.
+    #
+    # Normalising is exactly what hid the collision: `sort_by` and `'sort_by'`
+    # became one key here, last one winning, and the request went out carrying
+    # a value the caller never saw dropped. The reserved-key and ignored-key
+    # checks in `where` read the collapsed hash too, so nothing else was going
+    # to notice either.
+    #
+    # Nested too, because `condition` - the structured parameter the search
+    # endpoints read, and one {ResourceProxy::SEARCH_QUERY_KEYS} lists so that
+    # `where` accepts it - is a Hash. {Transport.stringify_query} would refuse
+    # the pair eventually, but not until the collection is enumerated, and
+    # every other refusal `where` makes happens at the call that wrote it.
+    #
+    # @raise [ArgumentError] for two keys that name the same parameter
+    def normalized_filters(params, prefix = nil)
+      DuplicateKeys
+        .normalize(params, prefix: prefix) { it.to_s.to_sym }
+        .to_h { |name, value| [name, nested_filters(name, value, prefix)] }
+    end
+
+    # A Hash filter is normalised the same way, one level down.
+    def nested_filters(name, value, prefix)
+      return value if !value.is_a?(Hash)
+
+      normalized_filters(value, prefix ? "#{prefix}[#{name}]" : name.to_s)
+    end
+
+    # Fetches one page and the digest the repeated-page guard compares.
+    #
+    # @return [Array(Array<Resources::Base>, Response, Integer)] the records,
+    #   the response they came in - which carries what the endpoint said about
+    #   the size of the whole result - and the digest
     def fetch(page, per_page)
       response = @transport.get(
         @path,
@@ -337,8 +376,12 @@ module ZammadAPI
         resource_class: @resource_class,
         query:          @query.merge(page: page, per_page: per_page)
       )
-      records = response.decoded(:array, operation: @operation, resource_class: @resource_class)
-      [records.map { @resource_class.from_response(@transport, it) }, response]
+      decoded = response.decoded(:array, operation: @operation, resource_class: @resource_class)
+      # The digest for the repeated-page guard is taken here, from the decoded
+      # payload, which is the one structure that has everything the guard needs
+      # and is already in hand. See the guard in `walk` for why it is this and
+      # not the records or the raw body.
+      [decoded.map { @resource_class.from_response(@transport, it) }, response, decoded.hash]
     end
 
     # Whether the endpoint's own count says there is nothing after this page,
@@ -384,17 +427,6 @@ module ZammadAPI
       page_records < (page_size.zero? ? @per_page : page_size)
     end
 
-    # How many records the endpoint says this query has.
-    #
-    # @return [Integer, nil] nil when the header was absent or not a count
-    def reported_total(response)
-      reported = response.headers[TOTAL_COUNT_HEADER]
-      return nil if reported.nil?
-
-      total = Integer(reported, 10, exception: false)
-      total if total&.>=(0)
-    end
-
     # @return [Integer, nil] nil when the endpoint did not report a total
     def total_count
       response = @transport.get(
@@ -416,7 +448,7 @@ module ZammadAPI
       # an endpoint that ignores the parameter costs the one request it just
       # spent; unread, the probe was thrown away and `count` walked every page
       # on top of it, so the answer cost 1 + N requests instead of N.
-      reported_total(response)
+      response.reported_total
     end
 
     # Reduced rather than refused, unlike the size {#page} takes. The

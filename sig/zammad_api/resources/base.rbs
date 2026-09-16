@@ -4,6 +4,7 @@ module ZammadAPI
       include AttributeAccess
 
       DEFAULT_MAX_PER_PAGE: Integer
+      MEMO_LOCK: Thread::Mutex
       DEFAULT_INDEX_QUERY_KEYS: Array[Symbol]
 
       attr_reader error: ValidationError?
@@ -11,6 +12,7 @@ module ZammadAPI
 
       @new_record: bool
       @destroyed: bool
+      @saved: bool
       @error: ValidationError?
       @changes: Hash[Symbol, Array[untyped]]
       @related: Associations::Proxy?
@@ -32,6 +34,7 @@ module ZammadAPI
       def self.page_limit: () -> Integer
       def self.filterable_keys: () -> Array[Symbol]
       def self.member_path: ((Integer | String) id) -> String
+      def self.fetch_one: (Transport transport, (Integer | String) id) -> Base
       def self.from_response: (Transport, Hash[untyped, untyped] attributes) -> Base
       def self.associations: () -> Hash[Symbol, Hash[Symbol, untyped]]
       def self.belongs_to_foreign_keys: () -> Array[Symbol]
@@ -62,8 +65,11 @@ module ZammadAPI
 
       def mark_persisted!: () -> void
       def raise_if_destroyed!: (String action) -> void
+      def raise_if_new!: (String operation) -> void
       def writable_attributes?: () -> bool
-      def replace_attributes!: (Response, operation: String) -> void
+      def attribute_writable?: (Symbol key) -> bool
+      def refuse_unwritable!: (Symbol key, untyped value) -> void
+      def replace_attributes!: (Response, operation: String, ?saved: bool) -> void
       def reset_pending_state!: () -> void
       def write_attribute: (Symbol, untyped) -> untyped
       def create_record: () -> Response

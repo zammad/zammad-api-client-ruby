@@ -52,6 +52,26 @@ A breaking release that modernises the whole gem. See
   both, because no attribute the caller can fix would change the outcome.
   `client.<resource>.create` uses `save!`, so it keeps raising rather than returning a
   record that looks created but is not.
+- A resource's class-level memos — the association proxy class and the `belongs_to`
+  foreign keys — are built under a lock. They were plain `@x ||=`, so two threads building
+  clients or reading associations at once could each build a different anonymous proxy
+  class for one resource, and whichever write lost was still held by the records already
+  built from it. Harmless under CRuby's GVL, wrong on JRuby and TruffleRuby, which is not
+  the contract `README` writes down.
+- `record[:x] = 1` stages the attribute it names. It reached the writer dispatch as `[]=`
+  and was taken for an attribute literally called `[]` whose value was the index, so the
+  write was lost without an error and the next `save` sent `{"[]": "x"}` to Zammad. Ruby's
+  operators end in `=` too, so `record <= 5` invented an attribute called `<` the same way;
+  a writer is now recognised only by a plain attribute name.
+- `record.destroy` and `record.reload` refuse a record that was never saved, instead of
+  acting on an id it was merely built with. `client.group.new(id: 99).destroy` reported
+  `new_record?` true and `persisted?` false and still sent `DELETE /api/v1/groups/99`.
+- `record.id = ...` raises. The id is what addresses the record, so a staged one took
+  effect for every path that builds a URL from the attributes and not at all for the record
+  those paths then reported on: `group.id = 99; group.destroy` sent `DELETE` to group 99
+  and left the record saying group 1 was the one destroyed. Zammad does not let an id be
+  set either, so no call that used to reach the server is lost. A new record may still be
+  built carrying one — `client.group.new(id: 5)`.
 - `record.destroy` marks the record `destroyed?`, and `persisted?` answers false for one.
   1.x left a destroyed record looking live, so a later `save` went out as a `PUT` to the
   deleted id and came back a 404 one call after the mistake.
@@ -109,6 +129,9 @@ A breaking release that modernises the whole gem. See
 
 ### Added
 
+- `Response#reported_total` reads the size of the whole result from the `x-total-count`
+  header an index endpoint sends, or `nil` where it sent none or something that is not a
+  count. It is what the collection walk and the `has_many` guard both ask.
 - `client.get`, `client.post`, `client.put` and `client.delete` reach any endpoint of the
   Zammad API, including the many this gem does not model. They return a
   `ZammadAPI::Response` and keep authentication, timeouts, retries, credential redaction,
@@ -384,6 +407,43 @@ A breaking release that modernises the whole gem. See
   headline example did something other than what it showed. The clamp itself stands — a
   batch size says how much to fetch at a time, not which records you get, which is why
   `page` refuses an oversize size and a walk reduces it.
+- A destroyed record reports the attributes Zammad last served, not a write that never
+  left the process. `destroy` dropped the staged change set and left the writes it
+  described standing, so `group.name = 'B'; group.destroy` answered `changed?` with false,
+  `changes` with `{}` and `name` with `"B"` — with nothing left to tell a local edit apart
+  from a value the server gave, in the one state where it can never be saved.
+- A record Zammad served without an id is no longer told it "was saved". Zammad serves a
+  reduced object where the authenticated user may not see the whole record, so a plain read
+  can hand back a persisted record with no id; the message sent the caller to look at a
+  save that never happened instead of at what the client may read.
+- `require 'zammad_api'` no longer depends on Faraday loading `net/http` for it.
+  `Timeout::Error` and `SocketError` are named in `Transport`'s class body and resolved
+  only because the default adapter pulled `timeout` and `socket` in transitively — so a
+  Faraday that stopped doing that, or a slimmer adapter, turned the require into a
+  `NameError` before a single request.
+- `middleware:` that decodes the response body — `c.response :json` is the usual one — is
+  refused when the client is built, before anything is sent, with a `ConfigurationError`
+  naming it. Faraday's parsed Hash used to become a Ruby inspect string that `JSON.parse`
+  refused, which killed every record built from it with a `ParseError` naming Zammad for
+  what the caller's stack had done. This gem parses JSON itself and hands the undecoded
+  bytes to attachment downloads, so once a middleware has consumed the body there is
+  nothing faithful left to hand back.
+- Two spellings of one query parameter raise instead of silently sending whichever Hash
+  order put last — at any depth, and in `where` at the call that wrote it as well as on
+  the wire. The same goes for two spellings of one response header in `ZammadAPI::Test`. Keys are normalised
+  in both places, so `where('sort_by' => 'name', sort_by: 'id')` and
+  `{state_id: 1, 'state_id' => 2}` each collapsed into one parameter and dropped the other
+  value without a word — including inside `condition`, the structured parameter the search
+  endpoints read.
+- A stubbed response from `ZammadAPI::Test` carries `content-type` the way a real one does,
+  and is decoded by that header rather than by the Ruby type of the stub's body. Code that
+  branches on `response.headers['content-type']` passed against Zammad and failed against
+  the stand-in, or the reverse; and a stub declaring a non-JSON type still handed back a
+  decoded Hash, where Zammad gives the raw string and reading a record from it raises
+  `ParseError`.
+- `record.fetch(:missing, default) { ... }` warns the way `Hash#fetch` warns, naming the
+  line that made the call. A bare `Kernel#warn` reports no source location, so the warning
+  identified neither the call site nor the library it came from.
 
 ### Changed
 

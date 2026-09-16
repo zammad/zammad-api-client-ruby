@@ -25,6 +25,11 @@ module ZammadAPI
       # whose endpoint caps lower declare +max_per_page+.
       DEFAULT_MAX_PER_PAGE = 1000
 
+      # Guards the class-level memos on the singleton below. One lock for every
+      # resource, because it is held only while a memo is first built.
+      MEMO_LOCK = Mutex.new
+      private_constant :MEMO_LOCK
+
       # Query parameters an index endpoint honours, beyond the paging
       # {Collection} owns.
       #
@@ -126,6 +131,30 @@ module ZammadAPI
         # @raise [ArgumentError] when the id cannot go into a path segment
         def member_path(id) = "#{resource_path}/#{Transport.escape_path_segment(id)}"
 
+        # Reads one record by id.
+        #
+        # On the resource rather than on {ResourceProxy}, because both callers
+        # of it need a proxy for nothing else: {ResourceProxy#find} has one,
+        # and {Associations::Proxy} was building a throwaway per association
+        # read until it grew a second copy of this instead. The resource
+        # already knows its member path and how to build itself from a body,
+        # which is the whole of the read.
+        #
+        # @api private
+        # @param transport [Transport]
+        # @param id [Integer, String]
+        # @return [Base]
+        def fetch_one(transport, id)
+          operation = 'find object'
+          response  = transport.get(
+            member_path(id),
+            operation:      operation,
+            resource_class: self,
+            query:          { expand: true }
+          )
+          from_response(transport, response.decoded(:object, operation: operation, resource_class: self))
+        end
+
         # Builds a record that is already stored in Zammad.
         #
         # @api private
@@ -152,10 +181,28 @@ module ZammadAPI
         # The attributes a +belongs_to+ reader resolves through, so that
         # writing one can drop the record it had already resolved to.
         #
+        # Both of the class-level memos here are built under one lock, because
+        # a plain `@x ||=` is a write to shared state that two threads can
+        # reach at once: on JRuby or TruffleRuby each could see the ivar unset
+        # and build a different anonymous proxy class for the same resource,
+        # and whichever write lost would still be held by the records already
+        # built from it.
+        #
+        # Populating them eagerly was the earlier answer, first on first use,
+        # then in `Client#setup`, then at require time. Each move shrank the
+        # window without closing it: `Client.new` is itself something two
+        # threads can call, and a resource a caller subclasses themselves -
+        # `class MyTicket < Ticket; end`, which this gem supports - is never in
+        # any list built ahead of time.
+        #
+        # The unlocked read first, so the settled case stays a plain ivar read:
+        # this is asked on every attribute write, and a lock on that path would
+        # cost far more than the one build it guards.
+        #
         # @api private
         # @return [Array<Symbol>]
         def belongs_to_foreign_keys
-          @belongs_to_foreign_keys ||= associations.filter_map { |_, spec| spec[:foreign_key] if spec[:type] == :belongs_to }
+          @belongs_to_foreign_keys || MEMO_LOCK.synchronize { @belongs_to_foreign_keys ||= associations.filter_map { |_, spec| spec[:foreign_key] if spec[:type] == :belongs_to } }
         end
 
         # The class carrying this resource's association readers, reached
@@ -164,9 +211,15 @@ module ZammadAPI
         # @api private
         # @return [Class]
         def related_class
+          return @related_class if @related_class
+
           # A resource's proxy inherits its parent's readers, so Base's
-          # created_by and updated_by reach every resource.
-          @related_class ||= Class.new(superclass.respond_to?(:related_class) ? superclass.related_class : Associations::Proxy) # steep:ignore NoMethod
+          # created_by and updated_by reach every resource. The parent is
+          # resolved before the lock is taken, because resolving it may build
+          # the parent's own proxy through this same method and a Mutex is not
+          # reentrant.
+          parent = superclass.respond_to?(:related_class) ? superclass.related_class : Associations::Proxy # steep:ignore NoMethod
+          MEMO_LOCK.synchronize { @related_class ||= Class.new(parent) }
         end
 
         private
@@ -253,6 +306,10 @@ module ZammadAPI
         @destroyed  = false
         @error      = nil
         @related    = nil
+        # Whether what this record holds came back from a save rather than
+        # from a read. Only {#no_id_message} asks, and only for a record left
+        # without an id, where the two lead somewhere quite different.
+        @saved      = false
       end
 
       # @return [Boolean] whether this record has not been stored yet
@@ -311,8 +368,23 @@ module ZammadAPI
       #
       # @param attributes [Hash] attribute names and their new values
       # @return [self]
+      # @raise [Error] when an attribute cannot be staged, such as +id+. Nothing
+      #   is staged in that case, so the record is left as it was.
       def assign_attributes(attributes)
+        # rubocop:disable Style/CombinableLoops -- combining them is the bug
+        # Two passes on purpose: every key is checked before any of them is
+        # written. Combined, `assign_attributes(name: 'X', id: 9, note: 'Y')`
+        # staged the name, raised on the id and never reached the note, leaving
+        # the record dirty with half a change set - the state `update` takes
+        # its own guard one line early to avoid.
+        #
+        # `write_attribute` checks again for each key, because it is also the
+        # direct writer's own guard and cannot assume a caller came through
+        # here. That is a second Symbol comparison per attribute, which is not
+        # worth a bypass to avoid.
+        attributes.each { |key, value| refuse_unwritable!(key.to_sym, value) }
         attributes.each { |key, value| write_attribute(key.to_sym, value) }
+        # rubocop:enable Style/CombinableLoops
         self
       end
 
@@ -376,7 +448,7 @@ module ZammadAPI
 
         response = new_record? ? create_record : update_record
 
-        replace_attributes!(response, operation: 'save object')
+        replace_attributes!(response, operation: 'save object', saved: true)
         true
       end
 
@@ -387,7 +459,8 @@ module ZammadAPI
       #
       # @param attributes [Hash] attribute names and their new values
       # @return [Boolean] whether the record was stored
-      # @raise [Error] when the record was destroyed
+      # @raise [Error] when the record was destroyed, or when an attribute
+      #   cannot be staged, such as +id+
       # @raise [ResponseError] for any failure other than a validation error
       # @see #save
       def update(attributes)
@@ -406,7 +479,8 @@ module ZammadAPI
       #
       # @param attributes [Hash] attribute names and their new values
       # @return [true]
-      # @raise [Error] when the record was destroyed
+      # @raise [Error] when the record was destroyed, or when an attribute
+      #   cannot be staged, such as +id+
       # @raise [ResponseError] when Zammad rejected the request
       # @see #save!
       def update!(attributes)
@@ -423,6 +497,7 @@ module ZammadAPI
       # @raise [ParseError] when the response is not a JSON object
       def reload
         raise_if_destroyed!('reload')
+        raise_if_new!('reload')
 
         response = transport.get(
           member_path,
@@ -443,14 +518,25 @@ module ZammadAPI
       # while the record existed does not: staged changes, the last validation
       # failure, and the association readers all go.
       #
+      # Readable as the record last was in Zammad, which is not what dropping
+      # the staged changes alone left behind: `reset_pending_state!` empties
+      # `@changes` and leaves the writes those changes described standing in
+      # `@attributes`, so `group.name = 'B'; group.destroy` answered
+      # `changed?` with false, `changes` with `{}` and `name` with "B" - a
+      # value Zammad never saw, with nothing left to tell it apart from one it
+      # served. `@baseline` is what the record arrived with, and every other
+      # path through this state moves the two together.
+      #
       # @return [true]
       # @raise [Error] when the record was already destroyed
       # @raise [ResponseError] when Zammad rejected the request
       def destroy
         raise_if_destroyed!('destroy')
+        raise_if_new!('destroy')
 
         transport.delete(member_path, operation: 'destroy object', resource_class: self.class)
-        @destroyed = true
+        @destroyed  = true
+        @attributes = @baseline
         reset_pending_state!
         true
       end
@@ -461,6 +547,18 @@ module ZammadAPI
 
       def mark_persisted!
         @new_record = false
+      end
+
+      # Refuses an operation on a record Zammad never had.
+      #
+      # `destroyed?` was the only thing these asked, so a record built with an
+      # id it was simply handed - `client.group.new(id: 99)`, which the
+      # attribute writers refuse but the constructor still allows - reported
+      # `new_record?` true and `persisted?` false and then issued a real DELETE
+      # against group 99. The id addresses a record this one does not stand
+      # for, and nothing about it came from Zammad.
+      def raise_if_new!(operation)
+        raise Error, "#{self.class.name} has not been saved, so there is nothing to #{operation}" if new_record?
       end
 
       # Refuses an operation on a record Zammad no longer holds.
@@ -478,6 +576,11 @@ module ZammadAPI
       end
 
       def writable_attributes? = true
+
+      # Asked by {#write_attribute} and by {AttributeAccess#respond_to_missing?},
+      # so that a record never claims a writer it would then refuse. That is
+      # the invariant the writer branch of `respond_to_missing?` exists for.
+      def attribute_writable?(key) = key != :id
 
       # Everything a freshly loaded record has to forget, in the one place that
       # every load path goes through. Held apart, `save!` and `reload` drifted
@@ -498,8 +601,9 @@ module ZammadAPI
       # from {#require_id!} the retried `save` would have taken the "nothing
       # to send" short circuit and reported true, having made no request at
       # all, for a record that may or may not be in Zammad.
-      def replace_attributes!(response, operation:)
+      def replace_attributes!(response, operation:, saved: false)
         @new_record = false
+        @saved      = saved
         @attributes = frozen_attributes(response.decoded(:object, operation: operation, resource_class: self.class))
         @baseline   = @attributes
         reset_pending_state!
@@ -531,6 +635,8 @@ module ZammadAPI
       # no request was ever sent for it, and the record went on reporting a
       # key Zammad had never sent it, so #changes and #attributes disagreed.
       def write_attribute(key, value)
+        refuse_unwritable!(key, value)
+
         staged = frozen_attributes(value)
 
         if @baseline.key?(key) && @baseline[key] == staged
@@ -573,6 +679,26 @@ module ZammadAPI
         )
       end
 
+      # The id is what addresses the record, so it is not an attribute a caller
+      # stages. Written, it took effect immediately for every path that builds
+      # a URL from `@attributes` and not at all for the record those paths then
+      # reported on: `group.id = 99; group.destroy` sent DELETE to group 99 and
+      # left the record saying group 1 was the one destroyed. Zammad would not
+      # have applied it either - an id is not something its endpoints let you
+      # set - so there is no call here that a refusal takes away.
+      def refuse_unwritable!(key, value)
+        return if attribute_writable?(key)
+
+        message = "#{self.class.name}##{key} cannot be staged as an attribute"
+        # `attribute_writable?` is a hook a resource may override, so the
+        # reason belongs to the key that was refused rather than to the raise.
+        if key == :id
+          message += ', because it is what addresses this record; look up the record you meant ' \
+                     "with find(#{value.inspect})"
+        end
+        raise Error, message
+      end
+
       def member_path = self.class.member_path(require_id!)
 
       # This record's id, for the paths and bodies that cannot be built
@@ -590,17 +716,33 @@ module ZammadAPI
         record_id
       end
 
-      # A record has no id in two quite different situations, and one message
-      # for both sent people looking in the wrong place. Before the first save
-      # there is simply nothing to address yet. After one there is - Zammad
-      # answered 2xx, so the record is in Zammad - but the response carried no
-      # id to address it by, which is what {#replace_attributes!} leaves
-      # behind when a 2xx body does not decode as the object it claims to be.
+      # A record has no id in three quite different situations, and one message
+      # for more than one of them sends people looking in the wrong place.
+      #
+      # Before the first save there is simply nothing to address yet.
+      #
+      # After one there is - Zammad answered 2xx, so the record is in Zammad -
+      # but the response carried no id to address it by, which is what
+      # {#replace_attributes!} leaves behind when a 2xx body does not decode
+      # as the object it claims to be.
+      #
+      # And a record can arrive without one from a plain read: Zammad reduces
+      # the object it serializes for a permission-scoped client, which is the
+      # same thing {#write_attribute} is written around. Such a record is
+      # persisted, so it used to be told it "was saved" - pointing the caller
+      # at a save that never happened, when what they need to look at is which
+      # user the client authenticates as.
       def no_id_message
         return "#{self.class.name} has no id, save it first" if new_record?
 
-        "#{self.class.name} was saved, but the response carried no id to address it by, " \
-          'so this record cannot act on the server. Look it up again to get one that can.'
+        if @saved
+          return "#{self.class.name} was saved, but the response carried no id to address it by, " \
+                 'so this record cannot act on the server. Look it up again to get one that can.'
+        end
+
+        "#{self.class.name} was loaded without an id, so this record cannot act on the server. " \
+          'Zammad serves a reduced object where the authenticated user may not see the whole record, ' \
+          'so check what this client may read, then look it up again to get one that can.'
       end
     end
   end

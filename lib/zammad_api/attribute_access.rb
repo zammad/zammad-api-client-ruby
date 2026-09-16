@@ -20,6 +20,16 @@ module ZammadAPI
     # than an attribute, so that typos like +save!+ still raise NoMethodError.
     NON_ATTRIBUTE_SUFFIXES = %w[! ?].freeze
 
+    # What a writer for an attribute is named: a plain identifier and an `=`.
+    #
+    # Ending in `=` is not enough, because Ruby's operators do too. `record[:x]
+    # = 1` reaches `method_missing` as `:[]=` and used to stage an attribute
+    # literally called `[]` whose value was the index - the write was lost, no
+    # error was raised, and the next `save` sent `{"[]": "x"}` to Zammad.
+    # `record <= 5` did the same for an attribute called `<`.
+    ATTRIBUTE_WRITER = /\A[a-zA-Z_]\w*=\z/
+    private_constant :ATTRIBUTE_WRITER
+
     # All known attributes, deeply frozen.
     #
     # Writing through this hash would change what the record reports without
@@ -32,6 +42,22 @@ module ZammadAPI
     # @param key [Symbol, String]
     # @return [Object, nil]
     def [](key) = attributes[key.to_sym]
+
+    # Stages an attribute by name, the writer matching {#[]}.
+    #
+    # Defined rather than left to `method_missing`, which saw `:[]=` as a
+    # writer for an attribute called `[]` and staged the index as its value.
+    # A read-only record refuses this the way it refuses any other write, and
+    # {#respond_to?} says so before it is called.
+    #
+    # @param key [Symbol, String]
+    # @param value [Object]
+    # @return [Object] the staged value
+    # @raise [Error] when the attribute cannot be staged, such as +id+
+    # @raise [NoMethodError] when the record is read-only
+    def []=(key, value)
+      write_attribute(key.to_sym, value)
+    end
 
     # @param key [Symbol, String]
     # @param default [Object] returned instead of raising
@@ -50,7 +76,18 @@ module ZammadAPI
       # Hash#fetch warns for this and then ignores the default, so this does
       # too rather than silently picking one of the two fallbacks a caller
       # cannot have meant to pass together.
-      warn 'warning: block supersedes default value argument' if block_given? && !default.empty?
+      #
+      # `uplevel` so that this reads like the warning it mirrors: Hash#fetch
+      # names the line that made the call, and a bare Kernel#warn named
+      # nothing at all - neither the call site nor the library it came from,
+      # which in an application with several such calls is everything the
+      # reader needs. Kernel#warn writes the `warning: ` prefix itself when
+      # given `uplevel`, so the message must not carry its own.
+      #
+      # Nothing here has to consult $VERBOSE. Kernel#warn is already silent
+      # when warnings are off, so `ruby -W0` and `$VERBOSE = nil` quiet this
+      # the same way they quiet Hash#fetch's own warning.
+      warn('block supersedes default value argument', uplevel: 1) if block_given? && !default.empty?
 
       symbol = key.to_sym
       # An explicit &block argument cannot be resolved against Hash#fetch's
@@ -141,9 +178,22 @@ module ZammadAPI
     def method_missing(name, *args)
       identifier = name.to_s
       return super if NON_ATTRIBUTE_SUFFIXES.any? { identifier.end_with?(it) }
-      return write_attribute(identifier.delete_suffix('=').to_sym, args.first) if identifier.end_with?('=')
+      return write_attribute(identifier.delete_suffix('=').to_sym, args.first) if ATTRIBUTE_WRITER.match?(identifier)
 
       attributes[name]
+    end
+
+    # `[]=` is a defined method, so `respond_to_missing?` never sees it and a
+    # read-only record answered true for the one writer it has while answering
+    # false for every named one - then raised NoMethodError when it was called.
+    # That is the invariant the writer branch below is conditional for: generic
+    # code asks before it writes, and a record that claims a writer it would
+    # refuse leads it straight into the exception it was checking to avoid.
+    # rubocop:disable-next Style/OptionalBooleanParameter -- Ruby's own signature
+    def respond_to?(name, include_private = false)
+      return writable_attributes? if name == :[]=
+
+      super
     end
 
     def respond_to_missing?(name, include_private = false)
@@ -154,7 +204,7 @@ module ZammadAPI
       # asking, and lead generic code - serializers, form binders,
       # assign_attributes loops - straight into the exception it was checking
       # to avoid.
-      return writable_attributes? if identifier.end_with?('=')
+      return writable_attributes? && attribute_writable?(identifier.delete_suffix('=').to_sym) if ATTRIBUTE_WRITER.match?(identifier)
 
       attributes.key?(name) || super
     end
@@ -164,6 +214,12 @@ module ZammadAPI
     # Whether this record stages attribute writes, so that {#respond_to?} and
     # calling a writer agree.
     def writable_attributes? = false
+
+    # Whether one particular attribute may be written. Overridden by records
+    # that refuse one: a record that claimed `id=` and then raised when it was
+    # called would defeat the point of asking, which is the whole reason the
+    # writer branch above is not an unconditional true.
+    def attribute_writable?(_key) = true
 
     # Overridden by writable records; read-only ones fall back to NoMethodError.
     def write_attribute(key, _value)

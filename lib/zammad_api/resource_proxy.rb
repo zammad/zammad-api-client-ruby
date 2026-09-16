@@ -90,18 +90,7 @@ module ZammadAPI
     # @param id [Integer, String]
     # @return [Resources::Base]
     # @raise [NotFoundError] when no such record exists
-    def find(id)
-      response = @transport.get(
-        member_path(id),
-        operation:      'find object',
-        resource_class: resource_class,
-        query:          { expand: true }
-      )
-      resource_class.from_response(
-        @transport,
-        response.decoded(:object, operation: 'find object', resource_class: resource_class)
-      )
-    end
+    def find(id) = resource_class.fetch_one(@transport, id)
 
     # Fetches the first record carrying all of these attribute values.
     #

@@ -476,9 +476,9 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(group.reload).to be(group)
     end
 
-    it 'raises for a record without an id' do
+    it 'raises for a record that was never saved' do
       expect { ZammadAPI::Resources::Group.new(transport).reload }
-        .to raise_error(ZammadAPI::Error, /has no id, save it first/)
+        .to raise_error(ZammadAPI::Error, /has not been saved, so there is nothing to reload/)
     end
 
     it 'raises ParseError when the response is not an object' do
@@ -531,8 +531,20 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(stub).to have_been_requested
     end
 
-    it 'raises for a record without an id' do
-      expect { client.group.new.destroy }.to raise_error(ZammadAPI::Error, /has no id, save it first/)
+    it 'raises for a record that was never saved' do
+      expect { client.group.new.destroy }.to raise_error(ZammadAPI::Error, /has not been saved, so there is nothing to destroy/)
+    end
+
+    # `destroy` asked only whether the record was already destroyed, so one
+    # built with an id it was simply handed - which the attribute writers
+    # refuse but the constructor still allows - issued a real DELETE for a
+    # record it does not stand for.
+    it 'sends nothing for a record built with an id it was never saved with' do
+      stub = stub_request(:delete, "#{url}/99")
+
+      expect { client.group.new(id: 99, name: 'X').destroy }
+        .to raise_error(ZammadAPI::Error, /has not been saved/)
+      expect(stub).not_to have_been_requested
     end
 
     context 'when the record is gone' do
@@ -581,6 +593,8 @@ RSpec.describe ZammadAPI::Resources::Base do
     end
 
     context 'with state staged before it was destroyed' do
+      subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Users') }
+
       before do
         stub_request(:delete, "#{url}/1").to_return(status: 200, body: '')
         group.name = 'Support'
@@ -593,11 +607,23 @@ RSpec.describe ZammadAPI::Resources::Base do
         expect(group.changes).to be_empty
       end
 
+      # Readable as Zammad last served them. The staged write above was never
+      # sent, and dropping the change set without it left the record reporting
+      # "Support" while `changed?` was false and `changes` was empty - so
+      # nothing was left to tell a local edit apart from a value the server
+      # gave, in the one state where it can never be saved.
       it 'keeps the attributes readable, so a destroyed record can still be reported on' do
         group.destroy
 
         expect(group.id).to eq(1)
-        expect(group.name).to eq('Support')
+        expect(group.name).to eq('Users')
+      end
+
+      it 'does not report a write Zammad never saw' do
+        group.destroy
+
+        expect(group.attributes).to eq({ id: 1, name: 'Users' })
+        expect(group.inspect).not_to include('Support')
       end
 
       it 'refuses the association readers, which would request a record that is gone' do
@@ -792,6 +818,198 @@ RSpec.describe ZammadAPI::Resources::Base do
 
     it 'reads a declaration of no query keys' do
       expect(Class.new(described_class) { index_query_keys }.filterable_keys).to eq([])
+    end
+  end
+
+  # The id is what addresses the record. Staged, it took effect for every path
+  # that builds a path from the attributes and not at all for the record those
+  # paths then reported on: `group.id = 99; group.destroy` sent DELETE to group
+  # 99 and left the record saying group 1 was the one destroyed.
+  # The parent is resolved before MEMO_LOCK is taken, because resolving it may
+  # build the parent's own proxy through this same method and a Mutex is not
+  # reentrant. Folded back inside the lock this raises
+  # `ThreadError: deadlock; recursive locking`, and a caller subclassing a
+  # resource is the case that lock exists to cover in the first place.
+  describe 'the association proxy of a subclass whose parent has none yet' do
+    it 'builds without deadlocking on the memo lock' do
+      leaf = Class.new(Class.new(ZammadAPI::Resources::Group))
+
+      expect(leaf.related_class).to be_a(Class)
+    end
+  end
+
+  # `record[:x] = v` reached method_missing as `:[]=`, which the writer branch
+  # took for an attribute called `[]`: it staged the index as the value, lost
+  # the write, and sent `{"[]": "x"}` on the next save.
+  describe '#[]=' do
+    subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Users') }
+
+    it 'stages the attribute it names' do
+      group[:note] = 'x'
+
+      expect(group.changes).to eq({ note: [nil, 'x'] })
+    end
+
+    it 'reads back through the matching reader' do
+      group[:note] = 'x'
+
+      expect(group[:note]).to eq('x')
+    end
+
+    it 'takes a string key the way the reader does' do
+      group['note'] = 'x'
+
+      expect(group[:note]).to eq('x')
+    end
+
+    it 'refuses what the named writer refuses' do
+      expect { group[:id] = 9 }.to raise_error(ZammadAPI::Error, /cannot be staged as an attribute/)
+    end
+
+    it 'invents no attribute from the operator itself' do
+      group[:note] = 'x'
+
+      expect(group.attributes.keys).not_to include(:[])
+    end
+
+    it 'is claimed by a record that stages writes' do
+      expect(group).to respond_to(:[]=)
+    end
+
+    # The production case for recognising a writer by name rather than by a
+    # trailing `=`: on a record that stages writes, an operator reached the
+    # writer branch and invented an attribute from its stem.
+    it 'invents no attribute from a comparison operator' do
+      group.public_send(:<=, 5)
+
+      expect(group.attributes.keys).not_to include(:<)
+    end
+
+    it 'stages nothing for a comparison operator' do
+      group.public_send(:<=, 5)
+
+      expect(group).not_to be_changed
+    end
+  end
+
+  describe 'writing the id' do
+    subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Users') }
+
+    it 'is refused' do
+      expect { group.id = 99 }.to raise_error(ZammadAPI::Error, /is what addresses this record/)
+    end
+
+    it 'points at the lookup that was meant' do
+      expect { group.id = 99 }.to raise_error(ZammadAPI::Error, /look up the record you meant with find\(99\)/)
+    end
+
+    it 'is refused through assign_attributes too' do
+      expect { group.assign_attributes(id: 99) }.to raise_error(ZammadAPI::Error, /is what addresses this record/)
+    end
+
+    # The message exists to name the id the caller passed, and the pre-check
+    # that runs for these two paths dropped it - so a serializer or a form
+    # binder, which reach the writer this way, were told to call find(nil).
+    it 'names the id that was passed through assign_attributes' do
+      expect { group.assign_attributes(id: 99) }.to raise_error(ZammadAPI::Error, /find\(99\)/)
+    end
+
+    it 'names the id that was passed through update' do
+      expect { group.update(id: 99) }.to raise_error(ZammadAPI::Error, /find\(99\)/)
+    end
+
+    it 'names the attribute it refused' do
+      expect { group.id = 99 }.to raise_error(ZammadAPI::Error, /Group#id cannot be staged/)
+    end
+
+    # Checked before anything is written, not on the way past: refusing
+    # mid-loop staged the keys that came first and left the record dirty with
+    # half a change set, which is the state `update` takes its own guard one
+    # line early to avoid.
+    it 'stages nothing at all when one key in the hash is refused' do
+      expect { group.assign_attributes(name: 'X', id: 99, note: 'Y') }.to raise_error(ZammadAPI::Error)
+
+      expect(group).not_to be_changed
+      expect(group.changes).to be_empty
+    end
+
+    it 'leaves the attributes it had already reached alone' do
+      expect { group.assign_attributes(name: 'X', id: 99, note: 'Y') }.to raise_error(ZammadAPI::Error)
+
+      expect(group.name).to eq('Users')
+    end
+
+    it 'stages nothing through update either' do
+      expect { group.update(name: 'X', id: 99) }.to raise_error(ZammadAPI::Error)
+
+      expect(group).not_to be_changed
+    end
+
+    # A record that claimed a writer and then raised when it was called would
+    # defeat the point of asking, and lead a serializer or form binder straight
+    # into the exception it was checking to avoid.
+    it 'does not claim a writer it would refuse' do
+      expect(group).not_to respond_to(:id=)
+    end
+
+    it 'still claims the writers it honours' do
+      expect(group).to respond_to(:name=)
+    end
+
+    it 'leaves the record addressing what it did before' do
+      expect { group.id = 99 }.to raise_error(ZammadAPI::Error)
+
+      expect(group.id).to eq(1)
+      expect(group).not_to be_changed
+    end
+
+    it 'still lets a new record be built carrying one' do
+      expect(client.group.new(id: 5).id).to eq(5)
+    end
+  end
+
+  # The third way a record ends up persisted without an id, and the one that
+  # has nothing to do with a save: Zammad serves a reduced object where the
+  # authenticated user may not see the whole record, which is the same thing
+  # #write_attribute is written around. Such a record used to be told it "was
+  # saved, but the response carried no id" - sending the caller to look at a
+  # save that never happened, when what they need is which user the client
+  # authenticates as.
+  describe 'a record Zammad served without an id' do
+    subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, name: 'Users') }
+
+    it 'refuses a reload it cannot address' do
+      expect { group.reload }.to raise_error(ZammadAPI::Error, /was loaded without an id/)
+    end
+
+    it 'points at what this client may read' do
+      expect { group.destroy }.to raise_error(ZammadAPI::Error, /check what this client may read/)
+    end
+
+    it 'does not claim a save that never happened' do
+      expect { group.reload }.to raise_error(ZammadAPI::Error) { |error| expect(error.message).not_to include('was saved') }
+    end
+
+    it 'does not tell the caller to save a record Zammad already holds' do
+      expect { group.destroy }.to raise_error(ZammadAPI::Error) { |error| expect(error.message).not_to include('save it first') }
+    end
+
+    it 'refuses a save it cannot address' do
+      group.name = 'Support'
+
+      expect { group.save! }.to raise_error(ZammadAPI::Error, /was loaded without an id/)
+    end
+
+    it 'still says the record was saved where a save is what left it this way' do
+      stub_request(:post, url).with(query: hash_including({})).to_return(status: 201, body: '<html>proxy</html>')
+      new_group = client.group.new(name: 'Support')
+      begin
+        new_group.save
+      rescue ZammadAPI::ParseError
+        nil
+      end
+
+      expect { new_group.reload }.to raise_error(ZammadAPI::Error, /was saved, but the response carried no id/)
     end
   end
 

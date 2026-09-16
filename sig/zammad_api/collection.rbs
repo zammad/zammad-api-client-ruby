@@ -3,7 +3,6 @@ module ZammadAPI
     include Enumerable[untyped]
 
     DEFAULT_PER_PAGE: Integer
-    TOTAL_COUNT_HEADER: String
     RESERVED_QUERY_KEYS: Array[Symbol]
 
     @transport: Transport
@@ -54,9 +53,10 @@ module ZammadAPI
     def page_size!: (untyped, String) -> Integer
     def walk: () { (Array[untyped]) -> void } -> void
     def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped]) -> Collection
-    def fetch: (Integer, Integer) -> [ Array[untyped], Response ]
+    def normalized_filters: (Hash[untyped, untyped] params, ?String? prefix) -> Hash[Symbol, untyped]
+    def nested_filters: (Symbol name, untyped value, String? prefix) -> untyped
+    def fetch: (Integer, Integer) -> [ Array[untyped], Response, Integer ]
     def reached_total?: (Integer, Integer?, Integer, Integer) -> bool
-    def reported_total: (Response) -> Integer?
     def total_count: () -> Integer?
     def clamp_per_page: (untyped) -> Integer
   end

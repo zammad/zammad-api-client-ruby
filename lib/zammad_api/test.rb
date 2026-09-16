@@ -121,9 +121,15 @@ module ZammadAPI
     # @param path [String] path relative to the instance URL, leading slash
     #   optional
     # @param status [Integer] HTTP status to answer with
-    # @param body [Hash, Array, String, nil] a Hash or Array is served as
-    #   JSON, anything else as a raw body
-    # @param headers [Hash] response headers
+    # @param body [Hash, Array, String, nil] a Hash or Array is serialized to
+    #   JSON bytes, anything else is served as it is. Whether those bytes are
+    #   then decoded is decided by the content-type, the way a real response
+    #   decides it - so a Hash served as +text/html+ comes back undecoded, and
+    #   a JSON String served as +application/json+ comes back decoded.
+    # @param headers [Hash] response headers. Names and values are stringified
+    #   and names downcased, the way a {Response} carries them. A Hash or Array
+    #   body is given +content-type: application/json+ unless this says
+    #   otherwise.
     # @param query [Hash, nil] only answer requests carrying these parameters
     # @return [self]
     def stub(method, path, status: 200, body: nil, headers: {}, query: nil)
@@ -137,11 +143,23 @@ module ZammadAPI
       # joining it.
       scope = nil if scope.nil? || scope.empty?
 
+      # Refused here rather than stringified into something the wire could not
+      # carry, and for the same reason the query above is: the error names the
+      # line that wrote the stub. A nil `Content-Type` became `''`, which then
+      # beat the JSON default this method supplies and served a Hash body
+      # undecoded, so the test failed inside the code under test with nothing
+      # to say the stub was at fault.
+      headers.each do |name, value|
+        next if value.is_a?(String) || value.is_a?(Symbol) || value.is_a?(Numeric)
+
+        raise ArgumentError, "header #{name} was stubbed as #{value.inspect}, and a response header is always text: pass a String"
+      end
+
       @monitor.synchronize do
         (@stubs[key(method, path)] ||= []) << {
           status:  status,
           body:    body,
-          headers: headers.to_h { |name, value| [name.to_s.downcase, value] },
+          headers: response_headers(headers, body),
           query:   scope
         }
       end
@@ -208,6 +226,39 @@ module ZammadAPI
     private
 
     def key(method, path) = [method.to_sym, ::ZammadAPI::Transport.relative_path(path)]
+
+    # The headers a stub answers with, downcased the way a {Response} carries
+    # them.
+    #
+    # A Hash or Array body is served as JSON, so it gets the content-type a
+    # real one would. {Transport#decode} always hands over a response whose
+    # headers name the type - it is what the decode branches on - while this
+    # set `json: true` directly and left the headers as written, so every
+    # stubbed response differed from the wire in a header a test can read.
+    # Code that branches on `response.headers['content-type']` passed against
+    # Zammad and failed against the stand-in, or the reverse, which is the
+    # divergence this kit exists to keep out.
+    #
+    # A caller's own content-type wins, so a test can still say the endpoint
+    # answered with something else.
+    def response_headers(headers, body)
+      # Values stringified as well as names. Only the name was normalised, so
+      # `headers: { 'X-Total-Count' => 7 }` reached the code under test as an
+      # Integer where the wire always carries "7": an assertion written the
+      # natural way passed against Zammad and failed here, or the reverse, and
+      # the one reader inside this gem had to tolerate both types to cope.
+      # Downcasing is what creates the collision, so it is refused here rather
+      # than merged: `{'Content-Type' => 'text/html', 'content-type' =>
+      # 'application/json'}` kept whichever Hash order put last and dropped the
+      # other without a word - the same silent drop DuplicateKeys refuses for a
+      # query parameter, and here it decided whether the body was decoded.
+      normalized = DuplicateKeys
+        .normalize(headers, noun: 'header') { it.to_s.downcase }
+        .transform_values(&:to_s)
+      return normalized if !body.is_a?(Hash) && !body.is_a?(Array)
+
+      { 'content-type' => 'application/json' }.merge(normalized)
+    end
 
     # A copy of the payload, frozen, for the record of what was sent.
     #
@@ -304,24 +355,48 @@ module ZammadAPI
     # So a stub that does not name a page answers one, and a request for any
     # page after it gets an empty one. A stub that does name a page is left
     # exactly as written - that is how a test says what the second page holds.
-    def paged_body(stub, params)
-      body = stub[:body]
+    def paged_body(stub, params, body)
       return body if !body.is_a?(Array) || stub[:query]&.key?('page')
       return body if [nil, '1'].include?(params['page'])
 
       []
     end
 
+    # Decoded by {Response.decode_body}, the rule {Transport#decode} reads, so
+    # that a stub answers the way the wire does.
+    #
+    # `json:` used to be set from the Ruby type of the stub's body, which made
+    # the content-type beside it decorative: a stub could say `text/html` and
+    # still hand back a decoded Hash with `json?` true, where Zammad gives the
+    # raw string and `decoded(:object)` raises ParseError. A test asserting
+    # that path passed here and failed in production, which is the divergence
+    # this kit exists to rule out.
+    # Paged after decoding, not before. Paging read the stub's body as written,
+    # which was the same thing only while a list could arrive as an Array - and
+    # once the content-type decided decoding, a list stubbed as a JSON string
+    # decoded to one and was never paged, so it answered every page with the
+    # same records and every full read of that collection raised
+    # PaginationError. Against Zammad the same code works, because page two
+    # comes back empty.
     def response_for(stub, params)
-      case paged_body(stub, params)
-      in Hash | Array => structured
-        raw = JSON.generate(structured)
-        build_response(stub, JSON.parse(raw, symbolize_names: true), raw, json: true)
-      in nil
-        build_response(stub, '', '', json: false)
-      in other
-        raw = other.to_s
-        build_response(stub, raw, raw, json: false)
+      raw        = raw_body_for(stub[:body])
+      body, json = Response.decode_body(stub[:headers]['content-type'], raw)
+      paged      = paged_body(stub, params, body)
+      # Re-serialized only where paging replaced the body, so `raw_body` stays
+      # the bytes the stub was written with for every other response.
+      return build_response(stub, body, raw, json: json) if paged.equal?(body)
+
+      build_response(stub, paged, JSON.generate(paged), json: json)
+    end
+
+    # The bytes a stub's body would have arrived as. A Hash or Array is what a
+    # test writes when it means JSON, so that is what it is serialized to;
+    # anything else is already the body.
+    def raw_body_for(body)
+      case body
+      when Hash, Array then JSON.generate(body)
+      when nil         then ''
+      else                  body.to_s
       end
     end
 
@@ -345,6 +420,8 @@ module ZammadAPI
     #
     # @api private
     class Transport
+      include ::ZammadAPI::Transport::Verbs
+
       attr_reader :test, :on_behalf_of
 
       def initialize(test, on_behalf_of: nil)
@@ -362,12 +439,6 @@ module ZammadAPI
       # no connection to rebuild, and the derived client reports the derived
       # config itself, so the stand-in keeps answering.
       def with_config(_config) = self
-
-      %i[get post put delete].each do |verb|
-        define_method(verb) do |path, **options|
-          request(verb, path, **options) # steep:ignore NoMethod
-        end
-      end
 
       def request(method, path, operation:, query: nil, body: nil, resource_class: nil)
         test.answer(

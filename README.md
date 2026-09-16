@@ -148,6 +148,12 @@ requests as the client finished building them and responses before anything else
 Faraday stays an implementation detail either way: an unregistered adapter raises
 `ZammadAPI::ConfigurationError`, not a Faraday error.
 
+Middleware that decodes the response body — `connection.response :json` — is the one thing
+the seam will not take, and says so with a `ZammadAPI::ConfigurationError`. This gem parses
+JSON itself, and hands the undecoded bytes back as the file from
+`attachment.download`, so a stack that has already consumed the body leaves nothing
+faithful to return.
+
 ## Available resources
 
 `group`, `organization`, `ticket`, `ticket_article`, `ticket_priority`, `ticket_state`, `user`
@@ -177,7 +183,9 @@ Each returns a `ZammadAPI::Response`, so the status and headers stay reachable:
 response = client.get('api/v1/tickets')
 response.status              # => 200
 response.headers['x-total-count']
+response.reported_total      # => 42, or nil when the endpoint reported none
 response.body                # decoded JSON, or the raw body for anything else
+response.json?               # => whether the body was decoded
 ```
 
 Paths are relative to the instance URL, and a leading slash is ignored, so they can be
@@ -725,6 +733,15 @@ raises `NotFoundError`, and one with `status: 422` makes `save` return `false`.
 | `requests` | Every request made, oldest first, as `verb` / `path` / `query` / `body` / `on_behalf_of`. |
 | `reset` | Forgets the stubs and the recorded requests. |
 
+A `Hash` or `Array` body is served as JSON and gets `content-type: application/json`
+unless `headers:` says otherwise — and it is that header, not the Ruby type, that decides
+whether the body comes back decoded, exactly as it does on the wire. So a `Hash` stubbed
+as `text/html` comes back as the raw string and reading a record from it raises
+`ParseError`, which is what Zammad would do. Header names and values are stringified and
+names downcased, the way a real `Response` carries them; a value that is not text, or two
+spellings of one header name, are refused where the stub is written rather than turned
+into something the wire could not send.
+
 A request that was not stubbed raises `ZammadAPI::Test::UnstubbedRequestError`, listing
 what is stubbed, rather than answering with something empty. It is deliberately not a
 `ZammadAPI::Error`: a forgotten stub means the test is wrong, not that Zammad refused
@@ -881,6 +898,7 @@ at the call site. Start with the handful of changes that do not.
 | `record.save` raised on a rejection | `save` → `false` with `record.error`; `save!` raises  | Branching on a rejected attribute needed a begin/rescue              |
 | `record.attributes[:x] = 1`         | `record.x = 1`, or `record.to_h` for a copy          | Writing through the reader staged no change, so `save` never sent it  |
 | `record.attributes = {...}`         | `record.assign_attributes(...)` / `record.update(...)` | The writer is gone, and the name now stages an attribute of its own |
+| `record.id = 5`                     | `client.x.find(5)`                                   | The id addresses the record, so a staged one deleted or updated a different record than it reported |
 | `record.new_instance`               | `record.new_record?` / `record.persisted?`           | Internal flag is no longer public                                    |
 | `resource.url` (instance)           | `Resource.resource_path` (class)                     | Clashed with an attribute named `url`                                |
 | `client.user.find(ticket.customer_id)` | `ticket.related.customer`                         | Following a foreign key needed the client threaded through           |

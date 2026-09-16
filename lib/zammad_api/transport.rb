@@ -4,7 +4,10 @@ require 'faraday'
 require 'faraday/retry'
 require 'json'
 require 'openssl'
+require 'socket'
+require 'timeout'
 
+require_relative 'duplicate_keys'
 require_relative 'errors'
 require_relative 'response'
 
@@ -17,6 +20,32 @@ module ZammadAPI
   #
   # @api private
   class Transport
+    # The verb shorthands, defined once for the two transports that answer
+    # them.
+    #
+    # {Test::Transport} stands in for this class precisely so that the code
+    # under test cannot tell them apart, and it carried its own copy of this
+    # loop - so a fifth verb added here would have left the stand-in unable to
+    # answer one the real transport had. The same argument as
+    # {Transport.relative_path} and {Resources::Base.member_path}: a rule kept
+    # in two places is one that gets changed in one of them.
+    #
+    # @api private
+    module Verbs
+      # @!method get(path, operation:, query: nil, resource_class: nil)
+      # @!method post(path, operation:, query: nil, body: nil, resource_class: nil)
+      # @!method put(path, operation:, query: nil, body: nil, resource_class: nil)
+      # @!method delete(path, operation:, query: nil, resource_class: nil)
+      # @return [Response]
+      %i[get post put delete].each do |verb|
+        define_method(verb) do |path, **options|
+          request(verb, path, **options) # steep:ignore NoMethod
+        end
+      end
+    end
+
+    include Verbs
+
     # HTTP methods that Zammad handles idempotently and that are therefore
     # safe to retry. POST is excluded on purpose - retrying it could create
     # duplicate tickets or users.
@@ -28,6 +57,13 @@ module ZammadAPI
     # Socket failures that mean the request ran out of time. Most adapters
     # wrap these into a Faraday error, but not all do, and this gem lets a
     # caller choose the adapter.
+    #
+    # `timeout` and `socket` are required above for this list and the next
+    # one. Both constants used to resolve only because `require 'faraday'`
+    # reaches net/http, which loads them - so the day Faraday stops eagerly
+    # loading its default adapter, or a caller picks a slimmer one, this class
+    # body raises NameError and `require 'zammad_api'` fails before a single
+    # request. The Steepfile has declared both libraries all along.
     TIMEOUT_ERRORS = [Errno::ETIMEDOUT, Timeout::Error].freeze
 
     # Socket failures that mean the instance could not be reached. Listed
@@ -123,14 +159,42 @@ module ZammadAPI
     # whose recorded values disagree with the wire makes green tests mean less
     # than they appear to.
     #
+    # Two spellings of one parameter are refused rather than merged. Keys are
+    # stringified here, so `{state_id: 1, 'state_id' => 2}` used to collapse
+    # into one parameter and send whichever Hash insertion order put last,
+    # dropping the other value without a word - the same silent-wrong-result
+    # shape as the dropped nil above, and the reason {Collection#where}
+    # normalises its keys before they ever reach here.
+    #
     # @api private
     # @param query [Hash]
     # @return [Hash{String => String, Array<String>, Hash}]
-    # @raise [ArgumentError] for a nil value, at any depth
-    def self.stringify_query(query)
-      query.each_with_object({}) do |(key, value), result|
-        result[key.to_s] = stringify_query_value(key.to_s, value)
-      end
+    # @raise [ArgumentError] for a nil value, or for two keys that name the
+    #   same parameter, either of them at any depth
+    def self.stringify_query(query) = stringify_query_hash(query, nil)
+
+    # Stringifies one level of a query, at whatever depth it sits.
+    #
+    # The duplicate check lives here rather than at the top level alone,
+    # because `condition` - which the search endpoints read, and which
+    # {ResourceProxy::SEARCH_QUERY_KEYS} lists so that {Collection#where}
+    # accepts it - is a Hash, and two spellings inside it collapsed exactly
+    # the way two spellings at the top level did. The nil check below has been
+    # at every depth all along; this is the same kind of rule.
+    #
+    # The key each name was first seen as is kept, so the message can print
+    # both spellings. Naming only the second left the reader to guess the
+    # first, which in a query assembled across several merges is the whole of
+    # the debugging.
+    #
+    # @api private
+    # @param hash [Hash]
+    # @param prefix [String, nil] the parameter path this Hash sits at
+    # @return [Hash{String => String, Array, Hash}]
+    def self.stringify_query_hash(hash, prefix)
+      DuplicateKeys
+        .normalize(hash, prefix: prefix, &:to_s)
+        .to_h { |name, value| [name, stringify_query_value(prefix ? "#{prefix}[#{name}]" : name, value)] }
     end
 
     # Stringifies the scalars and leaves the structure to Faraday.
@@ -152,7 +216,7 @@ module ZammadAPI
     def self.stringify_query_value(key, value)
       case value
       when nil   then raise ArgumentError, "query parameter #{key} is nil, and Zammad has no way to read that: pass a value, or leave the parameter out"
-      when Hash  then value.to_h { |nested, inner| [nested.to_s, stringify_query_value("#{key}[#{nested}]", inner)] }
+      when Hash  then stringify_query_hash(value, key)
       when Array then value.each_with_index.map { |inner, index| stringify_query_value("#{key}[#{index}]", inner) }
       else value.to_s
       end
@@ -247,17 +311,6 @@ module ZammadAPI
     # @return [Transport]
     def with_config(config) = self.class.new(config).with_on_behalf_of(on_behalf_of)
 
-    # @!method get(path, operation:, query: nil, resource_class: nil)
-    # @!method post(path, operation:, query: nil, body: nil, resource_class: nil)
-    # @!method put(path, operation:, query: nil, body: nil, resource_class: nil)
-    # @!method delete(path, operation:, query: nil, resource_class: nil)
-    # @return [Response]
-    %i[get post put delete].each do |verb|
-      define_method(verb) do |path, **options|
-        request(verb, path, **options) # steep:ignore NoMethod
-      end
-    end
-
     # Performs a request and raises on anything but a 2xx response.
     #
     # @param method [Symbol] +:get+, +:post+, +:put+ or +:delete+
@@ -308,7 +361,7 @@ module ZammadAPI
     end
 
     def build_connection
-      Faraday.new(
+      connection = Faraday.new(
         url:     config.url,
         proxy:   config.proxy,
         ssl:     { verify: config.ssl_verify },
@@ -323,6 +376,9 @@ module ZammadAPI
         config.middleware&.call(faraday)
         faraday.adapter(config.adapter || Faraday.default_adapter)
       end
+
+      refuse_decoding_middleware!(connection)
+      connection
     rescue ZammadAPI::Error
       raise
     rescue => e
@@ -402,8 +458,8 @@ module ZammadAPI
 
     def decode(faraday_response)
       headers    = faraday_response.headers.to_h.transform_keys { it.to_s.downcase }.freeze
-      raw_body   = faraday_response.body.to_s
-      body, json = decode_body(headers['content-type'], raw_body)
+      raw_body   = raw_body!(faraday_response.body)
+      body, json = Response.decode_body(headers['content-type'], raw_body)
 
       Response.new(
         status:   faraday_response.status,
@@ -414,19 +470,62 @@ module ZammadAPI
       )
     end
 
-    # Only JSON responses are decoded. Anything else - a proxy error page, a
-    # file download - is handed back untouched so that callers and error
-    # messages can still work with it.
-    #
-    # Returns whether it decoded alongside the body, because this is the only
-    # place that knows.
-    def decode_body(content_type, raw_body)
-      return [raw_body, false] if !content_type.to_s.include?('json')
-      return [raw_body, false] if raw_body.empty?
+    # Middleware that reads the body before this gem can. Matched by name so
+    # that naming one does not require it to be loaded.
+    DECODING_MIDDLEWARE = %w[Faraday::Response::Json].freeze
+    private_constant :DECODING_MIDDLEWARE
 
-      [JSON.parse(raw_body, symbolize_names: true), true]
-    rescue JSON::ParserError
-      [raw_body, false]
+    # Refuses a stack that would decode the response body, while the stack is
+    # still the only thing that has happened.
+    #
+    # `raw_body!` below catches the same mistake, but only once a response is
+    # in hand - which is one request too late: `client.group.create(...)` sent
+    # the POST, Zammad created the group, and only then did a
+    # ConfigurationError come back, so a caller retrying what looked like a
+    # configuration failure created a second one. The middleware is fully
+    # visible here, where the unregistered adapter and the unusable proxy are
+    # already refused before anything is sent.
+    def refuse_decoding_middleware!(connection)
+      offender = connection.builder.handlers.find { DECODING_MIDDLEWARE.include?(it.klass.name) }
+      return if offender.nil?
+
+      raise ConfigurationError,
+            "the configured middleware includes #{offender.klass.name}, which decodes the response body before " \
+            'this gem can. This gem parses JSON itself, and hands the undecoded bytes to attachment downloads, ' \
+            'so it needs the body as it arrives: drop `c.response :json` from the `middleware:` callable.'
+    end
+
+    # The body as it came off the wire.
+    #
+    # `middleware:` is a documented seam and `c.response :json` is a
+    # reasonable thing to put through it, at which point Faraday hands over a
+    # Hash rather than the bytes. `to_s` turned that into a Ruby inspect
+    # string, which JSON.parse then refused, so every record built from the
+    # response died in {Response#decoded} with a ParseError naming Zammad for
+    # what the caller's own stack had done.
+    #
+    # A backstop rather than the first line of defence: the stack is checked
+    # when it is built, which catches `c.response :json` before a request goes
+    # out. This is what is left for a middleware that decodes without being one
+    # of the names that check knows.
+    #
+    # Said plainly instead. Re-encoding the parsed structure was the other
+    # way out, and it is worse than it looks: {Response#raw_body} is
+    # documented as the undecoded body and
+    # {Resources::TicketArticleAttachment#download} hands exactly those bytes
+    # back as the file, so a re-encoding silently returns something that is
+    # not what Zammad stored - and JSON.generate has its own failures, which
+    # would escape from here past the `rescue ZammadAPI::Error` every caller
+    # is told to write. Once the bytes are gone they cannot be recovered, so
+    # the honest answer is to name the cause while it is still visible.
+    def raw_body!(body)
+      return body.to_s if body.nil? || body.is_a?(String)
+
+      raise ConfigurationError,
+            'the configured middleware decoded the response body before this gem could ' \
+            "(Faraday handed over #{body.class} rather than the raw body). This gem parses JSON itself, " \
+            'and hands the undecoded bytes to attachment downloads, so it needs the body as it arrived: ' \
+            'drop the parsing middleware - `c.response :json` is the usual one - from the `middleware:` callable.'
     end
 
     def log_request(method, path, query, body)

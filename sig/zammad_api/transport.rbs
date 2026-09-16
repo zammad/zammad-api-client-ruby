@@ -3,6 +3,16 @@ module ZammadAPI
   # these signatures ship with the gem and the Faraday declarations they would
   # need live in sig/vendor, which does not. See sig/zammad_api/config.rbs.
   class Transport
+    # Included by Transport and by Test::Transport, which stands in for it.
+    module Verbs
+      def get: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
+      def post: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
+      def put: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
+      def delete: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
+    end
+
+    include Verbs
+
     RETRIABLE_METHODS: Array[Symbol]
     RETRIABLE_STATUSES: Array[Integer]
     RETRIABLE_EXCEPTIONS: Array[untyped]
@@ -12,6 +22,8 @@ module ZammadAPI
     # OpenSSL::SSL::SSLError here would make the published signatures need
     # openssl declarations that a consumer has not loaded.
     SSL_ERRORS: Array[untyped]
+    # private_constant in the source; RBS has no way to say so.
+    DECODING_MIDDLEWARE: Array[String]
     SENSITIVE_KEY_PATTERN: Regexp
     REDACTED: String
     UNRESERVED_IN_PATH: Regexp
@@ -23,6 +35,7 @@ module ZammadAPI
     @connection: untyped
 
     def self.stringify_query: (Hash[untyped, untyped]) -> Hash[String, untyped]
+    def self.stringify_query_hash: (Hash[untyped, untyped], String?) -> Hash[String, untyped]
     def self.stringify_query_value: (String, untyped) -> untyped
     def self.escape_path_segment: (untyped) -> String
     def self.relative_path: (untyped) -> String
@@ -31,21 +44,17 @@ module ZammadAPI
     def with_on_behalf_of: ((String | Integer)? identifier) -> Transport
     def with_config: (Config) -> Transport
 
-    def get: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
-    def post: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
-    def put: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
-    def delete: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
-
     def request: (Symbol method, String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
 
     private
 
     def perform: (Symbol, String, Hash[Symbol, untyped]?, untyped) -> untyped
     def build_connection: () -> untyped
+    def refuse_decoding_middleware!: (untyped connection) -> void
     def apply_authentication: (untyped) -> void
     def retry_options: () -> Hash[Symbol, untyped]
     def decode: (untyped) -> Response
-    def decode_body: (String?, String) -> [untyped, bool]
+    def raw_body!: (untyped) -> String
     def log_request: (Symbol, String, Hash[Symbol, untyped]?, untyped) -> void
     def log_response: (Symbol, String, Response, Float) -> void
     def redact: (untyped) -> untyped

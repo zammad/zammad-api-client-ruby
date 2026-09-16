@@ -99,7 +99,39 @@ RSpec.describe ZammadAPI::Transport do
 
     it 'names the path to a nil buried in a nested value' do
       expect { described_class.stringify_query(condition: { state: { value: nil } }) }
-        .to raise_error(ArgumentError, /query parameter condition\[state\]\[value\] is nil/)
+        .to raise_error(ArgumentError, /parameter condition\[state\]\[value\] is nil/)
+    end
+
+    it 'refuses two spellings of one parameter rather than sending whichever came last' do
+      expect { described_class.stringify_query(state_id: 1, 'state_id' => 2) }
+        .to raise_error(ArgumentError, /parameter state_id was given twice/)
+    end
+
+    it 'refuses the collision whichever order it arrives in' do
+      expect { described_class.stringify_query('state_id' => 2, state_id: 1) }
+        .to raise_error(ArgumentError, /parameter state_id was given twice/)
+    end
+
+    it 'names both spellings, so the caller does not have to guess the other' do
+      expect { described_class.stringify_query(state_id: 1, 'state_id' => 2) }
+        .to raise_error(ArgumentError, /as :state_id and as "state_id"/)
+    end
+
+    # `condition` is a Hash the search endpoints read, and two spellings inside
+    # it collapsed exactly the way two at the top level did.
+    it 'refuses a collision nested inside a structured parameter' do
+      expect { described_class.stringify_query(condition: { 'state_id' => 1, state_id: 2 }) }
+        .to raise_error(ArgumentError, /parameter condition\[state_id\] was given twice/)
+    end
+
+    it 'still sends a structured parameter whose keys only look alike' do
+      expect(described_class.stringify_query(condition: { 'ticket.state_id' => { operator: 'is' } }))
+        .to eq({ 'condition' => { 'ticket.state_id' => { 'operator' => 'is' } } })
+    end
+
+    it 'still accepts two parameters that only look alike' do
+      expect(described_class.stringify_query(state_id: 1, state_ids: [2]))
+        .to eq({ 'state_id' => '1', 'state_ids' => ['2'] })
     end
 
     it 'names the index of a nil inside an array' do
@@ -404,6 +436,85 @@ RSpec.describe ZammadAPI::Transport do
       transport.get('api/v1/groups', operation: 'test')
 
       expect(seen).to eq(200)
+    end
+
+    # `c.response :json` is a reasonable thing to put through a documented
+    # seam, and Faraday then hands over a Hash rather than the bytes. `to_s`
+    # turned that into a Ruby inspect string, which JSON.parse refused, so
+    # every record built from the response died in Response#decoded with a
+    # ParseError naming Zammad for what the caller's own stack had done.
+    #
+    # Re-encoding the parsed structure was the other way out, and it is worse:
+    # `raw_body` is what an attachment download hands back as the file, so a
+    # re-encoding returns something Zammad never stored. The bytes are gone
+    # either way, so this names the cause while it is still visible.
+    context 'with middleware that decodes the body first' do
+      it 'refuses it when the stack is built, before anything is sent' do
+        expect { unit_transport(middleware: ->(builder) { builder.response(:json) }) }
+          .to raise_error(ZammadAPI::ConfigurationError, /decodes the response body before this gem can/)
+      end
+
+      it 'names the middleware it found' do
+        expect { unit_transport(middleware: ->(builder) { builder.response(:json) }) }
+          .to raise_error(ZammadAPI::ConfigurationError, /Faraday::Response::Json/)
+      end
+
+      it 'says which middleware to drop' do
+        expect { unit_transport(middleware: ->(builder) { builder.response(:json) }) }
+          .to raise_error(ZammadAPI::ConfigurationError, /c\.response :json/)
+      end
+
+      it 'is catchable as the gem error every caller rescues' do
+        expect { unit_transport(middleware: ->(builder) { builder.response(:json) }) }.to raise_error(ZammadAPI::Error)
+      end
+
+      # The check used to live in `decode`, which is one request too late: the
+      # POST went out, Zammad created the record, and only then did a
+      # "configuration" error come back - so a caller retrying it made a second.
+      it 'sends nothing before refusing' do
+        stub = stub_request(:post, url).with(query: hash_including({}))
+
+        expect { unit_client(middleware: ->(builder) { builder.response(:json) }).group.create(name: 'X') }
+          .to raise_error(ZammadAPI::ConfigurationError)
+        expect(stub).not_to have_been_requested
+      end
+    end
+
+    # The build-time check knows `Faraday::Response::Json` by name; anything
+    # else that consumes the body is caught only once a response is in hand.
+    context 'with a decoder the build-time check does not know by name' do
+      subject(:transport) do
+        unit_transport(middleware: lambda { |builder|
+          builder.use(Class.new(Faraday::Middleware) do
+            def on_complete(env) = env.body = { id: 1 }
+          end)
+        })
+      end
+
+      before { stub_request(:get, url).to_return(json_response([{ id: 1 }])) }
+
+      it 'builds, because nothing named is in the stack' do
+        expect { transport }.not_to raise_error
+      end
+
+      it 'refuses the response rather than stringifying what it got' do
+        expect { transport.get('api/v1/groups', operation: 'test') }
+          .to raise_error(ZammadAPI::ConfigurationError, /decoded the response body before this gem could/)
+      end
+
+      it 'names what it was handed instead of the body' do
+        expect { transport.get('api/v1/groups', operation: 'test') }
+          .to raise_error(ZammadAPI::ConfigurationError, /Faraday handed over Hash rather than the raw body/)
+      end
+    end
+
+    it 'leaves a middleware that does not touch the body alone' do
+      stub_request(:get, url).to_return(json_response([{ id: 1, name: 'Users' }]))
+
+      response = unit_transport(middleware: ->(builder) { builder.response(:logger, Logger.new(File::NULL)) })
+        .get('api/v1/groups', operation: 'test')
+
+      expect(response.body).to eq([{ id: 1, name: 'Users' }])
     end
 
     it 'uses the configured adapter' do

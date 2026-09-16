@@ -24,6 +24,22 @@ jobs:
         with:
           ruby-version: '3.4'
           bundler-cache: true
+      # The tag is what triggers this workflow, and nothing downstream reads
+      # it: the gem is built from the gemspec, so a tag that disagrees with
+      # ZammadAPI::VERSION publishes a gem under a version nobody tagged and
+      # leaves a GitHub release pointing at one that does not exist.
+      - name: Check the tag against the gem version and the changelog
+        run: |
+          tagged="${GITHUB_REF_NAME#v}"
+          declared="$(ruby -Ilib -rzammad_api/version -e 'print ZammadAPI::VERSION')"
+          if [ "$tagged" != "$declared" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match ZammadAPI::VERSION ($declared)"
+            exit 1
+          fi
+          if ! grep -q "^## \[${declared}\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [${declared}]' heading"
+            exit 1
+          fi
       - name: Verify the release candidate
         run: bundle exec rake spec:unit rubocop steep rbs_published
       - uses: rubygems/release-gem@v1

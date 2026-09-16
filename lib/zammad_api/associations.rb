@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require_relative 'errors'
-require_relative 'resource_proxy'
 require_relative 'transport'
 
 module ZammadAPI
@@ -45,7 +44,14 @@ module ZammadAPI
         return @cache[name] if @cache.key?(name)
 
         id = @record[foreign_key]
-        @cache[name] = id.nil? ? nil : ResourceProxy.new(@record.transport, resolve(class_name)).find(id)
+        # {Resources::Base.fetch_one} rather than a ResourceProxy built for the
+        # one call: {Client#setup} builds and freezes one proxy per resource so
+        # that callers get one proxy per resource, and a reader here that built
+        # a fresh one per association turned a walk over ten thousand tickets
+        # reading two associations each into twenty thousand objects that exist
+        # for a single method call. It is the read {ResourceProxy#find} makes
+        # too, so there is one of it rather than one here and one there.
+        @cache[name] = id.nil? ? nil : resolve(class_name).fetch_one(@record.transport, id)
       end
 
       # Deliberately not memoized: a list can grow while the record is held,
@@ -86,7 +92,7 @@ module ZammadAPI
       # that is worth checking rather than trusting. Saying so costs nothing
       # and turns a silently short list into a failure that names itself.
       def refuse_partial_list!(response, served, operation, target_class)
-        total = Integer(response.headers['x-total-count'].to_s, 10, exception: false)
+        total = response.reported_total
         return if total.nil? || served >= total
 
         raise PaginationError.truncated(operation: operation, served: served, total: total, resource_class: target_class)

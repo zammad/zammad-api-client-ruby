@@ -134,6 +134,117 @@ RSpec.describe ZammadAPI::Test do
       expect(client.get('api/v1/groups').headers['x-total-count']).to eq('7')
     end
 
+    # The stand-in exists so that the code under test cannot tell it from the
+    # real transport, and it carried its own copy of the verb loop - so a fifth
+    # verb added to one would have left the other unable to answer it.
+    it 'answers every verb the real transport answers' do
+      expect(ZammadAPI::Test::Transport.new(zammad))
+        .to respond_to(*ZammadAPI::Transport::Verbs.instance_methods)
+    end
+
+    # Transport#decode always hands over a response whose headers name the
+    # type - it is what the decode branches on - while this set `json: true`
+    # directly and left the headers as written. Code that branches on
+    # `response.headers['content-type']` passed against Zammad and failed
+    # against the stand-in, or the reverse.
+    it 'serves a JSON body with the content-type a real response carries' do
+      zammad.stub(:get, 'api/v1/groups', body: [])
+
+      expect(client.get('api/v1/groups').headers['content-type']).to eq('application/json')
+    end
+
+    it 'serves an object body with the same content-type' do
+      zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
+
+      expect(client.get('api/v1/groups/1').headers['content-type']).to eq('application/json')
+    end
+
+    it 'lets a test say the endpoint answered with something else' do
+      zammad.stub(:get, 'api/v1/groups', body: [], headers: { 'Content-Type' => 'application/json; charset=utf-8' })
+
+      expect(client.get('api/v1/groups').headers['content-type']).to eq('application/json; charset=utf-8')
+    end
+
+    # The header used to be decorative: `json:` came from the Ruby type of the
+    # stub's body, so a stub could say `text/html` and still hand back a
+    # decoded Hash, where Zammad gives the raw string and `decoded` raises.
+    context 'when a stub declares a type that is not JSON' do
+      before { zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 }, headers: { 'Content-Type' => 'text/html' }) }
+
+      it 'does not decode the body' do
+        expect(client.get('api/v1/groups/1')).not_to be_json
+      end
+
+      it 'hands back the raw body Zammad would have sent' do
+        expect(client.get('api/v1/groups/1').body).to eq('{"id":1}')
+      end
+
+      it 'fails the way a real one would when a record is read from it' do
+        expect { client.group.find(1) }.to raise_error(ZammadAPI::ParseError)
+      end
+    end
+
+    # A nil Content-Type stringified to '', which then beat the JSON default
+    # this kit supplies and served a Hash body undecoded - so the test failed
+    # inside the code under test with nothing to say the stub was at fault.
+    it 'refuses two spellings of one header rather than dropping a value' do
+      expect { zammad.stub(:get, 'api/v1/groups', body: [], headers: { 'Content-Type' => 'text/html', 'content-type' => 'application/json' }) }
+        .to raise_error(ArgumentError, /header content-type was given twice/)
+    end
+
+    it 'refuses a header value the wire could not carry' do
+      expect { zammad.stub(:get, 'api/v1/groups', body: [], headers: { 'Content-Type' => nil }) }
+        .to raise_error(ArgumentError, /header Content-Type was stubbed as nil/)
+    end
+
+    it 'names what a response header has to be' do
+      expect { zammad.stub(:get, 'api/v1/groups', body: [], headers: { 'X-Total-Count' => [7] }) }
+        .to raise_error(ArgumentError, /a response header is always text: pass a String/)
+    end
+
+    # Only the name used to be normalised, so a count written as an Integer
+    # reached the code under test as one, where the wire always carries "7".
+    it 'carries a header value as the String the wire would have sent' do
+      zammad.stub(:get, 'api/v1/groups', body: [], headers: { 'X-Total-Count' => 7 })
+
+      expect(client.get('api/v1/groups').headers['x-total-count']).to eq('7')
+    end
+
+    # Paging read the stub's body as written, which was the same thing only
+    # while a list could arrive as an Array. Once the content-type decided
+    # decoding, a list stubbed as a JSON string decoded to one and was never
+    # paged, so it answered every page with the same records and every full
+    # read raised PaginationError - where Zammad answers page two empty.
+    it 'pages a list stubbed as a JSON string the way it pages an Array' do
+      zammad.stub(:get, 'api/v1/groups', body: '[{"id":1,"name":"a"},{"id":2,"name":"b"}]', headers: { 'Content-Type' => 'application/json' })
+
+      expect(client.group.all.map(&:name)).to eq(%w[a b])
+    end
+
+    it 'answers a later page of a string-bodied list as an endpoint out of records would' do
+      zammad.stub(:get, 'api/v1/groups', body: '[{"id":1}]', headers: { 'Content-Type' => 'application/json' })
+
+      expect(client.get('api/v1/groups', query: { page: 2 }).body).to eq([])
+    end
+
+    it 'keeps the raw body of a page it did not replace' do
+      zammad.stub(:get, 'api/v1/groups/1', body: '{"id":1}', headers: { 'Content-Type' => 'application/json' })
+
+      expect(client.get('api/v1/groups/1').raw_body).to eq('{"id":1}')
+    end
+
+    it 'decodes a string body a stub declares as JSON' do
+      zammad.stub(:get, 'api/v1/groups/1', body: '{"id":1,"name":"Users"}', headers: { 'Content-Type' => 'application/json' })
+
+      expect(client.group.find(1).name).to eq('Users')
+    end
+
+    it 'claims no content-type for a body it does not serve as JSON' do
+      zammad.stub(:get, 'api/v1/groups/1/avatar', body: 'binary')
+
+      expect(client.get('api/v1/groups/1/avatar').headers).not_to have_key('content-type')
+    end
+
     # The stub keeps serving after a response is built, and Response is a
     # value. Handing out the stub's own Hash made every response from one stub
     # share it, so writing to `response.headers` in one example rewrote the

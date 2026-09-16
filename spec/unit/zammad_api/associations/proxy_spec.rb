@@ -160,6 +160,13 @@ RSpec.describe ZammadAPI::Associations::Proxy do
       expect(ticket.related.articles.size).to eq(2)
     end
 
+    it 'accepts a list whose reported total is not a count' do
+      stub_request(:get, articles_url).with(query: hash_including({}))
+        .to_return(json_response([{ id: 1 }, { id: 2 }], headers: { 'X-Total-Count' => 'many' }))
+
+      expect(ticket.related.articles.size).to eq(2)
+    end
+
     it 'accepts a list from an endpoint that reports no total at all' do
       stub_request(:get, articles_url).with(query: hash_including({}))
         .to_return(json_response([{ id: 1 }, { id: 2 }]))
