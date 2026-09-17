@@ -1,0 +1,36 @@
+module ZammadAPI
+  module AttributeAccess
+    NON_ATTRIBUTE_SUFFIXES: Array[String]
+    # private_constant in the source; RBS has no way to say so.
+    ATTRIBUTE_WRITER: Regexp
+
+    @attributes: Hash[Symbol, untyped]
+
+    attr_reader attributes: Hash[Symbol, untyped]
+
+    def []: (Symbol | String key) -> untyped
+    def []=: (Symbol | String key, untyped value) -> untyped
+    def fetch: (Symbol | String key, *untyped default) ?{ (Symbol) -> untyped } -> untyped
+    def key?: (Symbol | String key) -> bool
+    def to_h: () -> Hash[Symbol, untyped]
+    def id: () -> Integer?
+    def deconstruct_keys: (Array[Symbol]?) -> Hash[Symbol, untyped]
+    def ==: (untyped other) -> bool
+    def eql?: (untyped other) -> bool
+    def hash: () -> Integer
+    def as_json: (*untyped) -> Hash[Symbol, untyped]
+    def to_json: (?untyped state) -> String
+    def method_missing: (Symbol, *untyped) -> untyped
+    def respond_to?: (untyped name, ?bool include_private) -> bool
+    def respond_to_missing?: (Symbol, ?bool) -> bool
+
+    private
+
+    def unknown_attribute_message: (Symbol name) -> String
+    def writable_attributes?: () -> bool
+    def attribute_writable?: (Symbol key) -> bool
+    def write_attribute: (Symbol, untyped) -> untyped
+    def frozen_attributes: (untyped) -> untyped
+    def deep_dup: (untyped) -> untyped
+  end
+end

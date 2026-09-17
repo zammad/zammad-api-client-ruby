@@ -1,0 +1,65 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Every way to read a collection, and what each one costs.
+#
+# Collections are lazy: nothing is fetched until you iterate, and only the
+# pages you actually consume are fetched. A request carries as many records as
+# the endpoint serves - 100 for tickets, 200 for a search, 1000 for the other
+# index endpoints - unless a call asks for another size.
+#
+#   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=... \
+#     ruby examples/pagination.rb
+
+require 'zammad_api'
+
+client  = ZammadAPI::Client.from_env
+tickets = client.ticket.all # no request yet
+
+# Walk every record. Pages are fetched as the iteration reaches them, so only
+# one page is ever held in memory.
+seen = 0
+tickets.each { seen += 1 }
+puts "each               #{seen} tickets, one request per page"
+
+# The same walk with the page size chosen for the job at hand.
+ids = []
+tickets.find_each(batch_size: 50) { ids << it.id }
+puts "find_each          #{ids.size} tickets, 50 per request"
+
+# One whole page per block call, for work that batches: an import, a bulk
+# insert, a push onto a queue.
+sizes = []
+tickets.in_batches(of: 50) { sizes << it.size }
+puts "in_batches         pages of #{sizes.inspect}"
+
+# Stop early and the remaining pages are never fetched.
+puts "first(3)           #{tickets.first(3).map(&:id).inspect}, one request, for three records"
+puts "lazy.select        #{tickets.lazy.select { it.state == 'open' }.first(2).map(&:id).inspect}"
+puts "detect             ##{tickets.detect { it.state == 'open' }&.number}, stops at the match"
+
+# One specific page, when you are driving the paging yourself.
+puts "page(2, of: 10)    #{tickets.page(2, of: 10).map(&:id).inspect}"
+
+# Narrowing by a value is `search`, not `where`: Zammad's index endpoints sort
+# and page and drop every other parameter, so `where(state: 'open')` raises
+# rather than handing back every ticket. Searches compose with all of the above.
+puts "search             #{client.ticket.search('state.name:open').first(5).size} open tickets"
+
+# Counting a search is one request, because Zammad can answer `only_total_count`
+# without serving the records. An index endpoint has no answer for it and no
+# total to report, so counting one means walking it.
+puts "search.count       #{client.ticket.search('state.name:open').count}, one request"
+puts "empty?             #{client.ticket.search('state.name:merged').empty?}, asks for a single record"
+
+# `search` and `page` return a new collection, so scoping one never disturbs
+# the original.
+puts "immutable          #{tickets.page(2).equal?(tickets)}"
+
+puts <<~NOTE
+
+  Upgrading from 1.x: `each` used to fetch a single page, so iterating a
+  collection silently stopped at 100 records. It now walks every page. Ask
+  for one page explicitly with `page(1, of: 100)` where that is what you
+  wanted.
+NOTE

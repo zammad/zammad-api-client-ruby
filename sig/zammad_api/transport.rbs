@@ -1,0 +1,67 @@
+module ZammadAPI
+  # The Faraday connection and responses are untyped here rather than named:
+  # these signatures ship with the gem and the Faraday declarations they would
+  # need live in sig/vendor, which does not. See sig/zammad_api/config.rbs.
+  class Transport
+    # Included by Transport and by Test::Transport, which stands in for it.
+    module Verbs
+      def get: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?, ?resource_class: Class?) -> Response
+      def post: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?, ?resource_class: Class?) -> Response
+      def put: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?, ?resource_class: Class?) -> Response
+      def delete: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?, ?resource_class: Class?) -> Response
+    end
+
+    include Verbs
+
+    RETRIABLE_METHODS: Array[Symbol]
+    RETRIABLE_STATUSES: Array[Integer]
+    RETRIABLE_EXCEPTIONS: Array[untyped]
+    TIMEOUT_ERRORS: Array[untyped]
+    CONNECTION_ERRORS: Array[untyped]
+    # Untyped for the same reason as the Faraday ones above: naming
+    # OpenSSL::SSL::SSLError here would make the published signatures need
+    # openssl declarations that a consumer has not loaded.
+    SSL_ERRORS: Array[untyped]
+    # private_constant in the source; RBS has no way to say so.
+    DECODING_MIDDLEWARE: Array[String]
+    SENSITIVE_KEY_PATTERN: Regexp
+    REDACTED: String
+    UNRESERVED_IN_PATH: Regexp
+    DOT_SEGMENTS: Array[String]
+    RESERVED_HEADERS: Hash[String, String]
+
+    attr_reader config: Config
+    attr_reader on_behalf_of: String?
+
+    @connection: untyped
+
+    def self.stringify_query: (Hash[untyped, untyped]) -> Hash[String, untyped]
+    def self.stringify_query_hash: (Hash[untyped, untyped], String?) -> Hash[String, untyped]
+    def self.stringify_query_value: (String, untyped) -> untyped
+    def self.stringify_headers: (Hash[untyped, untyped]) -> Hash[String, String]
+    def self.stringify_header_value: (String, untyped) -> String
+    def self.escape_path_segment: (untyped) -> String
+    def self.relative_path: (untyped) -> String
+
+    def initialize: (Config) -> void
+    def with_on_behalf_of: ((String | Integer)? identifier) -> Transport
+    def with_config: (Config) -> Transport
+
+    def request: (Symbol method, String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?, ?resource_class: Class?) -> Response
+
+    private
+
+    def perform: (Symbol, String, Hash[Symbol, untyped]?, untyped, Hash[untyped, untyped]?) -> untyped
+    def build_connection: () -> untyped
+    def refuse_decoding_middleware!: (untyped connection) -> void
+    def apply_authentication: (untyped) -> void
+    def retry_options: () -> Hash[Symbol, untyped]
+    def decode: (untyped) -> Response
+    def raw_body!: (untyped) -> String
+    def log_request: (Symbol, String, Hash[Symbol, untyped]?, untyped, Hash[String, String]?) -> void
+    def log_response: (Symbol, String, Response, Float) -> void
+    def redact: (untyped) -> untyped
+    def redact_config_values: (untyped message) -> String
+    def logger: () -> Logger
+  end
+end

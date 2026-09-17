@@ -1,0 +1,83 @@
+module ZammadAPI
+  module Resources
+    class Base
+      include AttributeAccess
+
+      DEFAULT_MAX_PER_PAGE: Integer
+      MEMO_LOCK: Thread::Mutex
+      DEFAULT_INDEX_QUERY_KEYS: Array[Symbol]
+
+      attr_reader error: ValidationError?
+      attr_reader transport: Transport
+
+      @new_record: bool
+      @destroyed: bool
+      @saved: bool
+      @error: ValidationError?
+      @changes: Hash[Symbol, Array[untyped]]
+      @related: Associations::Proxy?
+      @baseline: Hash[Symbol, untyped]
+      self.@related_class: untyped
+      self.@belongs_to_foreign_keys: Array[Symbol]?
+      self.@declared_associations: Hash[Symbol, Hash[Symbol, untyped]]?
+      self.@path: String?
+      self.@searchable: bool?
+      self.@max_per_page: Integer?
+      self.@index_query_keys: Array[Symbol]?
+
+      def self.path: (String) -> void
+      def self.searchable: (bool) -> void
+      def self.max_per_page: (Integer) -> void
+      def self.index_query_keys: (*Symbol) -> void
+      def self.resource_path: () -> String
+      def self.searchable?: () -> bool
+      def self.page_limit: () -> Integer
+      def self.filterable_keys: () -> Array[Symbol]
+      def self.member_path: ((Integer | String) id) -> String
+      def self.fetch_one: (Transport transport, (Integer | String) id) -> Base
+      def self.from_response: (Transport, Hash[untyped, untyped] attributes) -> Base
+      def self.associations: () -> Hash[Symbol, Hash[Symbol, untyped]]
+      def self.belongs_to_foreign_keys: () -> Array[Symbol]
+      def self.related_class: () -> untyped
+      def self.declaration: [T] (Symbol name) { () -> T } -> T
+                          | (Symbol name) -> untyped
+      def self.declared_associations: () -> Hash[Symbol, Hash[Symbol, untyped]]
+      def self.belongs_to: (Symbol name, class_name: String, ?foreign_key: Symbol) -> void
+      def self.has_many: (Symbol name, class_name: String, path: ^(String) -> String) -> void
+
+      def initialize: (Transport, ?Hash[untyped, untyped]? attributes) -> void
+      def new_record?: () -> bool
+      def persisted?: () -> bool
+      def destroyed?: () -> bool
+      def changes: () -> Hash[Symbol, Array[untyped]]
+      def changed?: () -> bool
+      def related: () -> Associations::Proxy
+      def assign_attributes: (Hash[untyped, untyped] attributes) -> self
+      def save: () -> bool
+      def save!: () -> true
+      def update: (Hash[untyped, untyped] attributes) -> bool
+      def update!: (Hash[untyped, untyped] attributes) -> true
+      def reload: () -> self
+      def destroy: () -> true
+      def inspect: () -> String
+
+      private
+
+      def setup: (Transport, Hash[untyped, untyped] attributes) -> void
+      def mark_persisted!: () -> void
+      def raise_if_destroyed!: (String action) -> void
+      def raise_if_new!: (String operation) -> void
+      def writable_attributes?: () -> bool
+      def attribute_writable?: (Symbol key) -> bool
+      def refuse_unwritable!: (Symbol key, untyped value) -> void
+      def replace_attributes!: (Response, operation: String, ?saved: bool) -> void
+      def reset_pending_state!: () -> void
+      def write_attribute: (Symbol, untyped) -> untyped
+      def create_record: () -> Response
+      def update_record: () -> Response
+      def member_path: () -> String
+      def require_id!: () -> Integer
+      def no_id_message: () -> String
+    end
+  end
+end
