@@ -26,6 +26,7 @@ module ZammadAPI
 
     private
 
+    def unknown_attribute_message: (Symbol name) -> String
     def writable_attributes?: () -> bool
     def attribute_writable?: (Symbol key) -> bool
     def write_attribute: (Symbol, untyped) -> untyped

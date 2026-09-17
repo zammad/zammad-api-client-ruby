@@ -4,7 +4,9 @@
 # Every way to read a collection, and what each one costs.
 #
 # Collections are lazy: nothing is fetched until you iterate, and only the
-# pages you actually consume are fetched. 100 records per request by default.
+# pages you actually consume are fetched. A request carries as many records as
+# the endpoint serves - 100 for tickets, 200 for a search, 1000 for the other
+# index endpoints - unless a call asks for another size.
 #
 #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=... \
 #     ruby examples/pagination.rb
@@ -32,7 +34,7 @@ tickets.in_batches(of: 50) { sizes << it.size }
 puts "in_batches         pages of #{sizes.inspect}"
 
 # Stop early and the remaining pages are never fetched.
-puts "first(3)           #{tickets.first(3).map(&:id).inspect}, one request"
+puts "first(3)           #{tickets.first(3).map(&:id).inspect}, one request, for three records"
 puts "lazy.select        #{tickets.lazy.select { it.state == 'open' }.first(2).map(&:id).inspect}"
 puts "detect             ##{tickets.detect { it.state == 'open' }&.number}, stops at the match"
 
@@ -44,8 +46,9 @@ puts "page(2, of: 10)    #{tickets.page(2, of: 10).map(&:id).inspect}"
 # rather than handing back every ticket. Searches compose with all of the above.
 puts "search             #{client.ticket.search('state.name:open').first(5).size} open tickets"
 
-# Counting a search is one request, because Zammad answers it with a total.
-# An index endpoint has to be walked page by page.
+# Counting a search is one request, because Zammad can answer `only_total_count`
+# without serving the records. An index endpoint has no answer for it and no
+# total to report, so counting one means walking it.
 puts "search.count       #{client.ticket.search('state.name:open').count}, one request"
 puts "empty?             #{client.ticket.search('state.name:merged').empty?}, asks for a single record"
 

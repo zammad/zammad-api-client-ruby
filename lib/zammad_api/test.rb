@@ -70,10 +70,16 @@ module ZammadAPI
     #     client sent them, stringified the way the real transport sends them
     # @!attribute [r] body
     #   @return [Hash, nil] the request payload
+    # @!attribute [r] headers
+    #   @return [Hash{String => String}] the headers the call asked for,
+    #     downcased and stringified the way the real transport sends them.
+    #     Empty for a request that named none; the headers the client sets
+    #     from its own configuration are not in here, and the +From+ scope has
+    #     a member of its own below.
     # @!attribute [r] on_behalf_of
     #   @return [String, nil] the +From+ scope in effect, stringified the way
     #     the +From+ header carries it
-    Request = Data.define(:verb, :path, :query, :body, :on_behalf_of)
+    Request = Data.define(:verb, :path, :query, :body, :headers, :on_behalf_of)
 
     # @return [Config] the configuration the stand-in client reports
     attr_reader :config
@@ -202,16 +208,20 @@ module ZammadAPI
     # @return [Response]
     # @raise [ResponseError] for a stubbed non-2xx status
     # @raise [UnstubbedRequestError] when no stub matches
-    def answer(method, path, operation:, query: nil, body: nil, resource_class: nil, on_behalf_of: nil)
+    def answer(method, path, operation:, query: nil, body: nil, headers: nil, resource_class: nil, on_behalf_of: nil)
       relative = ::ZammadAPI::Transport.relative_path(path)
       # Through the real transport's own stringification, so that {Request#query}
-      # holds what a request would have carried rather than the raw Ruby values.
-      # A stand-in that records a different shape than the wire makes an
-      # assertion pass here and fail in production, or the other way round.
+      # and {Request#headers} hold what a request would have carried rather
+      # than the raw Ruby values. A stand-in that records a different shape
+      # than the wire makes an assertion pass here and fail in production, or
+      # the other way round - and the header rules are where that matters
+      # most, because a reserved name or a non-text value is refused on the
+      # wire and would otherwise sail through here.
       params   = ::ZammadAPI::Transport.stringify_query(query || {})
+      fields   = ::ZammadAPI::Transport.stringify_headers(headers || {})
 
       stub = @monitor.synchronize do
-        @requests << Request.new(verb: method, path: relative, query: params, body: snapshot(body), on_behalf_of: on_behalf_of)
+        @requests << Request.new(verb: method, path: relative, query: params, body: snapshot(body), headers: fields, on_behalf_of: on_behalf_of)
         take(method, relative, params)
       end
 
@@ -403,8 +413,8 @@ module ZammadAPI
     # A copy, because the stub keeps serving after this response is built and
     # Response is a value. Handing out the stub's own Hash made every response
     # from one stub share it, so a test that wrote to `response.headers` -
-    # bumping an x-total-count to check a walk, say - rewrote the stand-in for
-    # every later request in the example. The real transport builds a fresh
+    # editing a content-type to check a decode path, say - rewrote the
+    # stand-in for every later request in the example. The real transport builds a fresh
     # hash per response, and this exists to behave like it.
     def build_response(stub, body, raw_body, json:)
       Response.new(status: stub[:status], headers: stub[:headers].dup.freeze, body: body, raw_body: raw_body, json: json)
@@ -440,13 +450,14 @@ module ZammadAPI
       # config itself, so the stand-in keeps answering.
       def with_config(_config) = self
 
-      def request(method, path, operation:, query: nil, body: nil, resource_class: nil)
+      def request(method, path, operation:, query: nil, body: nil, headers: nil, resource_class: nil)
         test.answer(
           method,
           path,
           operation:      operation,
           query:          query,
           body:           body,
+          headers:        headers,
           resource_class: resource_class,
           on_behalf_of:   on_behalf_of
         )

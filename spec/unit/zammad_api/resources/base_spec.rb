@@ -536,14 +536,14 @@ RSpec.describe ZammadAPI::Resources::Base do
     end
 
     # `destroy` asked only whether the record was already destroyed, so one
-    # built with an id it was simply handed - which the attribute writers
-    # refuse but the constructor still allows - issued a real DELETE for a
-    # record it does not stand for.
+    # built with an id it was simply handed issued a real DELETE for a record
+    # it does not stand for. The constructor refuses that id now, so there is
+    # no such record left to destroy.
     it 'sends nothing for a record built with an id it was never saved with' do
       stub = stub_request(:delete, "#{url}/99")
 
       expect { client.group.new(id: 99, name: 'X').destroy }
-        .to raise_error(ZammadAPI::Error, /has not been saved/)
+        .to raise_error(ZammadAPI::Error, /is what addresses this record/)
       expect(stub).not_to have_been_requested
     end
 
@@ -876,17 +876,22 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(group).to respond_to(:[]=)
     end
 
+    it 'is claimed under either spelling' do
+      # rubocop:disable-next Performance/StringIdentifierArgument -- the String spelling is the point
+      expect(group.respond_to?('[]=')).to be(true)
+    end
+
     # The production case for recognising a writer by name rather than by a
     # trailing `=`: on a record that stages writes, an operator reached the
     # writer branch and invented an attribute from its stem.
     it 'invents no attribute from a comparison operator' do
-      group.public_send(:<=, 5)
+      expect { group.public_send(:<=, 5) }.to raise_error(NoMethodError)
 
       expect(group.attributes.keys).not_to include(:<)
     end
 
     it 'stages nothing for a comparison operator' do
-      group.public_send(:<=, 5)
+      expect { group.public_send(:<=, 5) }.to raise_error(NoMethodError)
 
       expect(group).not_to be_changed
     end
@@ -963,8 +968,15 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(group).not_to be_changed
     end
 
-    it 'still lets a new record be built carrying one' do
-      expect(client.group.new(id: 5).id).to eq(5)
+    # The constructor was the one door that did not make this refusal, and
+    # the only one whose value reached the wire: a new record is sent in full,
+    # so `new(id: 5).save` POSTed the id nothing had checked.
+    it 'is refused by the constructor too' do
+      expect { client.group.new(id: 5) }.to raise_error(ZammadAPI::Error, /is what addresses this record/)
+    end
+
+    it 'still lets a record Zammad served carry one' do
+      expect(ZammadAPI::Resources::Group.from_response(unit_transport, id: 5).id).to eq(5)
     end
   end
 

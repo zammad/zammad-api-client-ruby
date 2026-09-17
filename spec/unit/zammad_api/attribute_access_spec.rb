@@ -56,8 +56,52 @@ RSpec.describe ZammadAPI::AttributeAccess do
       expect(record.id).to eq(1)
     end
 
-    it 'returns nil for an unknown attribute, since Zammad allows custom fields' do
-      expect(record.custom_field).to be_nil
+    # A reader used to answer nil here, which made a typo a silent nil that
+    # flowed on into whatever was written with it - and put respond_to? and
+    # the call itself at odds, since respond_to?(:custom_field) was false
+    # throughout.
+    it 'raises for an attribute the record does not carry' do
+      expect { record.custom_field }.to raise_error(NoMethodError, /undefined attribute custom_field/)
+    end
+
+    it 'names the readers that tolerate an absent attribute' do
+      expect { record.custom_field }.to raise_error(NoMethodError, /fetch\(:custom_field, nil\)/)
+    end
+
+    it 'says the record may be one Zammad served less of' do
+      expect { record.custom_field }.to raise_error(NoMethodError, /reduced object/)
+    end
+
+    it 'lists what the record does carry, so the spelling can be compared' do
+      expect { record.custom_field }.to raise_error(NoMethodError, /carries id, name, preferences/)
+    end
+
+    # A key that could not become a Symbol is left as it arrived, so sorting
+    # the keys themselves would raise from inside the message.
+    it 'lists mixed keys without raising from the message itself' do
+      expect { record_class.new(1 => 'one', 'name' => 'X').custom_field }
+        .to raise_error(NoMethodError, /carries 1, name/)
+    end
+
+    it 'says so plainly for a record that carries nothing' do
+      expect { record_class.new({}).custom_field }
+        .to raise_error(NoMethodError, /carries no attributes at all/)
+    end
+
+    it 'carries the name and the receiver a bare NoMethodError would' do
+      expect { record.custom_field }.to raise_error(NoMethodError) do |error|
+        expect(error.name).to eq(:custom_field)
+        expect(error.receiver).to be(record)
+      end
+    end
+
+    it 'still reads an attribute the record carries but Zammad left nil' do
+      expect(record_class.new('note' => nil).note).to be_nil
+    end
+
+    it 'leaves [] and fetch answering for an absent attribute' do
+      expect(record[:custom_field]).to be_nil
+      expect(record.fetch(:custom_field, 'fallback')).to eq('fallback')
     end
 
     it 'reports known attributes via #key?' do
@@ -175,13 +219,21 @@ RSpec.describe ZammadAPI::AttributeAccess do
     it 'agrees with the named writers on the same record' do
       expect(record.respond_to?(:[]=)).to eq(record.respond_to?(:name=))
     end
+
+    # `respond_to?` takes either spelling and Ruby does not normalise the
+    # argument, so a Symbol-only comparison let the String fall through to the
+    # definition and answer true on a record that refuses every write.
+    it 'answers the same for the String spelling' do
+      # rubocop:disable-next Performance/StringIdentifierArgument -- the String spelling is the point
+      expect(record.respond_to?('[]=')).to eq(record.respond_to?(:[]=))
+    end
   end
 
   describe 'a name that only looks like a writer' do
     it 'does not invent an attribute from a comparison operator' do
       # Sent rather than written as `record <= 5`, which RuboCop reads as a
       # void literal and rewrites away, taking the spec with it.
-      record.public_send(:<=, 5)
+      expect { record.public_send(:<=, 5) }.to raise_error(NoMethodError)
 
       expect(record.attributes.keys).not_to include(:<)
     end

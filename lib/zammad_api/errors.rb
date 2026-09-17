@@ -58,18 +58,6 @@ module ZammadAPI
     def self.build(operation:, page:, resource_class: nil)
       new("Can't #{subject_for(operation, resource_class)}: page #{page} repeated page #{page - 1}, so the endpoint is ignoring the page parameter")
     end
-
-    # Raised the other way round: a list that is read in one request, from an
-    # endpoint that turned out to serve it a page at a time.
-    #
-    # @param operation [String]
-    # @param served [Integer] records the response carried
-    # @param total [Integer] records the endpoint says the list has
-    # @param resource_class [Class, nil]
-    # @return [PaginationError]
-    def self.truncated(operation:, served:, total:, resource_class: nil)
-      new("Can't #{subject_for(operation, resource_class)}: the endpoint served #{served} of #{total} records, so it pages this list and reading it in one request would drop the rest")
-    end
   end
 
   # Base class for errors carrying an HTTP response.

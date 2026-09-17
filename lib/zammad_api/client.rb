@@ -190,20 +190,32 @@ module ZammadAPI
     # the rest of it without giving up authentication, retries, credential
     # redaction, JSON decoding or the error classes.
     #
+    # +headers:+ is here because an escape hatch that cannot set one does not
+    # reach an endpoint that needs one. What it will not set is the two
+    # headers this client owns - see the +headers+ parameter below.
+    #
     # @example An endpoint this gem does not model
     #   client.get('api/v1/roles').body
     #   # => [{id: 1, name: "Admin", ...}, ...]
     #
     # @example Reading a response header
-    #   client.get('api/v1/tickets').headers['x-total-count']
+    #   client.get('api/v1/tickets').headers['content-type']
+    #
+    # @example An endpoint that needs a header of its own
+    #   client.get('api/v1/tickets/1', headers: {'Accept-Language' => 'de-de'})
     #
     # @param path [String] path relative to {Config#url}; a leading slash is
     #   ignored, so paths can be pasted from the Zammad documentation
     # @param query [Hash, nil] query string parameters
+    # @param headers [Hash, nil] request headers. Names are case-insensitive,
+    #   and +Authorization+ and +From+ are refused: the first is what the
+    #   client's credentials are for, the second is what {#on_behalf_of} sets.
     # @return [Response]
     # @raise [ResponseError] for any non-2xx response
     # @raise [TransportError] when the request could not be completed
-    def get(path, query: nil) = raw(:get, path, query: query)
+    # @raise [ArgumentError] for a header this client sets itself, or a value
+    #   that is not text
+    def get(path, query: nil, headers: nil) = raw(:get, path, query: query, headers: headers)
 
     # Performs a +POST+ against any endpoint of the Zammad API.
     #
@@ -213,29 +225,32 @@ module ZammadAPI
     # @param path [String] path relative to {Config#url}
     # @param query [Hash, nil] query string parameters
     # @param body [Hash, Array, nil] request payload, encoded as JSON
+    # @param headers [Hash, nil] request headers
     # @return [Response]
     # @raise [ResponseError] for any non-2xx response
     # @see #get
-    def post(path, query: nil, body: nil) = raw(:post, path, query: query, body: body)
+    def post(path, query: nil, body: nil, headers: nil) = raw(:post, path, query: query, body: body, headers: headers)
 
     # Performs a +PUT+ against any endpoint of the Zammad API.
     #
     # @param path [String] path relative to {Config#url}
     # @param query [Hash, nil] query string parameters
     # @param body [Hash, Array, nil] request payload, encoded as JSON
+    # @param headers [Hash, nil] request headers
     # @return [Response]
     # @raise [ResponseError] for any non-2xx response
     # @see #get
-    def put(path, query: nil, body: nil) = raw(:put, path, query: query, body: body)
+    def put(path, query: nil, body: nil, headers: nil) = raw(:put, path, query: query, body: body, headers: headers)
 
     # Performs a +DELETE+ against any endpoint of the Zammad API.
     #
     # @param path [String] path relative to {Config#url}
     # @param query [Hash, nil] query string parameters
+    # @param headers [Hash, nil] request headers
     # @return [Response]
     # @raise [ResponseError] for any non-2xx response
     # @see #get
-    def delete(path, query: nil) = raw(:delete, path, query: query)
+    def delete(path, query: nil, headers: nil) = raw(:delete, path, query: query, headers: headers)
 
     # @!endgroup
 
@@ -295,7 +310,7 @@ module ZammadAPI
 
     private
 
-    def raw(method, path, query: nil, body: nil)
+    def raw(method, path, query: nil, body: nil, headers: nil)
       relative = Transport.relative_path(path)
 
       @transport.request(
@@ -303,7 +318,8 @@ module ZammadAPI
         relative,
         operation: "#{method.to_s.upcase} #{relative}",
         query:     query,
-        body:      body
+        body:      body,
+        headers:   headers
       )
     end
 

@@ -281,6 +281,66 @@ RSpec.describe ZammadAPI::Client do
         expect(stub).to have_been_requested
       end
 
+      # An escape hatch that cannot set a header does not reach an endpoint
+      # that needs one.
+      it 'sends the headers it was given' do
+        stub = stub_request(:get, roles_url)
+          .with(headers: { 'Accept-Language' => 'de-de' })
+          .to_return(json_response([]))
+
+        client.get('api/v1/roles', headers: { 'Accept-Language' => 'de-de' })
+        expect(stub).to have_been_requested
+      end
+
+      it 'stringifies a header value the wire could not carry' do
+        stub = stub_request(:get, roles_url)
+          .with(headers: { 'X-Retry' => '3' })
+          .to_return(json_response([]))
+
+        client.get('api/v1/roles', headers: { 'X-Retry' => 3 })
+        expect(stub).to have_been_requested
+      end
+
+      # Faraday's authorization middleware leaves a header that is already set
+      # alone, so this would have replaced the client's own credentials -
+      # quietly, while #inspect went on reporting the scheme it was built with.
+      it 'refuses to replace the configured authentication' do
+        expect { client.get('api/v1/roles', headers: { 'Authorization' => 'Token other' }) }
+          .to raise_error(ArgumentError, /header authorization is set by this client/)
+      end
+
+      it 'names the option that does mean it' do
+        expect { client.get('api/v1/roles', headers: { 'Authorization' => 'Token other' }) }
+          .to raise_error(ArgumentError, /pass http_token:, oauth2_token:, or user: and password:/)
+      end
+
+      it 'refuses the From header that on_behalf_of owns' do
+        expect { client.get('api/v1/roles', headers: { from: 'agent@example.com' }) }
+          .to raise_error(ArgumentError, /use client\.on_behalf_of/)
+      end
+
+      it 'refuses a nil header value rather than sending an empty one' do
+        expect { client.get('api/v1/roles', headers: { 'X-Trace' => nil }) }
+          .to raise_error(ArgumentError, /header x-trace is nil/)
+      end
+
+      it 'refuses a header value that is not text' do
+        expect { client.get('api/v1/roles', headers: { 'X-Trace' => ['a'] }) }
+          .to raise_error(ArgumentError, /a header is always text/)
+      end
+
+      # HTTP reads the two names as one header, so a merge would send whichever
+      # Hash order put last and drop the other without a word.
+      it 'refuses two spellings of one header' do
+        expect { client.get('api/v1/roles', headers: { 'Accept-Language' => 'de', 'accept-language' => 'en' }) }
+          .to raise_error(ArgumentError, /header accept-language was given twice/)
+      end
+
+      it 'makes no request for a header it refuses' do
+        expect { client.get('api/v1/roles', headers: { 'X-Trace' => nil }) }.to raise_error(ArgumentError)
+        expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+      end
+
       it 'raises the mapped error class' do
         stub_request(:get, roles_url).to_return(json_response({ error: 'nope' }, status: 403))
 
@@ -328,6 +388,24 @@ RSpec.describe ZammadAPI::Client do
         expect(log.string).to include('[REDACTED]')
         expect(log.string).not_to include('hunter2')
       end
+
+      it 'redacts a credential-bearing header from the log too' do
+        stub_request(:post, roles_url).to_return(json_response({}))
+
+        log    = StringIO.new
+        logger = Logger.new(log, level: Logger::DEBUG)
+        unit_client(logger: logger).post('api/v1/roles', headers: { 'X-Api-Key' => 'hunter2' })
+
+        expect(log.string).to include('[REDACTED]')
+        expect(log.string).not_to include('hunter2')
+      end
+
+      it 'sends the headers it was given' do
+        stub = stub_request(:post, roles_url).with(headers: { 'X-Trace' => 'abc' }).to_return(json_response({}))
+
+        client.post('api/v1/roles', body: {}, headers: { 'X-Trace' => 'abc' })
+        expect(stub).to have_been_requested
+      end
     end
 
     describe '#put' do
@@ -335,6 +413,13 @@ RSpec.describe ZammadAPI::Client do
         stub = stub_request(:put, "#{roles_url}/1").with(body: JSON.generate({ name: 'Agent' })).to_return(json_response({ id: 1 }))
 
         client.put('api/v1/roles/1', body: { name: 'Agent' })
+        expect(stub).to have_been_requested
+      end
+
+      it 'sends the headers it was given' do
+        stub = stub_request(:put, "#{roles_url}/1").with(headers: { 'X-Trace' => 'abc' }).to_return(json_response({}))
+
+        client.put('api/v1/roles/1', body: {}, headers: { 'X-Trace' => 'abc' })
         expect(stub).to have_been_requested
       end
     end
@@ -348,6 +433,24 @@ RSpec.describe ZammadAPI::Client do
         client.delete('api/v1/tags/remove', query: { object: 'Ticket', o_id: 1, item: 'urgent' })
         expect(stub).to have_been_requested
       end
+
+      it 'sends the headers it was given' do
+        stub = stub_request(:delete, roles_url).with(headers: { 'X-Trace' => 'abc' }).to_return(json_response({}))
+
+        client.delete('api/v1/roles', headers: { 'X-Trace' => 'abc' })
+        expect(stub).to have_been_requested
+      end
+    end
+
+    # The scope is set after the caller's headers, so a request cannot take the
+    # header out from under the client that was scoped.
+    it 'keeps the on_behalf_of scope alongside a caller header' do
+      stub = stub_request(:get, roles_url)
+        .with(headers: { 'From' => 'agent@example.com', 'X-Trace' => 'abc' })
+        .to_return(json_response([]))
+
+      client.on_behalf_of('agent@example.com').get('api/v1/roles', headers: { 'X-Trace' => 'abc' })
+      expect(stub).to have_been_requested
     end
 
     it 'does not shadow a resource reader' do

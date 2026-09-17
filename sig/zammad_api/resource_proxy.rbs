@@ -35,6 +35,9 @@ module ZammadAPI
     def size: () -> Integer
     def length: () -> Integer
     def empty?: () -> bool
+    def first: () -> untyped
+             | (Integer count) -> Array[untyped]
+    def take: (Integer count) -> Array[untyped]
     def search: (String term) -> Collection
     def inspect: () -> String
 

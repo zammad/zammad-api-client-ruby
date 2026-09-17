@@ -133,41 +133,13 @@ RSpec.describe ZammadAPI::Associations::Proxy do
         .to raise_error(ZammadAPI::ParseError, /Can't get articles \(ZammadAPI::Resources::TicketArticle\)/)
     end
 
-    # This is the one list in the gem read in a single request, because the
-    # association endpoints Zammad routes serve the whole thing. An endpoint
-    # that turned out to page would have handed back its first page with
-    # nothing to say so, while `all` and `search` walk to the end.
-    context 'when the endpoint answers with one page of several' do
-      before do
-        stub_request(:get, articles_url).with(query: hash_including({}))
-          .to_return(json_response([{ id: 1 }, { id: 2 }], headers: { 'X-Total-Count' => '7' }))
-      end
-
-      it 'refuses rather than handing back a short list' do
-        expect { ticket.related.articles }.to raise_error(ZammadAPI::PaginationError, /served 2 of 7 records/)
-      end
-
-      it 'names the association it could not read whole' do
-        expect { ticket.related.articles }
-          .to raise_error(ZammadAPI::PaginationError, /Can't get articles \(ZammadAPI::Resources::TicketArticle\)/)
-      end
-    end
-
-    it 'accepts a list the endpoint reports in full' do
-      stub_request(:get, articles_url).with(query: hash_including({}))
-        .to_return(json_response([{ id: 1 }, { id: 2 }], headers: { 'X-Total-Count' => '2' }))
-
-      expect(ticket.related.articles.size).to eq(2)
-    end
-
-    it 'accepts a list whose reported total is not a count' do
-      stub_request(:get, articles_url).with(query: hash_including({}))
-        .to_return(json_response([{ id: 1 }, { id: 2 }], headers: { 'X-Total-Count' => 'many' }))
-
-      expect(ticket.related.articles.size).to eq(2)
-    end
-
-    it 'accepts a list from an endpoint that reports no total at all' do
+    # The one list in the gem read in a single request, because the endpoint
+    # it is declared against serves the whole thing: index_by_ticket iterates
+    # `ticket.articles` and renders them all, with no pagination to opt into.
+    # A guard used to sit here for a target that paged anyway, reading a total
+    # from a response header - a header Zammad sends from no endpoint, so it
+    # never once looked at a figure.
+    it 'reads the whole list in one request' do
       stub_request(:get, articles_url).with(query: hash_including({}))
         .to_return(json_response([{ id: 1 }, { id: 2 }]))
 

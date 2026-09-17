@@ -27,10 +27,10 @@ module ZammadAPI
     def me: () -> Resources::User
     def version: () -> String?
 
-    def get: (String path, ?query: Hash[untyped, untyped]?) -> Response
-    def post: (String path, ?query: Hash[untyped, untyped]?, ?body: untyped) -> Response
-    def put: (String path, ?query: Hash[untyped, untyped]?, ?body: untyped) -> Response
-    def delete: (String path, ?query: Hash[untyped, untyped]?) -> Response
+    def get: (String path, ?query: Hash[untyped, untyped]?, ?headers: Hash[untyped, untyped]?) -> Response
+    def post: (String path, ?query: Hash[untyped, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?) -> Response
+    def put: (String path, ?query: Hash[untyped, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?) -> Response
+    def delete: (String path, ?query: Hash[untyped, untyped]?, ?headers: Hash[untyped, untyped]?) -> Response
 
     def with: (**untyped options) -> Client
     def on_behalf_of: (String | Integer identifier) -> Client
@@ -41,7 +41,7 @@ module ZammadAPI
 
     private
 
-    def raw: (Symbol method, String path, ?query: Hash[untyped, untyped]?, ?body: untyped) -> Response
+    def raw: (Symbol method, String path, ?query: Hash[untyped, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?) -> Response
     def unknown_resource_message: (Symbol | String) -> String
     def setup: (Config config, untyped transport) -> self
   end

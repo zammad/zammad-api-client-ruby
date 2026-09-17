@@ -76,26 +76,7 @@ module ZammadAPI
           query:          { expand: true }
         )
         records = response.decoded(:array, operation: operation, resource_class: target_class)
-        refuse_partial_list!(response, records.size, operation, target_class)
         records.map { target_class.from_response(@record.transport, it) }
-      end
-
-      # A has_many reader spends one request and hands back the whole list,
-      # because the endpoints these are declared against serve it whole -
-      # +by_ticket+ answers with every article a ticket has. It is the one
-      # list in the gem that does not walk, and that is a property of the
-      # endpoint rather than of the declaration: a target that started paging
-      # would have handed back its first page and nothing to say so, while
-      # +all+ and +search+ walk to the end.
-      #
-      # Index endpoints report the size of the whole result in a header, so
-      # that is worth checking rather than trusting. Saying so costs nothing
-      # and turns a silently short list into a failure that names itself.
-      def refuse_partial_list!(response, served, operation, target_class)
-        total = response.reported_total
-        return if total.nil? || served >= total
-
-        raise PaginationError.truncated(operation: operation, served: served, total: total, resource_class: target_class)
       end
 
       # The target is named rather than referenced so that resources may point

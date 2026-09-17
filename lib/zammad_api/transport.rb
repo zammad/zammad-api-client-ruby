@@ -32,10 +32,10 @@ module ZammadAPI
     #
     # @api private
     module Verbs
-      # @!method get(path, operation:, query: nil, resource_class: nil)
-      # @!method post(path, operation:, query: nil, body: nil, resource_class: nil)
-      # @!method put(path, operation:, query: nil, body: nil, resource_class: nil)
-      # @!method delete(path, operation:, query: nil, resource_class: nil)
+      # @!method get(path, operation:, query: nil, headers: nil, resource_class: nil)
+      # @!method post(path, operation:, query: nil, body: nil, headers: nil, resource_class: nil)
+      # @!method put(path, operation:, query: nil, body: nil, headers: nil, resource_class: nil)
+      # @!method delete(path, operation:, query: nil, headers: nil, resource_class: nil)
       # @return [Response]
       %i[get post put delete].each do |verb|
         define_method(verb) do |path, **options|
@@ -222,6 +222,60 @@ module ZammadAPI
       end
     end
 
+    # Header names this class sets from the configuration, and will not take
+    # from a caller.
+    #
+    # +Authorization+ is built from the credentials {Config} validated, and
+    # +From+ is what {Client#on_behalf_of} means. Faraday's authorization
+    # middleware leaves a header that is already set alone, so a raw request
+    # carrying one of these would have replaced the client's own - quietly,
+    # and while {Client#inspect} went on reporting the authentication scheme
+    # it was built with. Naming the option that does mean it is the useful
+    # answer; overwriting in silence is not.
+    RESERVED_HEADERS = {
+      'authorization' => 'authentication is configured on the client: pass http_token:, oauth2_token:, or user: and password:, or build a second client with Client#with',
+      'from'          => 'the From header is what on_behalf_of sets: use client.on_behalf_of(...) to perform requests for another user'
+    }.freeze
+
+    # The headers a request carries beyond the ones this class sets.
+    #
+    # Names are downcased, which is what makes two spellings of one header
+    # comparable at all: HTTP treats them as the same header, so
+    # +{'Accept' => 'a', 'accept' => 'b'}+ would otherwise send whichever Hash
+    # order put last and drop the other without a word - the silent drop
+    # {DuplicateKeys} exists to refuse.
+    #
+    # Values are stringified for the reason {#with_on_behalf_of} stringifies
+    # the +From+ scope: a header is text on the wire, and a value of another
+    # type reaches Net::HTTP intact and dies there with
+    # `undefined method 'strip' for an instance of Integer`.
+    #
+    # Public for the same reason as {.stringify_query}: {Test} records what a
+    # request would have carried, and a stand-in whose recorded values
+    # disagree with the wire makes green tests mean less than they appear to.
+    #
+    # @api private
+    # @param headers [Hash]
+    # @return [Hash{String => String}]
+    # @raise [ArgumentError] for a nil value, a value that is not text, two
+    #   spellings of one header, or a header this class sets itself
+    def self.stringify_headers(headers)
+      DuplicateKeys
+        .normalize(headers, noun: 'header') { it.to_s.downcase }
+        .to_h { |name, value| [name, stringify_header_value(name, value)] }
+    end
+
+    # @api private
+    # @return [String]
+    def self.stringify_header_value(name, value)
+      reserved = RESERVED_HEADERS[name]
+      raise ArgumentError, "header #{name} is set by this client, not by a request: #{reserved}" if reserved
+      raise ArgumentError, "header #{name} is nil, and a header is always text: pass a value, or leave the header out" if value.nil?
+      raise ArgumentError, "header #{name} was given as #{value.inspect}, and a header is always text: pass a String" if !value.is_a?(String) && !value.is_a?(Symbol) && !value.is_a?(Numeric)
+
+      value.to_s
+    end
+
     # Percent-encodes one segment of a request path.
     #
     # Record ids are pasted into the path, and an id taken straight from a
@@ -318,6 +372,8 @@ module ZammadAPI
     # @param operation [String] description used in error messages
     # @param query [Hash, nil] query string parameters
     # @param body [Hash, nil] request payload, encoded as JSON
+    # @param headers [Hash, nil] request headers, beyond the ones this class
+    #   sets from the configuration
     # @param resource_class [Class, nil] used in error messages
     # @return [Response]
     # @raise [ResponseError] for non-2xx responses
@@ -329,9 +385,9 @@ module ZammadAPI
     # in {RETRIABLE_EXCEPTIONS}, which is this class saying it expects to see
     # them: an adapter that does not wrap them used to let them out raw once
     # the retries were spent, past every rescue a caller had written.
-    def request(method, path, operation:, query: nil, body: nil, resource_class: nil)
+    def request(method, path, operation:, query: nil, body: nil, headers: nil, resource_class: nil)
       started  = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      response = decode(perform(method, path, query, body))
+      response = decode(perform(method, path, query, body, headers))
       log_response(method, path, response, started)
 
       return response if response.success?
@@ -347,14 +403,19 @@ module ZammadAPI
 
     private
 
-    def perform(method, path, query, body)
-      # Built before the request is logged, so a rejected query does not leave
-      # a line claiming a request that was never made.
+    def perform(method, path, query, body, headers)
+      # Built before the request is logged, so a rejected query or header does
+      # not leave a line claiming a request that was never made.
       params = query && Transport.stringify_query(query)
-      log_request(method, path, query, body)
+      fields = headers && Transport.stringify_headers(headers)
+      log_request(method, path, query, body, fields)
 
       @connection.public_send(method, path) do |request|
         request.params.update(params) if params
+        # One at a time rather than in bulk, so that every name goes through
+        # Faraday's own case-insensitive writer and replaces the header it
+        # names rather than sitting beside it under another spelling.
+        fields&.each { |name, value| request.headers[name] = value }
         request.body = body if body
         request.headers['From'] = on_behalf_of if on_behalf_of
       end
@@ -528,8 +589,8 @@ module ZammadAPI
             'drop the parsing middleware - `c.response :json` is the usual one - from the `middleware:` callable.'
     end
 
-    def log_request(method, path, query, body)
-      logger.debug { "Zammad API request: #{method.to_s.upcase} #{path}#{" query=#{redact(query).inspect}" if query}" }
+    def log_request(method, path, query, body, headers)
+      logger.debug { "Zammad API request: #{method.to_s.upcase} #{path}#{" query=#{redact(query).inspect}" if query}#{" headers=#{redact(headers).inspect}" if headers}" }
       logger.debug { "Zammad API payload: #{redact(body).inspect}" } if body
     end
 

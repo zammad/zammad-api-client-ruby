@@ -35,8 +35,13 @@ A breaking release that modernises the whole gem. See
   offset.
 - `Collection#per_page` and `#current_page` are no longer public. `inspect` reports both.
 - There is no `per`. The page size belongs to the call that reads: `find_each(batch_size:)`
-  to walk, `in_batches(of:)` to batch, `page(number, of:)` for one page. Everything else —
-  `each`, `first`, `lazy`, `count` — fetches 100 per request.
+  to walk, `in_batches(of:)` to batch, `page(number, of:)` for one page. Everything else
+  fetches as many records as the endpoint serves.
+- A collection fetches the endpoint's own page size rather than a fixed 100 — 1000 on the
+  index endpoints, 100 on `/api/v1/tickets`, 200 on a search — so a walk spends roughly a
+  tenth of the round trips, each of which is a fresh TLS handshake under Faraday's default
+  adapter. `page(n)` without `of:` is a page of that size, so pin it with
+  `page(n, of: 100)` where a persisted page number has to keep meaning what it did.
 - `where` rejects `page`, `per_page`, `expand`, `only_total_count` and `query` with an
   `ArgumentError`. They used to be accepted and silently overridden.
 - A `nil` query value raises `ArgumentError`. 1.x dropped the parameter, so
@@ -70,8 +75,10 @@ A breaking release that modernises the whole gem. See
   effect for every path that builds a URL from the attributes and not at all for the record
   those paths then reported on: `group.id = 99; group.destroy` sent `DELETE` to group 99
   and left the record saying group 1 was the one destroyed. Zammad does not let an id be
-  set either, so no call that used to reach the server is lost. A new record may still be
-  built carrying one — `client.group.new(id: 5)`.
+  set either, so no call that used to reach the server is lost. The constructor refuses it
+  too: `client.group.new(id: 5)` raises, because a new record is sent in full, so the one
+  spelling that reached the wire was the one nothing checked. `Resource.from_response` is
+  how a body Zammad served becomes a record carrying its id.
 - `record.destroy` marks the record `destroyed?`, and `persisted?` answers false for one.
   1.x left a destroyed record looking live, so a later `save` went out as a `PUT` to the
   deleted id and came back a 404 one call after the mistake.
@@ -97,11 +104,22 @@ A breaking release that modernises the whole gem. See
   `UnknownResourceError`; use the raw request methods for endpoints this gem does not
   model.
 - The internal `new_instance` accessor was replaced by `new_record?` and `persisted?`, and
-  the instance-level `url` accessor by the class-level `resource_path`. Both old names
-  read as unknown attributes and return `nil` rather than raising, because a Zammad
-  record carries administrator-defined attributes and a reader cannot tell a removed
-  method from a custom field — so `if record.new_instance` silently takes the else
-  branch.
+  the instance-level `url` accessor by the class-level `resource_path`. Both old names now
+  raise `NoMethodError` as unknown attributes, naming the attributes the record does carry.
+- A reader for an attribute the record does not carry raises `NoMethodError` instead of
+  answering `nil`. A typo read as `nil` and flowed on into whatever was written with it,
+  and `respond_to?` and `method` disagreed with the call throughout, so generic code that
+  asks before it calls was told the reader did not exist. `record[:x]`,
+  `record.fetch(:x, nil)` and `record.key?(:x)` are the readers for an attribute that may
+  legitimately be absent — which it may, because Zammad serves a reduced object where the
+  authenticated user may not see the whole record, and the message says so.
+- `Collection#find` raises `ArgumentError` when given an id. `find` on a resource proxy is
+  the lookup by id; on a collection it is `Enumerable#find`, whose argument is an ifnone
+  callable — so `client.ticket.all.find(1)` answered with an `Enumerator`, made no request
+  and raised nothing. Use `client.ticket.find(1)`, or `detect { … }` for the block form.
+- `TicketArticle#attachments` raises `ParseError` for attachment metadata that is not a
+  list of objects, where it used to die with a bare `NoMethodError` from inside the gem —
+  past the `rescue ZammadAPI::Error` every caller is told to write.
 - `page(number, of: size)` raises `ArgumentError` when `size` is larger than the endpoint
   serves, instead of quietly reducing it. A reduced page size moves the page:
   `page(3, of: 500)` against `/api/v1/tickets` went out as `page=3&per_page=100` and
@@ -122,6 +140,15 @@ A breaking release that modernises the whole gem. See
   answered 404, which reached `find_by` as a `NotFoundError` from a method documented to
   return `nil`, so `find_by(…) || create(…)` raised instead of creating. Walk those short
   lists with `all.detect { … }` instead.
+- Nothing reads an `x-total-count` response header any more, because Zammad has never sent
+  one — from any endpoint, in any version. `Response#reported_total` was built on it, and
+  two guards read that: `Collection#each` would have ended a walk one request early on the
+  reported figure, and a `has_many` reader would have refused a list it judged truncated.
+  Both were dead, and the one that could have acted was the one that could have been
+  wrong, since it ends a walk on a figure the records do not corroborate. Zammad reports a
+  total in the body instead, and only where asked: `only_total_count` — which is what
+  `Collection#count` uses on a search — or `with_total_count` on `/search`, and `full` on
+  the index endpoints that render through `model_index_render`.
 - A record id of `.` or `..` raises `ArgumentError`. Both are made entirely of unreserved
   characters, so escaping carried them through and `find('..')` resolved one path level
   up — onto the index endpoint, or through a `has_many` path onto every article on the
@@ -129,9 +156,19 @@ A breaking release that modernises the whole gem. See
 
 ### Added
 
-- `Response#reported_total` reads the size of the whole result from the `x-total-count`
-  header an index endpoint sends, or `nil` where it sent none or something that is not a
-  count. It is what the collection walk and the `has_many` guard both ask.
+- `Collection#first` and `#take` size their own request: `all.first` is one request for one
+  record and `all.first(5)` one request for five, where `Enumerable` took them off the
+  front of a page sized for walking. The request is sized rather than the collection
+  limited to a page, so a read still walks on where a page comes back shorter than it was
+  asked for — `first(5)` answers with five records if five exist. A collection `page`
+  already limited keeps its own size, because that size says which records it holds.
+- `client.get`, `#post`, `#put` and `#delete` take `headers:`, for an endpoint that needs
+  one. Names are case-insensitive and two spellings of one header are refused rather than
+  merged; `Authorization` and `From` are refused outright, being what the client's
+  credentials and `on_behalf_of` are for.
+- `Test::Request#headers` records the headers a request asked for, stringified and
+  downcased through the real transport's own rules, so a stand-in cannot accept a header
+  the wire would refuse.
 - `client.get`, `client.post`, `client.put` and `client.delete` reach any endpoint of the
   Zammad API, including the many this gem does not model. They return a
   `ZammadAPI::Response` and keep authentication, timeouts, retries, credential redaction,

@@ -26,7 +26,14 @@ module ZammadAPI
       # Narrowed from Base so callers get the concrete article type.
       def self.from_response: (Transport, Hash[untyped, untyped] attributes) -> TicketArticle
 
+      # private_constant in the source; RBS has no way to say so.
+      ATTACHMENTS_OPERATION: String
+
       def attachments: () -> Array[TicketArticleAttachment]
+
+      private
+
+      def attachment: (untyped raw) -> TicketArticleAttachment
     end
 
     class TicketArticleAttachment

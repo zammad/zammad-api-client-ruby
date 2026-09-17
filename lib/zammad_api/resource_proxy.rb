@@ -295,7 +295,19 @@ module ZammadAPI
     #   @return [Boolean]
     #   @see Collection#empty?
 
-    def_delegators :all, :where, :each, :find_each, :in_batches, :page, :pluck, :count, :size, :length, :empty?
+    # @!method first(count = nil)
+    #   Overrides +Enumerable#first+ so that it reads one sized page rather
+    #   than taking records off the front of one sized for walking.
+    #   @param count [Integer, nil] how many records to read
+    #   @return [Resources::Base, Array<Resources::Base>, nil]
+    #   @see Collection#first
+
+    # @!method take(count)
+    #   @param count [Integer] how many records to read
+    #   @return [Array<Resources::Base>]
+    #   @see Collection#take
+
+    def_delegators :all, :where, :each, :find_each, :in_batches, :page, :pluck, :count, :size, :length, :empty?, :first, :take
 
     # @!endgroup
 

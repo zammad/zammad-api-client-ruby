@@ -15,7 +15,6 @@ module ZammadAPI
     def self.decode_body: (String?, String) -> [untyped, bool]
 
     def success?: () -> bool
-    def reported_total: () -> Integer?
     def json?: () -> bool
     def decoded: (Symbol shape, operation: String, ?resource_class: Class?) -> untyped
 

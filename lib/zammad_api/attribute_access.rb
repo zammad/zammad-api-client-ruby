@@ -9,8 +9,9 @@ module ZammadAPI
   #
   # Zammad objects can carry administrator-defined custom attributes, so the
   # set of readable attributes is not known ahead of time and is resolved
-  # through +method_missing+. Use {#fetch} when a missing attribute should be
-  # an error rather than +nil+.
+  # through +method_missing+. A reader for an attribute the record does not
+  # carry raises +NoMethodError+; {#[]}, {#fetch} with a default, and {#key?}
+  # are the readers for an attribute that may be absent.
   #
   # This also carries the object protocols a record is expected to answer:
   # {#==} and {#hash} identify a record by its id, {#deconstruct_keys} makes
@@ -179,8 +180,25 @@ module ZammadAPI
       identifier = name.to_s
       return super if NON_ATTRIBUTE_SUFFIXES.any? { identifier.end_with?(it) }
       return write_attribute(identifier.delete_suffix('=').to_sym, args.first) if ATTRIBUTE_WRITER.match?(identifier)
+      return attributes[name] if attributes.key?(name)
 
-      attributes[name]
+      # An attribute the record does not carry used to read as nil, which made
+      # `ticket.titel` a silent nil that flowed on into whatever was written
+      # with it - and left this module the one place in the gem that answers a
+      # question it cannot answer instead of saying so. It also put
+      # `respond_to?` and the call itself at odds: `respond_to?(:titel)` was
+      # false and `method(:titel)` raised NameError while `ticket.titel`
+      # worked, so generic code that asks before it calls - a serializer, a
+      # delegator, `try` - was told the reader did not exist.
+      #
+      # Built rather than left to `super`, so that the message can name what
+      # to reach for instead, while `name` and `receiver` stay what a bare
+      # NoMethodError would have carried.
+      #
+      # The steep:ignore is for `name`: NameError.new takes a Symbol there and
+      # NoMethodError#name answers with one, while the core signature
+      # describes the parameter as a String.
+      raise NoMethodError.new(unknown_attribute_message(name), name, args, receiver: self) # steep:ignore ArgumentTypeMismatch
     end
 
     # `[]=` is a defined method, so `respond_to_missing?` never sees it and a
@@ -189,9 +207,15 @@ module ZammadAPI
     # That is the invariant the writer branch below is conditional for: generic
     # code asks before it writes, and a record that claims a writer it would
     # refuse leads it straight into the exception it was checking to avoid.
+    #
+    # Compared as a String, because `respond_to?` takes either spelling and
+    # Ruby does not normalise the argument before it reaches here. Compared to
+    # the Symbol alone, `respond_to?('[]=')` fell through to the definition
+    # and answered true on a record that refuses every write - the same wrong
+    # answer this method exists to prevent, reached by the other spelling.
     # rubocop:disable-next Style/OptionalBooleanParameter -- Ruby's own signature
     def respond_to?(name, include_private = false)
-      return writable_attributes? if name == :[]=
+      return writable_attributes? if name.to_s == '[]='
 
       super
     end
@@ -210,6 +234,27 @@ module ZammadAPI
     end
 
     private
+
+    # Why an attribute is missing is worth saying, because the two reasons
+    # lead somewhere quite different: a name that is simply wrong, and a
+    # record Zammad served less of than it holds. The second is the same fact
+    # {Resources::Base#no_id_message} and {Resources::Base#write_attribute}
+    # are written around - Zammad reduces the object it serializes for a
+    # client whose user may not see the whole record - and it is not
+    # something the spelling of the call can show.
+    def unknown_attribute_message(name)
+      # Sorted by the name rather than by the key, because a key that could
+      # not become a Symbol is left as it arrived - {DeepCopy.symbolize} says
+      # so - and `[:name, 1].sort` raises, which would replace this message
+      # with an ArgumentError from inside the method that explains it.
+      carried = attributes.keys.sort_by(&:to_s).join(', ')
+
+      "undefined attribute #{name} for #{self.class.name}. This record carries " \
+        "#{attributes.empty? ? 'no attributes at all' : carried}. " \
+        "Check the spelling, or read it with [#{name.inspect}] or fetch(#{name.inspect}, nil) where it may be absent. " \
+        'Zammad also serves a reduced object where the authenticated user may not see the whole record, so an ' \
+        'attribute the record has in Zammad can still be missing here - check what this client may read.'
+    end
 
     # Whether this record stages attribute writes, so that {#respond_to?} and
     # calling a writer agree.

@@ -2,6 +2,7 @@
 
 require_relative '../associations'
 require_relative '../attribute_access'
+require_relative '../deep_copy'
 require_relative '../errors'
 require_relative '../transport'
 
@@ -157,12 +158,17 @@ module ZammadAPI
 
         # Builds a record that is already stored in Zammad.
         #
+        # Straight to the state, past the constructor's refusal of attributes
+        # a caller may not stage. Zammad serves +id+ in every body it answers
+        # with, and +id+ is the one attribute that refusal exists for.
+        #
         # @api private
         # @param transport [Transport]
         # @param attributes [Hash]
         # @return [Base]
         def from_response(transport, attributes)
-          record = new(transport, attributes)
+          record = allocate
+          record.send(:setup, transport, attributes)
           record.send(:mark_persisted!)
           record
         end
@@ -294,22 +300,19 @@ module ZammadAPI
 
       # @param transport [Transport]
       # @param attributes [Hash, nil]
+      # @raise [Error] when an attribute cannot be staged, such as +id+
       def initialize(transport, attributes = {})
-        @transport  = transport
-        @attributes = frozen_attributes(attributes || {})
-        # What #changes measures against: the attributes this record arrived
-        # with, kept apart from the ones it currently holds. The two share the
-        # one frozen Hash until the first write copies it.
-        @baseline   = @attributes
-        @changes    = {}
-        @new_record = true
-        @destroyed  = false
-        @error      = nil
-        @related    = nil
-        # Whether what this record holds came back from a save rather than
-        # from a read. Only {#no_id_message} asks, and only for a record left
-        # without an id, where the two lead somewhere quite different.
-        @saved      = false
+        given = attributes || {}
+        # The same refusal the writers make, at the one door that did not make
+        # it. `group.id = 99` is refused with a sentence about what an id is
+        # for, and `client.group.new(id: 99)` was accepted in silence - and
+        # then `save` POSTed `{"id": 99, ...}`, because a new record is sent in
+        # full. So the one spelling that reached the wire was the one nothing
+        # checked, and Zammad's answer to it was the first news of the
+        # mistake. {.from_response} is the way in for a body Zammad served,
+        # which carries an id precisely because it is a record that has one.
+        given.each { |key, value| refuse_unwritable!(DeepCopy.symbolize(key), value) }
+        setup(transport, given)
       end
 
       # @return [Boolean] whether this record has not been stored yet
@@ -544,6 +547,31 @@ module ZammadAPI
       def inspect = "#<#{self.class.name} id=#{id.inspect} new_record=#{new_record?}#{' destroyed=true' if destroyed?} attributes=#{attributes.inspect}>"
 
       private
+
+      # Everything a record is, in the one place both ways of building one go
+      # through. Held apart, {.from_response} would restate this list by hand
+      # and the next field added to the constructor would be left unset on
+      # every record built from a response - the argument {Client#setup} is
+      # written around, one class over.
+      #
+      # @return [void]
+      def setup(transport, attributes)
+        @transport  = transport
+        @attributes = frozen_attributes(attributes)
+        # What #changes measures against: the attributes this record arrived
+        # with, kept apart from the ones it currently holds. The two share the
+        # one frozen Hash until the first write copies it.
+        @baseline   = @attributes
+        @changes    = {}
+        @new_record = true
+        @destroyed  = false
+        @error      = nil
+        @related    = nil
+        # Whether what this record holds came back from a save rather than
+        # from a read. Only {#no_id_message} asks, and only for a record left
+        # without an id, where the two lead somewhere quite different.
+        @saved      = false
+      end
 
       def mark_persisted!
         @new_record = false

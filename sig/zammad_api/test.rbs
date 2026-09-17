@@ -15,6 +15,7 @@ module ZammadAPI
       attr_reader path: String
       attr_reader query: Hash[String, untyped]
       attr_reader body: untyped
+      attr_reader headers: Hash[String, String]
       attr_reader on_behalf_of: String?
 
       def self.new: (**untyped) -> instance
@@ -42,6 +43,7 @@ module ZammadAPI
       operation: String,
       ?query: Hash[untyped, untyped]?,
       ?body: untyped,
+      ?headers: Hash[untyped, untyped]?,
       ?resource_class: Class?,
       ?on_behalf_of: String?
     ) -> Response
@@ -73,7 +75,7 @@ module ZammadAPI
       def with_config: (Config) -> Test::Transport
 
 
-      def request: (Symbol method, String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?resource_class: Class?) -> Response
+      def request: (Symbol method, String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?, ?resource_class: Class?) -> Response
     end
   end
 end

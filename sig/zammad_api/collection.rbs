@@ -2,7 +2,6 @@ module ZammadAPI
   class Collection
     include Enumerable[untyped]
 
-    DEFAULT_PER_PAGE: Integer
     RESERVED_QUERY_KEYS: Array[Symbol]
 
     @transport: Transport
@@ -26,7 +25,7 @@ module ZammadAPI
       filterable: Array[Symbol],
       filter_hint: String,
       ?query: Hash[Symbol, untyped],
-      ?per_page: Integer,
+      ?per_page: Integer?,
       ?page: Integer?,
       ?countable: bool
     ) -> void
@@ -38,6 +37,11 @@ module ZammadAPI
     def in_batches: (?of: Integer?) { (Array[untyped]) -> void } -> Collection
                   | (?of: Integer?) -> Enumerator[Array[untyped], Collection]
     def page: (Integer number, ?of: Integer?) -> Collection
+    def first: () -> untyped
+             | (Integer count) -> Array[untyped]
+    def take: (Integer count) -> Array[untyped]
+    def find: (?untyped ifnone) { (untyped) -> boolish } -> untyped
+            | (*untyped) -> untyped
     def where: (**untyped) -> Collection
     def pluck: (*(Symbol | String) keys) -> Array[untyped]
     def count: (*untyped) ?{ (untyped) -> boolish } -> Integer
@@ -48,6 +52,9 @@ module ZammadAPI
 
     private
 
+    def own_request_for_first?: (untyped count) -> bool
+    def find_by_id_message: (untyped) -> String
+    def resource_name: () -> String
     def ignored_message: (Array[Symbol]) -> String
     def positive_integer!: (untyped, String) -> Integer
     def page_size!: (untyped, String) -> Integer
@@ -55,8 +62,7 @@ module ZammadAPI
     def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped]) -> Collection
     def normalized_filters: (Hash[untyped, untyped] params, ?String? prefix) -> Hash[Symbol, untyped]
     def nested_filters: (Symbol name, untyped value, String? prefix) -> untyped
-    def fetch: (Integer, Integer) -> [ Array[untyped], Response, Integer ]
-    def reached_total?: (Integer, Integer?, Integer, Integer) -> bool
+    def fetch: (Integer, Integer) -> [ Array[untyped], Integer ]
     def total_count: () -> Integer?
     def clamp_per_page: (untyped) -> Integer
   end

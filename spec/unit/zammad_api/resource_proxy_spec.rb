@@ -395,6 +395,11 @@ RSpec.describe ZammadAPI::ResourceProxy do
     end
   end
 
+  # What a collection over this endpoint fetches per request when nothing asks
+  # for another size: as many as the endpoint serves. Read off the resource
+  # rather than written out, so that these stubs follow the declaration.
+  def default_per_page = ZammadAPI::Resources::Group.page_limit
+
   describe '#all' do
     it 'returns a collection' do
       expect(proxy.all).to be_a(ZammadAPI::Collection)
@@ -402,7 +407,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
 
     it 'defaults to the collection page size' do
       stub = stub_request(:get, url)
-        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => ZammadAPI::Collection::DEFAULT_PER_PAGE.to_s })
+        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => default_per_page.to_s })
         .to_return(json_response([]))
 
       proxy.all.to_a
@@ -417,7 +422,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
   describe '#where' do
     it 'returns a collection carrying the query parameters' do
       stub = stub_request(:get, url)
-        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => '100', 'sort_by' => 'name' })
+        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => default_per_page.to_s, 'sort_by' => 'name' })
         .to_return(json_response([]))
 
       proxy.where(sort_by: 'name').to_a
@@ -447,7 +452,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
   end
 
   describe 'enumerating a proxy directly' do
-    def stub_page(page, records, per_page: ZammadAPI::Collection::DEFAULT_PER_PAGE)
+    def stub_page(page, records, per_page: default_per_page)
       stub_request(:get, url)
         .with(query: { 'expand' => 'true', 'page' => page.to_s, 'per_page' => per_page.to_s })
         .to_return(json_response(records))
@@ -455,7 +460,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
 
     # The walk confirms a short page with one more request, so a collection
     # that fits in a single page needs the empty page after it.
-    def stub_last_page(page, records, per_page: ZammadAPI::Collection::DEFAULT_PER_PAGE)
+    def stub_last_page(page, records, per_page: default_per_page)
       stub_page(page, records, per_page: per_page)
       stub_page(page + 1, [], per_page: per_page)
     end
@@ -471,14 +476,16 @@ RSpec.describe ZammadAPI::ResourceProxy do
     end
 
     it 'walks pages, like the collection does' do
-      stub_page(1, Array.new(ZammadAPI::Collection::DEFAULT_PER_PAGE) { { id: it + 1 } })
-      stub_page(2, [{ id: 101 }])
+      stub_page(1, Array.new(default_per_page) { { id: it + 1 } })
+      stub_page(2, [{ id: default_per_page + 1 }])
 
-      expect(proxy.count).to eq(101)
+      expect(proxy.map(&:id).size).to eq(default_per_page + 1)
     end
 
-    it 'stops early for #first, without walking everything' do
-      stub_page(1, [{ id: 1 }, { id: 2 }])
+    # Forwarded to the collection rather than left to Enumerable#first, which
+    # would take one record off the front of a page sized for walking.
+    it 'reads one sized page for #first, without walking everything' do
+      stub_page(1, [{ id: 1 }], per_page: 1)
 
       expect(proxy.first.id).to eq(1)
       expect(a_request(:get, url).with(query: hash_including({ 'page' => '2' }))).not_to have_been_made
@@ -544,6 +551,18 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect(proxy.length).to eq(1)
     end
 
+    it 'forwards #take, so it costs what #first costs' do
+      stub_page(1, [{ id: 1 }, { id: 2 }], per_page: 2)
+
+      expect(proxy.take(2).map(&:id)).to eq([1, 2])
+    end
+
+    it 'forwards #first' do
+      stub_page(1, [{ id: 1, name: 'Users' }], per_page: 1)
+
+      expect(proxy.first.name).to eq('Users')
+    end
+
     it 'forwards #empty?' do
       stub_request(:get, url).with(query: hash_including({})).to_return(json_response([]))
 
@@ -598,7 +617,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
 
     it 'requests the search endpoint' do
       stub = stub_request(:get, "#{url}/search")
-        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => '100', 'query' => 'support' })
+        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => ZammadAPI::ResourceProxy::SEARCH_MAX_PER_PAGE.to_s, 'query' => 'support' })
         .to_return(json_response([]))
 
       proxy.search('support').to_a

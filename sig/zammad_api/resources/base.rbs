@@ -63,6 +63,7 @@ module ZammadAPI
 
       private
 
+      def setup: (Transport, Hash[untyped, untyped] attributes) -> void
       def mark_persisted!: () -> void
       def raise_if_destroyed!: (String action) -> void
       def raise_if_new!: (String operation) -> void

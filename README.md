@@ -148,6 +148,13 @@ requests as the client finished building them and responses before anything else
 Faraday stays an implementation detail either way: an unregistered adapter raises
 `ZammadAPI::ConfigurationError`, not a Faraday error.
 
+Faraday's default adapter, `net_http`, opens and closes a connection around every
+request, so a walk of N pages is N TCP connections and N TLS handshakes. That is the
+default because it needs no extra gem; for anything that pages, downloads attachments in a
+loop, or runs a worker pool, add `faraday-net_http_persistent` to your Gemfile and pass
+`adapter: :net_http_persistent` as above. Nothing else changes — the option is the whole of
+it.
+
 Middleware that decodes the response body — `connection.response :json` — is the one thing
 the seam will not take, and says so with a `ZammadAPI::ConfigurationError`. This gem parses
 JSON itself, and hands the undecoded bytes back as the file from
@@ -177,16 +184,32 @@ client.put('api/v1/roles/2', body: {note: 'Updated'})
 client.delete('api/v1/tags/remove', query: {object: 'Ticket', o_id: 1, item: 'urgent'})
 ```
 
+All four take `headers:`, for an endpoint that needs one:
+
+```ruby
+client.get('api/v1/tickets/1', headers: {'Accept-Language' => 'de-de'})
+```
+
+Names are case-insensitive, and two spellings of one header are refused rather than merged.
+`Authorization` and `From` are refused outright: the first is what the client's credentials
+are for, the second is what `on_behalf_of` sets, and replacing either from a single request
+would leave the client reporting something it no longer does.
+
 Each returns a `ZammadAPI::Response`, so the status and headers stay reachable:
 
 ```ruby
 response = client.get('api/v1/tickets')
 response.status              # => 200
-response.headers['x-total-count']
-response.reported_total      # => 42, or nil when the endpoint reported none
+response.headers['content-type']
 response.body                # decoded JSON, or the raw body for anything else
+response.raw_body            # the bytes as they arrived
 response.json?               # => whether the body was decoded
 ```
+
+Zammad reports the size of a result in the body rather than in a header, and only
+where you ask for it: `only_total_count=true` or `with_total_count=true` on a `/search`
+endpoint, and `full=true` on the index endpoints that render through
+`model_index_render`. `count` on a search collection uses the first of those.
 
 Paths are relative to the instance URL, and a leading slash is ignored, so they can be
 pasted straight from the Zammad documentation. A non-2xx response raises the same error
@@ -214,10 +237,11 @@ group = client.group.create(name: 'Support', note: 'Some note')
 
 ```ruby
 group = client.group.find(42)
-group.name       # => "Support"
-group[:name]     # same, without method_missing
+group.name         # => "Support"
+group[:name]       # same, and nil rather than an error when it is absent
 group.fetch(:name) # raises KeyError if the attribute is absent
-group.to_h       # every attribute, as a Hash you may modify
+group.key?(:name)  # => true
+group.to_h         # every attribute, as a Hash you may modify
 ```
 
 Or by attribute value:
@@ -257,8 +281,22 @@ therefore still create a duplicate — as writing the search out by hand would.
 or not. Search hits come back by relevance, so a record carrying the value is at the top of
 them or not among them at all; to look further, page through `search` yourself.
 
-Zammad records can carry administrator-defined custom attributes, so an unknown reader
-returns `nil` rather than raising. Use `fetch` when a missing attribute should be an error.
+Zammad records can carry administrator-defined custom attributes, so readers are resolved
+against the attributes the record arrived with rather than declared ahead of time. A reader
+for an attribute the record does not carry raises `NoMethodError`, naming what it does
+carry — a typo is not worth a silent `nil` that flows on into whatever you write with it:
+
+```ruby
+group.titel          # NoMethodError: undefined attribute titel for ...
+group[:titel]        # => nil
+group.fetch(:titel, nil) # => nil
+group.key?(:titel)   # => false
+```
+
+That matters beyond typos: Zammad serves a reduced object where the authenticated user may
+not see the whole record, so an attribute that exists in Zammad can be missing here. The
+message says so. Use `[]`, `fetch` with a default, or `key?` wherever an attribute may
+legitimately be absent.
 
 `attributes` and `changes` are deeply frozen, because a record that let you write into
 them would report a change it had never staged and would not send:
@@ -529,7 +567,7 @@ end
 ```ruby
 tickets = client.ticket.all
 
-tickets.page(2)           # page 2 of the default 100 per page
+tickets.page(2)           # page 2 at the size the endpoint serves
 tickets.page(2, of: 10)   # records 11 to 20
 ```
 
@@ -538,8 +576,9 @@ original untouched.
 
 ### Page size
 
-A request fetches 100 records by default. Three calls take another size, each for its own
-kind of work:
+A request fetches as many records as the endpoint will serve — 100 for `/api/v1/tickets`,
+200 for a search, 1000 for the other index endpoints — so a walk spends as few round trips
+as it can. Three calls take another size, each for its own kind of work:
 
 ```ruby
 client.ticket.all.find_each(batch_size: 50) { |ticket| archive(ticket) }  # walking
@@ -554,8 +593,7 @@ size: `client.ticket.all.find_each(batch_size: 50).first(7)`.
 `page(3, of: 50)` already says which records the collection holds, and re-sizing it would
 quietly hand back different ones. Size the page itself, or slice with `each_slice`.
 
-Zammad caps the page size per endpoint — 100 for `/api/v1/tickets`, 200 for a search, 1000
-for the other index endpoints. `find_each` and `in_batches` are reduced to that cap: a
+That cap is also the ceiling. `find_each` and `in_batches` are reduced to it: a
 batch size is how much to fetch at a time, so a smaller one costs more requests and still
 yields every record. `page` raises instead, because a page size also says *which* records
 you get — `page(3, of: 500)` reduced to 100 hands back records 201 to 300 rather than 1001
@@ -566,6 +604,20 @@ that cap, so an instance that pages smaller than expected is walked to the end r
 truncated at the first short page.
 That keeps a walk complete: a page size the server silently shrank would otherwise end the
 iteration at the first page.
+
+`first` and `take` size their own request rather than taking records off the front of one
+sized for walking, so the cheap-looking call is cheap:
+
+```ruby
+client.ticket.all.first        # one request, for one record
+client.ticket.all.first(5)     # one request, for five
+client.ticket.all.take(5)      # the same, and the same cost
+```
+
+They size the request, not the collection, so they still read on where a page comes back
+shorter than it was asked for — `first(5)` answers with five records if five exist, however
+the endpoint chooses to page them. A collection `page` already limited keeps its own size,
+since that size says which records it holds.
 
 ### Reading single attributes
 
@@ -579,22 +631,44 @@ shrinking the request.
 
 ### Counting
 
-`count` walks the pages, except on a search, which Zammad can count in a single request:
+`count` is one request on a search, which Zammad can answer without serving the records.
+Every other endpoint has to be walked, because an index endpoint offers nothing cheaper:
+`model_index_render` reads `sort_by`, `order_by` and the paging and drops every other
+parameter, so it has no answer for `only_total_count` and no total to report.
 
 ```ruby
 client.ticket.search('state.name:open').count   # one request
-client.ticket.all.count                         # one request per page of 100
+client.ticket.all.count                         # one request per page
 ```
 
-`size` and `length` are `count`, and cost the same. `empty?` asks for a single record
-rather than a page:
+`size` and `length` are `count`, and cost the same. `empty?` and `first` ask for a single
+record rather than a page:
 
 ```ruby
 client.ticket.search('state.name:merged').empty? # one request, for one record
-client.group.all.size                            # => 12
+client.group.all.size                            # => 12, having walked
+```
+
+A block or an argument is `Enumerable#count` counting matches, and walks either way:
+
+```ruby
+client.ticket.all.count { it.state == 'open' }  # walks every page
 ```
 
 Nothing is cached, so every traversal of a collection fetches again.
+
+### `find` is a lookup, not a filter
+
+`find` on a resource takes an id. On a collection it is `Enumerable#find`, which takes a
+block — and its argument is an ifnone callable, not an id, so passing one is refused rather
+than answered with an Enumerator and no request:
+
+```ruby
+client.ticket.find(1)                 # the lookup by id
+client.ticket.all.detect { ... }      # the block form
+client.ticket.all.find { ... }        # the same
+client.ticket.all.find(1)             # ArgumentError, naming both of the above
+```
 
 ## Deriving clients
 
@@ -730,7 +804,7 @@ raises `NotFoundError`, and one with `status: 422` makes `save` return `false`.
 | ------ | ------------ |
 | `stub(verb, path, status:, body:, headers:, query:)` | Declares a response. Stubbing the same endpoint twice with the same scope describes a sequence; the last stub answers every later request. `query:` matches a subset, so it need not repeat `expand`, `page` or `per_page`. |
 | `client` | A client wired to this stand-in. |
-| `requests` | Every request made, oldest first, as `verb` / `path` / `query` / `body` / `on_behalf_of`. |
+| `requests` | Every request made, oldest first, as `verb` / `path` / `query` / `body` / `headers` / `on_behalf_of`. |
 | `reset` | Forgets the stubs and the recorded requests. |
 
 A `Hash` or `Array` body is served as JSON and gets `content-type: application/json`
@@ -741,6 +815,12 @@ as `text/html` comes back as the raw string and reading a record from it raises
 names downcased, the way a real `Response` carries them; a value that is not text, or two
 spellings of one header name, are refused where the stub is written rather than turned
 into something the wire could not send.
+
+`query` and `headers` are recorded through the real transport's own stringification, so
+they hold what a request would have carried rather than the raw Ruby values — and a header
+the wire would refuse is refused here too. `headers` names only what the call asked for;
+the ones the client sets from its configuration are not in it, and an `on_behalf_of` scope
+has a field of its own.
 
 A request that was not stubbed raises `ZammadAPI::Test::UnstubbedRequestError`, listing
 what is stubbed, rather than answering with something empty. It is deliberately not a
@@ -856,12 +936,6 @@ at the call site. Start with the handful of changes that do not.
 
   Use `assign_attributes(name: 'Support')`, or `update` to assign and save.
 
-- **`record.new_instance` and `record.url` return `nil`**, because an unknown attribute
-  reads as `nil` rather than raising — Zammad records carry administrator-defined
-  attributes, so a reader cannot tell a removed method from a custom field. `if
-  record.new_instance` now always takes the else branch. Use `new_record?` /
-  `persisted?`, and `Resource.resource_path` on the class.
-
 - **`rescue Faraday::ConnectionFailed`** (and any other Faraday exception) no longer
   matches. Transport failures are wrapped, so rescue `ZammadAPI::ConnectionError`,
   `ZammadAPI::TimeoutError`, or `ZammadAPI::TransportError` for both.
@@ -886,6 +960,7 @@ at the call site. Start with the handful of changes that do not.
 | `collection.page_next` / `page_prev`     | `collection.page(n)` or `in_batches`             | Removed; they mutated shared state                                  |
 | `collection.each_page { ... }`           | `collection.in_batches { ... }`                  | Ruby already has a name for this                                    |
 | `collection[3]`                          | `collection.page(4, of: 1).first`                | An index that costs a request, and that ignored `page`, was a trap  |
+| `collection.find(1)`                     | `client.x.find(1)`, or `collection.detect { ... }` | On a collection `find` is `Enumerable#find`, whose argument is an ifnone callable — so an id answered with an Enumerator and made no request. It raises now |
 | `client.x.all(per_page: 50)`             | `client.x.all.page(1, of: 50)`, `find_each(batch_size: 50)` | `all` accepted the argument and discarded it; page size belongs to the call that reads |
 | `client.x.all(active: true)`             | `client.x.search(...)`, or `client.x.all.detect { ... }`    | The filter never reached the request in 1.x, and could not have: Zammad's index endpoints do not filter. `where` now raises instead of quietly returning everything. `find_by` needs a string value to search on, so it replaces `all(email: '...')` rather than `all(active: true)` |
 | `client.x.search(query: 'zammad')`       | `client.x.search('zammad')`                      | The search term is the argument, not a keyword                      |
@@ -899,8 +974,10 @@ at the call site. Start with the handful of changes that do not.
 | `record.attributes[:x] = 1`         | `record.x = 1`, or `record.to_h` for a copy          | Writing through the reader staged no change, so `save` never sent it  |
 | `record.attributes = {...}`         | `record.assign_attributes(...)` / `record.update(...)` | The writer is gone, and the name now stages an attribute of its own |
 | `record.id = 5`                     | `client.x.find(5)`                                   | The id addresses the record, so a staged one deleted or updated a different record than it reported |
-| `record.new_instance`               | `record.new_record?` / `record.persisted?`           | Internal flag is no longer public                                    |
+| `record.new_instance`               | `record.new_record?` / `record.persisted?`           | Internal flag is no longer public; the old name raises `NoMethodError`, naming the attributes the record does carry |
 | `resource.url` (instance)           | `Resource.resource_path` (class)                     | Clashed with an attribute named `url`                                |
+| `record.unknown_attribute` → `nil`  | raises `NoMethodError`; use `record[:x]`, `fetch(:x, nil)` or `key?(:x)` | A typo read as `nil` and flowed on into whatever was written with it. Zammad also serves a reduced object where the user may not see the whole record, and that is worth being told about |
+| `client.x.new(id: 5)`               | `client.x.find(5)`                                   | The constructor was the one door that did not refuse a staged id — and the only one whose value reached Zammad, since a new record is sent in full |
 | `client.user.find(ticket.customer_id)` | `ticket.related.customer`                         | Following a foreign key needed the client threaded through           |
 
 ### Errors
@@ -924,6 +1001,11 @@ at the call site. Start with the handful of changes that do not.
 | Ruby >= 3.0                                      | Ruby >= 3.4                | 3.0 through 3.3 are end-of-life or nearly so                 |
 
 ### Defaults 1.x did not have
+
+A collection fetches as many records per request as the endpoint serves — 1000 on the index
+endpoints, 100 on tickets, 200 on a search — rather than a fixed 100, so a walk spends
+roughly a tenth of the round trips. `page(n)` without `of:` is a page of that size, so pin
+it with `page(n, of: 100)` if a persisted page number has to keep meaning what it did.
 
 A request now times out after 60 seconds (10 to connect) where 1.x waited as long as the
 server took, so a call that used to hang raises `ZammadAPI::TimeoutError`. `GET`, `PUT`

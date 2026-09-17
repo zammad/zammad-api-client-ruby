@@ -482,6 +482,34 @@ RSpec.describe ZammadAPI::Test do
       expect(zammad.requests.last.on_behalf_of).to be_nil
     end
 
+    # Through the real transport's own rules, so that a stand-in cannot accept
+    # a header the wire would refuse or record it in a shape the wire would
+    # not carry.
+    it 'records the headers a raw request asked for' do
+      zammad.stub(:get, 'api/v1/roles', body: [])
+      client.get('api/v1/roles', headers: { 'Accept-Language' => 'de-de' })
+
+      expect(zammad.requests.last.headers).to eq('accept-language' => 'de-de')
+    end
+
+    it 'records a header value the way the wire would carry it' do
+      zammad.stub(:get, 'api/v1/roles', body: [])
+      client.get('api/v1/roles', headers: { 'X-Retry' => 3 })
+
+      expect(zammad.requests.last.headers).to eq('x-retry' => '3')
+    end
+
+    it 'leaves the headers empty for a request that named none' do
+      client.group.find(1)
+
+      expect(zammad.requests.last.headers).to eq({})
+    end
+
+    it 'refuses a header the real transport would refuse' do
+      expect { client.get('api/v1/roles', headers: { 'Authorization' => 'Token other' }) }
+        .to raise_error(ArgumentError, /header authorization is set by this client/)
+    end
+
     it 'records a request that was not stubbed, so the failure can be inspected' do
       expect { client.group.find(2) }.to raise_error(described_class::UnstubbedRequestError)
       expect(zammad.requests.map(&:path)).to eq(['api/v1/groups/2'])

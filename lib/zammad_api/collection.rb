@@ -11,9 +11,10 @@ module ZammadAPI
   # steps and shared without being disturbed.
   #
   # {#each} walks every page until the server runs out of records, so it is
-  # safe to iterate a collection larger than one page. Combine it with
-  # +Enumerable+ methods such as +first+, +lazy+ or +find+ to stop early
-  # without downloading everything.
+  # safe to iterate a collection larger than one page. {#first} reads one page
+  # sized for what it was asked for, and +lazy+, +detect+ and the rest of
+  # +Enumerable+ stop the walk as soon as they have enough, so neither has to
+  # download everything.
   #
   # @example Iterate every ticket
   #   client.ticket.all.each { |ticket| puts ticket.title }
@@ -29,9 +30,6 @@ module ZammadAPI
   class Collection
     include Enumerable
 
-    # Records fetched per request, unless a call asks for another size.
-    DEFAULT_PER_PAGE = 100
-
     # Query parameters this collection owns. Passing them to {#where} would be
     # silently overridden, so they are rejected instead.
     #
@@ -43,7 +41,11 @@ module ZammadAPI
     private_constant :RESERVED_QUERY_KEYS
 
     # @api private
-    def initialize(transport:, resource_class:, path:, operation:, max_per_page:, filterable:, filter_hint:, query: {}, per_page: DEFAULT_PER_PAGE, page: nil, countable: false)
+    # @param per_page [Integer, nil] records fetched per request, or nil for
+    #   as many as the endpoint serves
+    # @param countable [Boolean] whether this endpoint answers
+    #   +only_total_count+, which only a search endpoint does
+    def initialize(transport:, resource_class:, path:, operation:, max_per_page:, filterable:, filter_hint:, query: {}, per_page: nil, page: nil, countable: false)
       @transport      = transport
       @resource_class = resource_class
       @path           = path
@@ -52,7 +54,21 @@ module ZammadAPI
       @max_per_page   = max_per_page
       @filterable     = filterable
       @filter_hint    = filter_hint
-      @per_page       = clamp_per_page(per_page)
+      # As many as the endpoint serves, unless a call asks for another size.
+      #
+      # A fixed default of 100 was the earlier answer, and it cost a request
+      # for every 100 records where the endpoint would have served 1000: a
+      # walk of the user index spent ten times the round trips it needed, and
+      # each of those is a TLS handshake of its own under Faraday's default
+      # adapter. The endpoint's own cap is the one number that is right for
+      # every resource without a caller looking each of them up - it is
+      # already what {#clamp_per_page} measures against.
+      #
+      # What that costs is a larger page held at once - a thousand expanded
+      # users rather than a hundred. {#first} is what made that affordable:
+      # the cheap-looking call that only wants a record or two now sizes its
+      # own page instead of taking them off the front of this one.
+      @per_page       = clamp_per_page(per_page || max_per_page)
       @page           = page
       @countable      = countable
     end
@@ -111,7 +127,8 @@ module ZammadAPI
     #   client.ticket.all.page(2, of: 50).to_a
     #
     # @param number [Integer] one-based page number
-    # @param of [Integer, nil] records on the page, {DEFAULT_PER_PAGE} by default
+    # @param of [Integer, nil] records on the page, as many as the endpoint
+    #   serves by default
     # @return [Collection]
     # @raise [ArgumentError] for a page size the endpoint does not serve
     def page(number, of: nil)
@@ -176,13 +193,100 @@ module ZammadAPI
       map { |record| keys.map { record[it] } }
     end
 
+    # The first record, or the first +count+ of them.
+    #
+    # Sized to what was asked for, which +Enumerable#first+ cannot be: it
+    # takes its records off the front of a page this collection sized for
+    # walking, so +all.first+ downloaded a page of a thousand users to hand
+    # back one of them.
+    #
+    # The request is sized, not the collection. Limiting it to one page of
+    # +count+ records would have been the shorter way to write this and
+    # answers wrongly where the endpoint serves a smaller page than the
+    # +max_per_page+ this resource declares: +first(500)+ against a server
+    # capping at 100 came back with 100 records and nothing to say that the
+    # other 400 were there to be read. Sizing the request instead leaves the
+    # walk able to fetch a second page, and +Enumerable#first+ stops it as
+    # soon as it has what it asked for - so the ordinary case is still the one
+    # request it looks like.
+    #
+    # A collection {#page} already limited is left as it is. Its page size
+    # says which records it holds, so re-sizing it would move them - the same
+    # reason {#page_size!} refuses to.
+    #
+    # @param count [Integer, nil] how many records to read
+    # @return [Resources::Base, Array<Resources::Base>, nil] one record, or an
+    #   array of them when +count+ was given
+    def first(count = nil)
+      wanted = count || 1
+      sized  = own_request_for_first?(wanted) ? with(per_page: wanted) : self
+      # Through the enumerator rather than `super`, so that the sized
+      # collection does the reading and this method is not asked to be both
+      # the caller and the callee of Enumerable#first.
+      count.nil? ? sized.each.first : sized.each.first(count)
+    end
+
+    # The first +count+ records, read the way {#first} reads them.
+    #
+    # +take(n)+ and +first(n)+ ask one question, and +Enumerable+ answers both
+    # by taking records off the front of a page this collection sized for
+    # walking. With {#first} sizing its own request and this one left alone,
+    # what the same read cost depended on which of the two words was typed.
+    #
+    # @param count [Integer] how many records to read
+    # @return [Array<Resources::Base>]
+    def take(count)
+      # Enumerable#take always answers with an Array, and {#first} only does
+      # when it is given a count - a nil is "just the one" there. Refused with
+      # the error Enumerable#take raises for it, rather than quietly answering
+      # a different question with a different type.
+      raise TypeError, 'no implicit conversion from nil to integer' if count.nil?
+
+      first(count)
+    end
+
+    # +Enumerable#find+, which takes a block.
+    #
+    # Defined only to refuse the other reading of it. {ResourceProxy#find}
+    # takes an id - +client.ticket.find(1)+ is the lookup by id - and the same
+    # word on a collection is +Enumerable#find+, whose argument is an ifnone
+    # callable rather than an id. So +client.ticket.all.find(1)+ made no
+    # request, raised nothing, and answered with an Enumerator: a silent
+    # no-op, on the one spelling a caller is most likely to reach for.
+    #
+    # A collection cannot do the lookup either, even where it would be
+    # unambiguous - {#where} and {#search} have already narrowed what it
+    # holds, so an id found through one of them would mean something different
+    # from an id found through another.
+    #
+    # @yieldparam record [Resources::Base]
+    # @return [Resources::Base, nil]
+    # @raise [ArgumentError] when given an id where a block belongs
+    def find(*args, &block)
+      raise ArgumentError, find_by_id_message(args.first) if block.nil? && !args.empty?
+
+      super
+    end
+
     # Number of records in this collection.
     #
-    # Zammad answers this in one request for a search; every other endpoint
-    # has to be walked.
+    # One request on a search, which Zammad can count without serving the
+    # records: +only_total_count+ is the first thing
+    # ApplicationController#model_search_render looks at, and it answers with
+    # the figure alone.
+    #
+    # Every other endpoint has to be walked. An index endpoint drops
+    # +only_total_count+ along with every other parameter it does not know -
+    # model_index_render reads +sort_by+, +order_by+ and the paging and
+    # nothing else - and there is no header to read a total from either, so
+    # there is nothing cheaper to ask. Probing anyway cost a wasted request
+    # before the walk that had to happen regardless.
     #
     # @return [Integer]
     def count(*args, &block)
+      # A block or an argument is Enumerable counting matches, not this asking
+      # how large the result is. A collection limited to one page has to read
+      # that page, because the total describes the whole query.
       return super if !args.empty? || block || @page || !@countable
 
       total_count || super
@@ -203,21 +307,49 @@ module ZammadAPI
 
     # Whether this collection has no records.
     #
-    # Costs one request, which asks for a single record rather than a whole
-    # page - except on a collection limited to one page, where the page size
-    # decides which records that page holds and so cannot be narrowed.
+    # Costs the one request {#first} costs: a page of a single record, except
+    # on a collection limited to one page, where the page size decides which
+    # records that page holds and so cannot be narrowed.
     #
     # @example
     #   client.ticket.search('state.name:merged').empty?
     #
     # @return [Boolean]
-    def empty? = (@page ? self : page(1, of: 1)).first.nil?
+    def empty? = first.nil?
 
     def inspect
       "#<#{self.class.name} #{@resource_class.name} path=#{@path.inspect} per_page=#{@per_page}#{" page=#{@page}" if @page}>"
     end
 
     private
+
+    # Whether a read of this many records is worth sizing the request for.
+    #
+    # Not where this collection is already limited to a page, whose size says
+    # which records it holds, and not where the count is larger than the
+    # endpoint serves - {#clamp_per_page} would reduce it to the same size the
+    # collection already has. A zero or negative count is left to
+    # Enumerable#first, which has its own answers for both.
+    def own_request_for_first?(count)
+      return false if @page
+
+      count.is_a?(Integer) && count.positive? && count <= @max_per_page
+    end
+
+    def find_by_id_message(id)
+      "find on a #{self.class.name} is Enumerable#find, which takes a block: #{id.inspect} would be read as its " \
+        'ifnone argument and answered with an Enumerator, without a request. ' \
+        "Look a record up by id on the resource itself - client.#{resource_name}.find(#{id.inspect}) - " \
+        'or pick one out of the records this collection holds with detect { ... }.'
+    end
+
+    # The resource as a client names it: ZammadAPI::Resources::TicketArticle
+    # is reached as client.ticket_article. Derived rather than looked up in
+    # {Client::RESOURCES}, because a resource a caller subclasses themselves is
+    # in no list, and this is a sentence in an error message either way.
+    def resource_name
+      @resource_class.name.to_s.split('::').last.gsub(/([a-z\d])([A-Z])/, '\1_\2').downcase
+    end
 
     def ignored_message(ignored)
       honoured = @filterable.empty? ? 'nothing beyond paging' : @filterable.join(', ')
@@ -249,12 +381,8 @@ module ZammadAPI
       page      = @page || 1
       previous  = nil
       page_size = 0
-      seen      = 0
-      total     = nil
       loop do
-        records, response, digest = fetch(page, @per_page)
-        total = response.reported_total if total.nil?
-        seen += records.size
+        records, digest = fetch(page, @per_page)
 
         # Before the records are handed over, not after. Yielding first meant
         # an endpoint that ignores `page` had its repeated page imported,
@@ -273,9 +401,9 @@ module ZammadAPI
         # records - but the implication that matters here runs the other way:
         # an endpoint that ignores `page` and re-serializes the same records
         # with a different key order produces different bytes every time, so
-        # the guard never fires, and because every page is full neither the
-        # short-page break nor the total break fires either. A missed repeat
-        # is not a missed error, it is a walk that never ends. `Hash#hash`
+        # the guard never fires, and because every page is full the short-page
+        # break does not fire either. A missed repeat is not a missed error,
+        # it is a walk that never ends. `Hash#hash`
         # ignores key order and whitespace, which is exactly the insensitivity
         # this needs - and taking it from the decoded payload rather than from
         # the built records costs nothing extra, because that payload is what
@@ -288,22 +416,15 @@ module ZammadAPI
         break if @page
         break if records.empty?
 
-        # Where the endpoint reported how many records the query has, that is
-        # the answer to whether there is another page, and it arrived with the
-        # page already fetched. Without it the rule below has to see a short
-        # page before it can stop, so every collection smaller than one page -
-        # the ticket states, the priorities, most of what a script reads -
-        # paid for a second request that could only ever come back empty.
+        # Every stop condition here is derived from the records the endpoint
+        # actually served. There was one that was not - an index endpoint was
+        # believed to report the size of the whole result in a header, which
+        # would have ended a short walk one request earlier - and Zammad sends
+        # no such header from any endpoint, so it never once fired. What it
+        # did leave behind was a stop condition that could end a walk early on
+        # a figure the records did not corroborate, which is the one way a
+        # walk can be wrong rather than merely slow.
         #
-        # Only where the page it arrived with corroborates it, though. This is
-        # the one stop condition here not derived from the records the
-        # endpoint actually served, and a total that under-reports - a count
-        # taken before permission scoping, a stale cache, a proxy rewriting
-        # the header - used to end the walk early: 100 of 150 records came
-        # back, nothing was raised, and nothing told that result apart from a
-        # complete one.
-        break if reached_total?(seen, total, records.size, page_size)
-
         # How big a page this endpoint actually serves, learned from the first
         # one rather than assumed. The requested size is clamped to a per-
         # resource page limit, and where that guess was higher than the
@@ -366,9 +487,8 @@ module ZammadAPI
 
     # Fetches one page and the digest the repeated-page guard compares.
     #
-    # @return [Array(Array<Resources::Base>, Response, Integer)] the records,
-    #   the response they came in - which carries what the endpoint said about
-    #   the size of the whole result - and the digest
+    # @return [Array(Array<Resources::Base>, Integer)] the records and the
+    #   digest
     def fetch(page, per_page)
       response = @transport.get(
         @path,
@@ -381,52 +501,21 @@ module ZammadAPI
       # payload, which is the one structure that has everything the guard needs
       # and is already in hand. See the guard in `walk` for why it is this and
       # not the records or the raw body.
-      [decoded.map { @resource_class.from_response(@transport, it) }, response, decoded.hash]
+      [decoded.map { @resource_class.from_response(@transport, it) }, decoded.hash]
     end
 
-    # Whether the endpoint's own count says there is nothing after this page,
-    # and the page agrees with it.
+    # Asked only of a search endpoint, which is the only kind that answers
+    # +only_total_count+. Every one of them routes through
+    # model_search_render, which reads it before it reads anything else, so a
+    # shape other than the +{total_count: n}+ object means something has
+    # answered that is not the endpoint this was addressed to - a proxy error
+    # page, a login form - and the walk is the honest fallback.
     #
-    # A method rather than the guard written inline, so that the nil check
-    # narrows: `total` is assigned inside the loop, and the type checker will
-    # not narrow a local it sees reassigned there.
+    # A negative figure is refused rather than trusted: it cannot describe a
+    # result, and a count is the one answer nothing downstream can sanity
+    # check - `Array.new(collection.count)` and `count.zero?` both take it at
+    # its word.
     #
-    # Two conditions, because a count can be wrong in both directions and only
-    # one of them is safe:
-    #
-    # * The page came back short of the size this endpoint serves, so it had
-    #   no more to give. A full page means it may still be serving, whatever
-    #   its count claims, and the cost of asking is one request that comes
-    #   back empty.
-    # * Exactly as many records were seen as the count names. Seeing more
-    #   means the endpoint has already contradicted its own header, and a
-    #   count contradicted once is not one to end a walk on - the remaining
-    #   stop conditions, which read the records themselves, take over.
-    #
-    # An over-reported total still costs nothing: the walk runs on and stops
-    # on the empty page, which is what it did before there was a header to
-    # read.
-    def reached_total?(seen, total, page_records, page_size)
-      return false if total.nil? || seen != total
-
-      # Short of what this endpoint serves, which is not the same as short of
-      # what was asked for. The two differ wherever the server's cap is lower
-      # than the request - a lowered api_pagination_limit, a custom deployment
-      # - and reading the requested size there made every page look like the
-      # last one: an endpoint serving 2 per page against a request for 100,
-      # with a total under-reporting 2 of 3, ended the walk on page one with 2
-      # records and nothing raised. That is the failure the corroboration
-      # exists to prevent, reached one page further in.
-      #
-      # Page one is still read against the requested size, because nothing has
-      # shown what the endpoint serves yet. What that leaves is the case where
-      # the cap is lower AND the total under-reports AND the short first page
-      # is all there is: only a second request tells that apart from a
-      # complete result, and paying for one on every collection smaller than a
-      # page is the cost reading the total is here to avoid.
-      page_records < (page_size.zero? ? @per_page : page_size)
-    end
-
     # @return [Integer, nil] nil when the endpoint did not report a total
     def total_count
       response = @transport.get(
@@ -435,20 +524,10 @@ module ZammadAPI
         resource_class: @resource_class,
         query:          @query.merge(only_total_count: true)
       )
-      # Not every search endpoint honours only_total_count; one that ignores it
-      # answers with the usual array of records, which is a shape to read
-      # differently rather than a reason to raise.
-      if response.body.is_a?(Hash)
-        total = response.body[:total_count]
-        return total if total.is_a?(Integer)
-      end
+      return nil if !response.body.is_a?(Hash)
 
-      # That array is still a page of the result, and it carries the size of
-      # the whole one in the same header every index endpoint sets. Read here,
-      # an endpoint that ignores the parameter costs the one request it just
-      # spent; unread, the probe was thrown away and `count` walked every page
-      # on top of it, so the answer cost 1 + N requests instead of N.
-      response.reported_total
+      total = response.body[:total_count]
+      total if total.is_a?(Integer) && !total.negative?
     end
 
     # Reduced rather than refused, unlike the size {#page} takes. The

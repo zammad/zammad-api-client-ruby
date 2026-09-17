@@ -26,45 +26,24 @@ module ZammadAPI
   class Response
     SUCCESS_STATUSES = (200..299)
 
-    # Header Zammad's index endpoints report the size of the whole result in.
-    # Keys are downcased by the time a Response carries them.
+    # There is no reader here for the size of the whole result, and the
+    # absence is deliberate. This class carried a `reported_total` that read
+    # an `x-total-count` response header, and two stop conditions were built
+    # on it: {Collection#each} ended a walk one request early on it, and a
+    # has_many reader refused a list it judged truncated by it.
     #
-    # Private, as it was on Collection before both readers of it came here:
-    # {#reported_total} is the way to ask, and the signatures this gem
-    # publishes are its API.
-    TOTAL_COUNT_HEADER = 'x-total-count'
-    private_constant :TOTAL_COUNT_HEADER
+    # Zammad has never sent that header, from any endpoint. Its only custom
+    # response header is `X-Failure`, and the totals it does report are
+    # fields in a JSON body: `only_total_count` and `with_total_count` on a
+    # search, `full` on the endpoints that render through
+    # model_index_render. So the reader answered nil every time, both guards
+    # were dead, and the one of them that could have acted - ending a walk on
+    # a figure the records did not corroborate - was the one that could have
+    # been wrong. {Collection#total_count} asks a search endpoint for its
+    # figure the way Zammad actually offers it.
 
     # @return [Boolean] whether the status code is in the 2xx range
     def success? = SUCCESS_STATUSES.cover?(status)
-
-    # How many records the endpoint says the whole query has.
-    #
-    # Here rather than on the two readers of it, because it is a fact about a
-    # response and both of them had their own copy: {Collection} kept the
-    # header name in a private constant and refused a negative count, while
-    # {Associations::Proxy} hardcoded the string and accepted any Integer. A
-    # rule kept in two places is one that gets changed in one of them.
-    #
-    # A negative count is refused rather than trusted: it cannot describe a
-    # result, and both callers use this to decide whether they have seen every
-    # record, where a nonsense figure is worse than none.
-    #
-    # Stringified before it is read. Every producer of a Response hands over
-    # String header values - Faraday does, and {Test} normalises them - so this
-    # is for a Response built by hand, where `Integer(5, 10, exception: false)`
-    # is nil: a base cannot be given for a non-String and the exception is
-    # swallowed, so a count would read as no count at all, which is the one
-    # answer that turns the guard off silently.
-    #
-    # @return [Integer, nil] nil when the header was absent or not a count
-    def reported_total
-      reported = headers[TOTAL_COUNT_HEADER]
-      return nil if reported.nil?
-
-      total = Integer(reported.to_s, 10, exception: false)
-      total if total&.>=(0)
-    end
 
     # Recorded at decode time, where the answer is known, rather than derived
     # from `body` and `raw_body` being the same object. That identity held only

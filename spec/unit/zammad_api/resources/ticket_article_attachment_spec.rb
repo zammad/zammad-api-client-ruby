@@ -36,6 +36,31 @@ RSpec.describe ZammadAPI::Resources::TicketArticleAttachment do
       bare = ZammadAPI::Resources::TicketArticle.from_response(transport, id: 9)
       expect(bare.attachments).to eq([])
     end
+
+    # This metadata comes off a response body like any other, and an element
+    # that is not an object reached `raw.merge` and died there as a bare
+    # NoMethodError from inside the gem - past the `rescue ZammadAPI::Error`
+    # every caller is told to write.
+    it 'refuses metadata that is not a list' do
+      article = ZammadAPI::Resources::TicketArticle.from_response(transport, id: 9, attachments: 'none')
+
+      expect { article.attachments }
+        .to raise_error(ZammadAPI::ParseError, /expected a JSON array of objects, got String/)
+    end
+
+    it 'refuses a list holding something that is not an object' do
+      article = ZammadAPI::Resources::TicketArticle.from_response(transport, id: 9, attachments: [3])
+
+      expect { article.attachments }
+        .to raise_error(ZammadAPI::ParseError, /got an array holding Integer/)
+    end
+
+    it 'names the article in the refusal' do
+      article = ZammadAPI::Resources::TicketArticle.from_response(transport, id: 9, attachments: 'none')
+
+      expect { article.attachments }
+        .to raise_error(ZammadAPI::ParseError, /ZammadAPI::Resources::TicketArticle/)
+    end
   end
 
   describe '#download' do
