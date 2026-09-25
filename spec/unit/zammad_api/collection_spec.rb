@@ -251,16 +251,16 @@ RSpec.describe ZammadAPI::Collection do
     end
 
     # Re-sizing the page silently changed which records the collection held:
-    # page(3, of: 50) names records 101 to 150, and a batch_size of 10 turned
+    # page(3, per_page: 50) names records 101 to 150, and a batch_size of 10 turned
     # that into records 21 to 30 with nothing said about it.
     it 'refuses to re-size a collection already limited to a page' do
-      expect { collection.page(3, of: 50).find_each(batch_size: 10) { nil } }
+      expect { collection.page(3, per_page: 50).find_each(batch_size: 10) { nil } }
         .to raise_error(ArgumentError, /batch_size cannot be combined with page/)
     end
 
     it 'says how to name the page it would have served' do
-      expect { collection.page(3, of: 50).find_each(batch_size: 10) { nil } }
-        .to raise_error(ArgumentError, /page\(3, of: 10\)/)
+      expect { collection.page(3, per_page: 50).find_each(batch_size: 10) { nil } }
+        .to raise_error(ArgumentError, /page\(3, per_page: 10\)/)
     end
   end
 
@@ -287,7 +287,7 @@ RSpec.describe ZammadAPI::Collection do
     end
 
     it 'refuses to re-size a collection already limited to a page' do
-      expect { collection.page(3, of: 50).in_batches(of: 10) { nil } }
+      expect { collection.page(3, per_page: 50).in_batches(of: 10) { nil } }
         .to raise_error(ArgumentError, /of cannot be combined with page/)
     end
 
@@ -315,13 +315,13 @@ RSpec.describe ZammadAPI::Collection do
     it 'sizes the page, and so decides which records it holds' do
       stub_page(2, [{ id: 3 }], per_page: 3)
 
-      expect(collection.page(2, of: 3).map(&:id)).to eq([3])
+      expect(collection.page(2, per_page: 3).map(&:id)).to eq([3])
     end
 
     it 'keeps the size when the page moves' do
       stub_page(3, [{ id: 5 }], per_page: 3)
 
-      expect(collection.page(2, of: 3).page(3).map(&:id)).to eq([5])
+      expect(collection.page(2, per_page: 3).page(3).map(&:id)).to eq([5])
     end
 
     it 'returns a new collection and leaves the original unpaged' do
@@ -340,11 +340,11 @@ RSpec.describe ZammadAPI::Collection do
     end
 
     it 'rejects a non-positive page size' do
-      expect { collection.page(1, of: 0) }.to raise_error(ArgumentError, 'of needs a positive integer')
+      expect { collection.page(1, per_page: 0) }.to raise_error(ArgumentError, 'per_page needs a positive integer')
     end
 
     it 'rejects a non-integer page size' do
-      expect { collection.page(1, of: '7') }.to raise_error(ArgumentError, 'of needs a positive integer')
+      expect { collection.page(1, per_page: '7') }.to raise_error(ArgumentError, 'per_page needs a positive integer')
     end
   end
 
@@ -357,32 +357,32 @@ RSpec.describe ZammadAPI::Collection do
     end
 
     it 'refuses a page larger than a generic index endpoint serves' do
-      expect { client.group.all.page(1, of: 5000) }
+      expect { client.group.all.page(1, per_page: 5000) }
         .to raise_error(ArgumentError, /serves at most 1000 records per page/)
     end
 
     it 'refuses a page larger than the ticket index endpoint serves' do
-      expect { client.ticket.all.page(1, of: 5000) }
+      expect { client.ticket.all.page(1, per_page: 5000) }
         .to raise_error(ArgumentError, /serves at most 100 records per page/)
     end
 
     it 'refuses a page larger than a search endpoint serves' do
-      expect { client.user.search('smith').page(1, of: 5000) }
+      expect { client.user.search('smith').page(1, per_page: 5000) }
         .to raise_error(ArgumentError, /serves at most 200 records per page/)
     end
 
     it 'names the page that would have been served instead' do
-      expect { client.ticket.all.page(3, of: 500) }
-        .to raise_error(ArgumentError, /page\(3, of: 500\) would be sent as page 3 of 100/)
+      expect { client.ticket.all.page(3, per_page: 500) }
+        .to raise_error(ArgumentError, /page\(3, per_page: 500\) would be sent as page 3 of 100/)
     end
 
     it 'names a page size the endpoint does serve' do
-      expect { client.ticket.all.page(3, of: 500) }
-        .to raise_error(ArgumentError, /Ask for page\(3, of: 100\) or fewer/)
+      expect { client.ticket.all.page(3, per_page: 500) }
+        .to raise_error(ArgumentError, /Ask for page\(3, per_page: 100\) or fewer/)
     end
 
     it 'accepts a page exactly the size the endpoint serves' do
-      expect(client.ticket.all.page(2, of: 100).inspect).to include('per_page=100')
+      expect(client.ticket.all.page(2, per_page: 100).inspect).to include('per_page=100')
     end
 
     it 'walks the whole list when asked for more per page than the endpoint serves' do
@@ -640,7 +640,7 @@ RSpec.describe ZammadAPI::Collection do
     it 'leaves the page size alone on a collection limited to one page' do
       stub_request(:get, url).with(query: hash_including({})).to_return(json_response([{ id: 3 }]))
 
-      collection.page(2, of: 5).empty?
+      collection.page(2, per_page: 5).empty?
       expect(a_request(:get, url).with(query: hash_including('page' => '2', 'per_page' => '5'))).to have_been_made
     end
   end
@@ -760,7 +760,7 @@ RSpec.describe ZammadAPI::Collection do
     it 'leaves a collection already limited to a page at its own size' do
       stub_page(3, [{ id: 5 }, { id: 6 }], per_page: 2)
 
-      expect(collection.page(3, of: 2).first.id).to eq(5)
+      expect(collection.page(3, per_page: 2).first.id).to eq(5)
     end
 
     it 'leaves a zero count to Enumerable' do

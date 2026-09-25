@@ -26,7 +26,7 @@ module ZammadAPI
   #   client.ticket.all.in_batches(of: 50) { |tickets| import(tickets) }
   #
   # @example One explicit page
-  #   client.ticket.all.page(2, of: 50).to_a
+  #   client.ticket.all.page(2, per_page: 50).to_a
   class Collection
     include Enumerable
 
@@ -115,28 +115,28 @@ module ZammadAPI
 
     # Returns a new collection limited to a single page.
     #
-    # +of+ decides how big that page is, and so which records it holds:
-    # +page(2, of: 50)+ is records 51 to 100. A size larger than the endpoint
+    # +per_page+ decides how big that page is, and so which records it holds:
+    # +page(2, per_page: 50)+ is records 51 to 100. A size larger than the endpoint
     # serves is refused rather than reduced, because reducing it moves the
-    # page: +page(3, of: 500)+ against an endpoint capping at 100 was sent as
+    # page: +page(3, per_page: 500)+ against an endpoint capping at 100 was sent as
     # +page=3&per_page=100+ and answered with records 201 to 300 instead of
     # 1001 to 1500. A job that checkpoints a page number then re-read what it
     # had already handled and never reached the rest.
     #
     # @example
-    #   client.ticket.all.page(2, of: 50).to_a
+    #   client.ticket.all.page(2, per_page: 50).to_a
     #
     # @param number [Integer] one-based page number
-    # @param of [Integer, nil] records on the page, as many as the endpoint
+    # @param per_page [Integer, nil] records on the page, as many as the endpoint
     #   serves by default
     # @return [Collection]
     # @raise [ArgumentError] for a page size the endpoint does not serve
-    def page(number, of: nil)
+    def page(number, per_page: nil)
       raise ArgumentError, 'page needs to be a positive integer' if !number.is_a?(Integer) || !number.positive?
-      return with(page: number) if of.nil?
+      return with(page: number) if per_page.nil?
 
-      size = positive_integer!(of, 'of')
-      raise ArgumentError, "#{@path} serves at most #{@max_per_page} records per page, so page(#{number}, of: #{size}) would be sent as page #{number} of #{@max_per_page} and hold different records. Ask for page(#{number}, of: #{@max_per_page}) or fewer, or walk the records with find_each." if size > @max_per_page
+      size = positive_integer!(per_page, 'per_page')
+      raise ArgumentError, "#{@path} serves at most #{@max_per_page} records per page, so page(#{number}, per_page: #{size}) would be sent as page #{number} of #{@max_per_page} and hold different records. Ask for page(#{number}, per_page: #{@max_per_page}) or fewer, or walk the records with find_each." if size > @max_per_page
 
       with(page: number, per_page: size)
     end
@@ -365,14 +365,14 @@ module ZammadAPI
     end
 
     # Re-sizing the page of a collection that {#page} already limited would
-    # change which records it holds: `page(3, of: 50)` names records 101 to
+    # change which records it holds: `page(3, per_page: 50)` names records 101 to
     # 150, and re-sizing to 10 behind the caller's back served records 21 to
     # 30 instead - a different answer to the same question, with nothing said
     # about it. The two ways of naming a page cannot both be honoured, so this
     # says so rather than picking one, the way {#where} does.
     def page_size!(value, name)
       size = positive_integer!(value, name)
-      raise ArgumentError, "#{name} cannot be combined with page: page(#{@page}, of: #{@per_page}) already named which records this collection holds. Size that page with page(#{@page}, of: #{size}), or slice the records with each_slice(#{size})." if @page
+      raise ArgumentError, "#{name} cannot be combined with page: page(#{@page}, per_page: #{@per_page}) already named which records this collection holds. Size that page with page(#{@page}, per_page: #{size}), or slice the records with each_slice(#{size})." if @page
 
       size
     end

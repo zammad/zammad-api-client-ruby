@@ -168,7 +168,7 @@ module ZammadAPI
       raise ArgumentError, unsearchable_values_message(params) if term.nil?
 
       search(term)
-        .page(1, of: SEARCH_MAX_PER_PAGE)
+        .page(1, per_page: SEARCH_MAX_PER_PAGE)
         .detect { |record| params.all? { |key, value| record[key] == value } }
     end
 
@@ -266,7 +266,7 @@ module ZammadAPI
     #   @return [Enumerator] when no block is given
     #   @see Collection#in_batches
 
-    # @!method page(number, of: nil)
+    # @!method page(number, per_page: nil)
     #   @param number [Integer] one-based page number
     #   @param of [Integer, nil] records on the page
     #   @return [Collection]

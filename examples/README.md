@@ -24,8 +24,8 @@ show what is left for your own code to do.
 | Script | What it does | API features it shows |
 | ------ | ------------ | --------------------- |
 | [`quickstart.rb`](quickstart.rb) | Creates a ticket, reads it back, adds an article, updates it | The basics end to end |
-| [`pagination.rb`](pagination.rb) | Reads a collection every available way | `each`, `find_each`, `in_batches`, `page(n, of: m)`, `where`, `count`, `empty?`, `lazy`, `first(n)`, collection immutability |
-| [`manual_batches.rb`](manual_batches.rb) | Drives pagination by hand: pull-based, numbered, resumable | `in_batches` as an Enumerator (`next`, `with_index`), an explicit `page(n, of: m)` loop with a persisted cursor |
+| [`pagination.rb`](pagination.rb) | Reads a collection every available way | `each`, `find_each`, `in_batches`, `page(n, per_page: m)`, `where`, `count`, `empty?`, `lazy`, `first(n)`, collection immutability |
+| [`manual_batches.rb`](manual_batches.rb) | Drives pagination by hand: pull-based, numbered, resumable | `in_batches` as an Enumerator (`next`, `with_index`), an explicit `page(n, per_page: m)` loop with a persisted cursor |
 | [`ticket_report.rb`](ticket_report.rb) | Exports every ticket to CSV | Automatic pagination, `in_batches` batching, `fetch` for required attributes |
 | [`triage_tickets.rb`](triage_tickets.rb) | Flags urgent tickets, nudges stale ones | `search`, `case/in` pattern matching on records, staged `changes` so only diffs are sent, `article` |
 | [`onboard_customer.rb`](onboard_customer.rb) | Creates an organization, a user, and a welcome ticket raised as that user | `find_by`, `create`, `on_behalf_of` as a scoped client and as a block |

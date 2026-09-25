@@ -513,7 +513,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
     it 'forwards the page size #page was given' do
       stub = stub_page(1, [], per_page: 5)
 
-      proxy.page(1, of: 5).to_a
+      proxy.page(1, per_page: 5).to_a
       expect(stub).to have_been_requested
     end
 

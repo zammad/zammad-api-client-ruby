@@ -94,7 +94,7 @@ check!('auto wizard or already configured') do
   # /api/v1/getting_started, so the setup state cannot be read from there.
   # An authenticated request answers the only question that matters.
   ZammadAPI::Client.new(url: URL, user: LOGIN, password: PASSWORD, retries: 0)
-    .group.all.page(1, of: 1).to_a
+    .group.all.page(1, per_page: 1).to_a
   'already set up'
 end
 
@@ -161,7 +161,7 @@ check('iterate every group across pages') do
   "#{names.size} groups"
 end
 
-check('fetch a single page') { "#{CLIENT.group.all.page(1, of: 1).to_a.size} record" }
+check('fetch a single page') { "#{CLIENT.group.all.page(1, per_page: 1).to_a.size} record" }
 
 check('lazy enumeration stops early') { CLIENT.group.all.lazy.map(&:id).first(1).inspect }
 
@@ -240,7 +240,7 @@ rescue ArgumentError => e
 end
 
 check('where accepts a parameter the endpoint honours') do
-  "#{CLIENT.group.all.where(sort_by: 'name').page(1, of: 2).to_a.size} record(s)"
+  "#{CLIENT.group.all.where(sort_by: 'name').page(1, per_page: 2).to_a.size} record(s)"
 end
 
 section 'Tickets'

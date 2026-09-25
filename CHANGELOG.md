@@ -19,29 +19,29 @@ A breaking release that modernises the whole gem. See
   fetched a single page, so iterating stopped silently at 100 records for `all` and at
   10 for `search`.
 - Collections are built up by chaining instead of by keyword arguments:
-  `all(per_page: 50)` is now `find_each(batch_size: 50)` or `page(1, of: 50)`,
+  `all(per_page: 50)` is now `find_each(batch_size: 50)` or `page(1, per_page: 50)`,
   `all(active: true)` is `search(...)` or `all.detect { ... }`,
   `search(query: 'zammad')` is `search('zammad')`,
-  and `search(query: 'z', page: 2, per_page: 50)` is `search('z').page(2, of: 50)`.
+  and `search(query: 'z', page: 2, per_page: 50)` is `search('z').page(2, per_page: 50)`.
   `all` accepted those keywords and then discarded them, so its page size was always
   100 and its filters never reached the request; `search` did honour `page` and
   `per_page`. All of them now raise `ArgumentError` rather than being accepted.
-- `page(number, per_page)` with a block was replaced by `page(number, of: size)`, which
+- `page(number, per_page)` with a block was replaced by `page(number, per_page: size)`, which
   returns a new collection. `page_next` and `page_prev` were removed.
 - `Collection#each_page` was renamed to `#in_batches`, which also takes the page size as
   `in_batches(of: 500)`.
 - `Collection#[]` was removed. It cost a request per index and ignored the page a
-  collection was limited to; use `first`, or `page(n, of: 1).first` for one record at an
+  collection was limited to; use `first`, or `page(n, per_page: 1).first` for one record at an
   offset.
 - `Collection#per_page` and `#current_page` are no longer public. `inspect` reports both.
 - There is no `per`. The page size belongs to the call that reads: `find_each(batch_size:)`
-  to walk, `in_batches(of:)` to batch, `page(number, of:)` for one page. Everything else
+  to walk, `in_batches(of:)` to batch, `page(number, per_page:)` for one page. Everything else
   fetches as many records as the endpoint serves.
 - A collection fetches the endpoint's own page size rather than a fixed 100 — 1000 on the
   index endpoints, 100 on `/api/v1/tickets`, 200 on a search — so a walk spends roughly a
   tenth of the round trips, each of which is a fresh TLS handshake under Faraday's default
-  adapter. `page(n)` without `of:` is a page of that size, so pin it with
-  `page(n, of: 100)` where a persisted page number has to keep meaning what it did.
+  adapter. `page(n)` without `per_page:` is a page of that size, so pin it with
+  `page(n, per_page: 100)` where a persisted page number has to keep meaning what it did.
 - `where` rejects `page`, `per_page`, `expand`, `only_total_count` and `query` with an
   `ArgumentError`. They used to be accepted and silently overridden.
 - A `nil` query value raises `ArgumentError`. 1.x dropped the parameter, so
@@ -120,9 +120,9 @@ A breaking release that modernises the whole gem. See
 - `TicketArticle#attachments` raises `ParseError` for attachment metadata that is not a
   list of objects, where it used to die with a bare `NoMethodError` from inside the gem —
   past the `rescue ZammadAPI::Error` every caller is told to write.
-- `page(number, of: size)` raises `ArgumentError` when `size` is larger than the endpoint
+- `page(number, per_page: size)` raises `ArgumentError` when `size` is larger than the endpoint
   serves, instead of quietly reducing it. A reduced page size moves the page:
-  `page(3, of: 500)` against `/api/v1/tickets` went out as `page=3&per_page=100` and
+  `page(3, per_page: 500)` against `/api/v1/tickets` went out as `page=3&per_page=100` and
   answered with records 201–300 rather than 1001–1500, so a job checkpointing a page
   number re-read what it had already handled. `find_each(batch_size:)` and
   `in_batches(of:)` are still reduced, because a batch size names how much to fetch per
@@ -216,7 +216,7 @@ A breaking release that modernises the whole gem. See
   page, so an instance that pages smaller than those figures is still walked to the end
   rather than truncated.
 - `find_each(batch_size:)` and `in_batches(of:)` raise when the collection is already
-  limited to a page. `page(3, of: 50)` and a batch size are two ways of naming the same
+  limited to a page. `page(3, per_page: 50)` and a batch size are two ways of naming the same
   thing, and re-sizing the page behind the caller would hand back different records.
 - `ZammadAPI::PaginationError`, raised when an endpoint answers a page with the page
   before it, instead of paging forever.

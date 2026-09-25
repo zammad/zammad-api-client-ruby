@@ -568,7 +568,7 @@ end
 tickets = client.ticket.all
 
 tickets.page(2)           # page 2 at the size the endpoint serves
-tickets.page(2, of: 10)   # records 11 to 20
+tickets.page(2, per_page: 10)   # records 11 to 20
 ```
 
 Collections are immutable: `where` and `page` return a new collection and leave the
@@ -583,22 +583,22 @@ as it can. Three calls take another size, each for its own kind of work:
 ```ruby
 client.ticket.all.find_each(batch_size: 50) { |ticket| archive(ticket) }  # walking
 client.ticket.all.in_batches(of: 50) { |tickets| import(tickets) }        # batching
-client.ticket.all.page(2, of: 100)                                         # one page
+client.ticket.all.page(2, per_page: 100)                                  # one page
 ```
 
 `find_each` without a block is an Enumerator, so it is also how you read at a chosen page
 size: `client.ticket.all.find_each(batch_size: 50).first(7)`.
 
 `page` and a batch size are two ways of naming the same thing, so combining them raises:
-`page(3, of: 50)` already says which records the collection holds, and re-sizing it would
+`page(3, per_page: 50)` already says which records the collection holds, and re-sizing it would
 quietly hand back different ones. Size the page itself, or slice with `each_slice`.
 
 That cap is also the ceiling. `find_each` and `in_batches` are reduced to it: a
 batch size is how much to fetch at a time, so a smaller one costs more requests and still
 yields every record. `page` raises instead, because a page size also says *which* records
-you get — `page(3, of: 500)` reduced to 100 hands back records 201 to 300 rather than 1001
+you get — `page(3, per_page: 500)` reduced to 100 hands back records 201 to 300 rather than 1001
 to 1500. So `in_batches(of: 500)` over tickets yields batches of 100, while
-`page(3, of: 500)` over tickets is refused.
+`page(3, per_page: 500)` over tickets is refused.
 A walk learns the size the endpoint actually serves from the first page rather than trusting
 that cap, so an instance that pages smaller than expected is walked to the end rather than
 truncated at the first short page.
@@ -956,15 +956,15 @@ at the call site. Start with the handful of changes that do not.
 | 1.x                                      | 2.0                                              | Why                                                                 |
 | ---------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------- |
 | `collection.each` stopped after one page | `each` walks every page                          | Iterating truncated silently at the page size: 100 for `all`, 10 for `search` |
-| `collection.page(1, 3) { \|r\| ... }`    | `collection.page(1, of: 3).each { ... }`         | `page` now returns a collection instead of mutating and yielding    |
+| `collection.page(1, 3) { \|r\| ... }`    | `collection.page(1, per_page: 3).each { ... }`         | `page` now returns a collection instead of mutating and yielding    |
 | `collection.page_next` / `page_prev`     | `collection.page(n)` or `in_batches`             | Removed; they mutated shared state                                  |
 | `collection.each_page { ... }`           | `collection.in_batches { ... }`                  | Ruby already has a name for this                                    |
-| `collection[3]`                          | `collection.page(4, of: 1).first`                | An index that costs a request, and that ignored `page`, was a trap  |
+| `collection[3]`                          | `collection.page(4, per_page: 1).first`                | An index that costs a request, and that ignored `page`, was a trap  |
 | `collection.find(1)`                     | `client.x.find(1)`, or `collection.detect { ... }` | On a collection `find` is `Enumerable#find`, whose argument is an ifnone callable — so an id answered with an Enumerator and made no request. It raises now |
-| `client.x.all(per_page: 50)`             | `client.x.all.page(1, of: 50)`, `find_each(batch_size: 50)` | `all` accepted the argument and discarded it; page size belongs to the call that reads |
+| `client.x.all(per_page: 50)`             | `client.x.all.page(1, per_page: 50)`, `find_each(batch_size: 50)` | `all` accepted the argument and discarded it; page size belongs to the call that reads |
 | `client.x.all(active: true)`             | `client.x.search(...)`, or `client.x.all.detect { ... }`    | The filter never reached the request in 1.x, and could not have: Zammad's index endpoints do not filter. `where` now raises instead of quietly returning everything. `find_by` needs a string value to search on, so it replaces `all(email: '...')` rather than `all(active: true)` |
 | `client.x.search(query: 'zammad')`       | `client.x.search('zammad')`                      | The search term is the argument, not a keyword                      |
-| `client.x.search(query: 'z', page: 2, per_page: 50)` | `client.x.search('z').page(2, of: 50)` | Search did honour those two; paging is the collection's job now     |
+| `client.x.search(query: 'z', page: 2, per_page: 50)` | `client.x.search('z').page(2, per_page: 50)` | Search did honour those two; paging is the collection's job now     |
 
 ### Records
 
@@ -1004,8 +1004,8 @@ at the call site. Start with the handful of changes that do not.
 
 A collection fetches as many records per request as the endpoint serves — 1000 on the index
 endpoints, 100 on tickets, 200 on a search — rather than a fixed 100, so a walk spends
-roughly a tenth of the round trips. `page(n)` without `of:` is a page of that size, so pin
-it with `page(n, of: 100)` if a persisted page number has to keep meaning what it did.
+roughly a tenth of the round trips. `page(n)` without `per_page:` is a page of that size, so pin
+it with `page(n, per_page: 100)` if a persisted page number has to keep meaning what it did.
 
 A request now times out after 60 seconds (10 to connect) where 1.x waited as long as the
 server took, so a call that used to hang raises `ZammadAPI::TimeoutError`. `GET`, `PUT`

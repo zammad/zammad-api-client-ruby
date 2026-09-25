@@ -53,7 +53,7 @@ page = File.exist?(CURSOR) ? Integer(File.read(CURSOR)) : 1
 puts "   starting at page #{page}"
 
 loop do
-  batch = tickets.page(page, of: PER_PAGE).to_a
+  batch = tickets.page(page, per_page: PER_PAGE).to_a
   break if batch.empty?
 
   puts "   page #{page}: #{batch.size} tickets"
@@ -76,7 +76,7 @@ puts <<~NOTE
     in_batches              you want one whole response at a time
     in_batches.next         you want to pull batches as a consumer is ready
     in_batches.with_index   you want the batches numbered as they arrive
-    page(n, of: m)          the page number must be persisted, retried or skipped
+    page(n, per_page: m)    the page number must be persisted, retried or skipped
 
   Pacing is not on this list: the client already backs off and retries a 429,
   so a manual sleep loop only duplicates it.

@@ -354,9 +354,9 @@ RSpec.describe ZammadAPI::Test do
         zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name' })
         zammad.stub(:get, 'api/v1/groups', body: [{ id: 2 }], query: { sort_by: 'name' })
 
-        expect(client.group.all.where(sort_by: 'name').page(1, of: 1).map(&:id)).to eq([1])
-        expect(client.group.all.where(sort_by: 'name').page(1, of: 1).map(&:id)).to eq([2])
-        expect(client.group.all.where(sort_by: 'name').page(1, of: 1).map(&:id)).to eq([2])
+        expect(client.group.all.where(sort_by: 'name').page(1, per_page: 1).map(&:id)).to eq([1])
+        expect(client.group.all.where(sort_by: 'name').page(1, per_page: 1).map(&:id)).to eq([2])
+        expect(client.group.all.where(sort_by: 'name').page(1, per_page: 1).map(&:id)).to eq([2])
       end
     end
   end
@@ -447,7 +447,7 @@ RSpec.describe ZammadAPI::Test do
 
     it 'records them stringified, the way the transport sends them' do
       zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }])
-      client.group.all.page(2, of: 50).to_a
+      client.group.all.page(2, per_page: 50).to_a
 
       expect(zammad.requests.last.query)
         .to eq({ 'expand' => 'true', 'page' => '2', 'per_page' => '50' })
