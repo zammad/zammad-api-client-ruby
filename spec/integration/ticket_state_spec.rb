@@ -30,7 +30,7 @@ RSpec.describe ZammadAPI, 'ticket state object basics' do
     expect(ticket_state.id).to be_nil
     expect(ticket_state.name).to eq(name)
     expect(ticket_state.state_type).to eq('new')
-    expect(ticket_state.state_type_id).to be_nil
+    expect(ticket_state.key?(:state_type_id)).to be(false)
     expect(ticket_state.next_state_id).to be_nil
     expect(ticket_state.ignore_escalation).to be(false)
     expect(ticket_state.note).to eq('')
