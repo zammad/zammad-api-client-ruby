@@ -5,7 +5,18 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      actions:
+        patterns: ["*"]
   - package-ecosystem: "bundler"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      # Lint and type tooling churns often and never affects the shipped gem.
+      development:
+        dependency-type: "development"
+        patterns: ["*"]
+      runtime:
+        dependency-type: "production"
+        patterns: ["*"]

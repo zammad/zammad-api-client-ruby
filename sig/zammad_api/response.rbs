@@ -1,0 +1,25 @@
+module ZammadAPI
+  # Built with Data.define; the generated readers are declared explicitly.
+  class Response < ::Data
+    attr_reader status: Integer
+    attr_reader headers: Hash[String, String]
+    attr_reader body: untyped
+    attr_reader raw_body: String
+    attr_reader json: bool
+
+    def self.new: (status: Integer, headers: Hash[String, String], body: untyped, raw_body: String, json: bool) -> instance
+    SUCCESS_STATUSES: Range[Integer]
+    # private_constant in the source; RBS has no way to say so.
+    TOTAL_COUNT_HEADER: String
+
+    def self.decode_body: (String?, String) -> [untyped, bool]
+
+    def success?: () -> bool
+    def json?: () -> bool
+    def decoded: (Symbol shape, operation: String, ?resource_class: Class?) -> untyped
+
+    private
+
+    def array_of_objects!: (Array[untyped], operation: String, resource_class: Class?) -> Array[untyped]
+  end
+end

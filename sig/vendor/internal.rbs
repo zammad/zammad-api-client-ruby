@@ -1,0 +1,14 @@
+# Declarations that hold only while this repository is type-checked, and are
+# deliberately not part of what the gem publishes.
+#
+# ResourceProxy forwards the collection shorthands with Forwardable, so the
+# type checker has to know the class extends it before it can see
+# `def_delegators` on the singleton. Consumers never need that: the published
+# signatures declare each forwarded method concretely, which is what a caller
+# is checked against, and naming Forwardable there would make `rbs validate`
+# fail for anyone who has not loaded the stdlib declarations for it.
+module ZammadAPI
+  class ResourceProxy
+    extend Forwardable
+  end
+end
