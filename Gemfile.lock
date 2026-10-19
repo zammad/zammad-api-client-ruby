@@ -17,11 +17,11 @@ GEM
       bigdecimal
       rexml
     diff-lcs (1.6.2)
-    faraday (2.14.3)
-      faraday-net_http (>= 2.0, < 3.5)
+    faraday (2.15.0)
+      faraday-net_http (>= 2.0, < 3.6)
       json
       logger
-    faraday-net_http (3.4.4)
+    faraday-net_http (3.5.0)
       net-http (~> 0.5)
     hashdiff (1.2.1)
     iniparse (1.5.0)
@@ -29,8 +29,11 @@ GEM
     language_server-protocol (3.17.0.6)
     lint_roller (1.1.0)
     logger (1.7.0)
-    net-http (0.9.1)
+    net-http (0.10.0)
+      net-protocol (>= 0.3.0)
       uri (>= 0.11.1)
+    net-protocol (0.4.0)
+      timeout
     overcommit (0.72.0)
       childprocess (>= 0.6.3, < 6)
       iniparse (~> 1.4)
@@ -85,10 +88,11 @@ GEM
       regexp_parser (>= 2.0)
       rubocop (~> 1.86, >= 1.86.2)
     ruby-progressbar (1.13.0)
+    timeout (0.6.1)
     unicode-display_width (3.2.0)
       unicode-emoji (~> 4.1)
     unicode-emoji (4.2.0)
-    uri (1.1.1)
+    uri (1.1.2)
     webmock (3.26.3)
       addressable (>= 2.8.0)
       crack (>= 0.3.2)
