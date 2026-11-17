@@ -161,6 +161,13 @@ A breaking release that modernises the whole gem. See
   characters, so escaping carried them through and `find('..')` resolved one path level
   up — onto the index endpoint, or through a `has_many` path onto every article on the
   instance offered as one ticket's.
+- A configuration that names more than one way to authenticate raises `ConfigurationError`.
+  `http_token`, `oauth2_token` and `user` with `password` used to be accepted together, and
+  the first of them in that order was sent without a word about the others — which is what
+  let `from_env(user:, password:)` and `with(oauth2_token:)` keep sending an old token. A
+  client authenticates one way by construction now. `from_env` and `with` drop the
+  credentials an override replaces, so switching schemes through either still works, and an
+  environment that itself sets two schemes is refused until an argument says which is meant.
 
 ### Added
 

@@ -120,13 +120,15 @@ module ZammadAPI
 
     # Lays +overrides+ over +options+, dropping the credentials they replace.
     #
-    # A credential is one option out of several that are read in a fixed
-    # order - see {#authentication_scheme} - so a plain merge left the old
-    # scheme in charge: with +ZAMMAD_TOKEN+ set,
+    # A configuration authenticates one way, so an override that names
+    # another has to take the old one's place, not sit beside it. A plain
+    # merge left both, and the old scheme in charge: with +ZAMMAD_TOKEN+ set,
     # +Client.from_env(user: 'u', password: 'p')+ still sent the
     # environment's token, and +client.with(oauth2_token: 'x')+ on a token
     # client went on acting as the account the token belonged to. Neither
-    # raised, and both read as if they had switched identity.
+    # raised, and both read as if they had switched identity. Two schemes
+    # side by side are refused outright now, which is what makes dropping
+    # the old one here necessary rather than merely right.
     #
     # An override that names a scheme therefore takes the place of every
     # other scheme. The options of its own scheme are kept, so overriding
@@ -213,6 +215,9 @@ module ZammadAPI
     # @return [String] the same URL with the credentials blanked
     def redacted(value) = redact_userinfo(value)
 
+    # The one way this configuration authenticates. There is never more than
+    # one to choose between: see {#validate_credentials!}.
+    #
     # @return [Symbol] +:http_token+, +:oauth2_token+ or +:basic+
     def authentication_scheme
       return :http_token   if http_token
@@ -351,11 +356,34 @@ module ZammadAPI
         'or http_token: or oauth2_token:, instead.'
     end
 
+    # One way to authenticate, and only one.
+    #
+    # Several used to be accepted together, and {#authentication_scheme}
+    # picked the first of them in a fixed order without a word. That is what
+    # let an override leave the old credential in charge - a token beside a
+    # user and password it was meant to replace - and it is the same mistake
+    # wherever it comes from: a client that holds two identities sends one of
+    # them, and which one is not something the call site shows. Refused here,
+    # a configuration says how it authenticates by construction, and the
+    # merges that build one - {.merge_options} - have to drop what an
+    # override replaces rather than keep it beside the new value.
+    #
+    # Half of a scheme counts as naming it, so a token beside a +user+ that
+    # has no password is refused as two schemes rather than passed as one.
     def validate_credentials!
+      given = CREDENTIAL_OPTIONS.select { |_, options| options.any? { !public_send(it).nil? } }.keys
+      raise ConfigurationError, multiple_credentials_message(given) if given.size > 1
       return if http_token || oauth2_token
 
       raise ConfigurationError, 'missing user in config'     if user.nil?
       raise ConfigurationError, 'missing password in config' if password.nil?
+    end
+
+    def multiple_credentials_message(schemes)
+      named = schemes.map { CREDENTIAL_OPTIONS.fetch(it).join(' and ') }.join(', ')
+
+      "config names more than one way to authenticate (#{named}), and a request can carry only one. " \
+        'Pass http_token:, or oauth2_token:, or user: and password:, and leave the others out.'
     end
 
     # Numeric is not the whole test. Complex is one and answers neither

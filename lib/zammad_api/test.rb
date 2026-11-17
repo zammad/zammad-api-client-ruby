@@ -87,7 +87,10 @@ module ZammadAPI
     # @param options [Hash] any option accepted by {Config}; the defaults are
     #   enough for a client that never opens a connection
     def initialize(**options)
-      @config    = Config.new(url: 'https://zammad.test/', http_token: 'test-token', **options)
+      # Through the merge a client's own overrides go through, so that
+      # `Test.new(user: 'u', password: 'p')` replaces the stand-in token
+      # rather than being refused for naming a second way to authenticate.
+      @config    = Config.new(**Config.merge_options({ url: 'https://zammad.test/', http_token: 'test-token' }, options))
       @stubs     = {}
       # The stub each scope of each endpoint last answered a first page with,
       # which is the one a later page of the same read belongs to. See #take.

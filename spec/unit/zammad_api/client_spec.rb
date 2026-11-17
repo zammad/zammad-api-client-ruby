@@ -4,6 +4,11 @@ RSpec.describe ZammadAPI::Client do
   let(:url) { "#{ClientHelper::BASE_URL}api/v1/users/1" }
 
   describe '.new' do
+    it 'refuses more than one way to authenticate' do
+      expect { described_class.new(url: 'http://zammad.test/', http_token: 't', user: 'u', password: 'p') }
+        .to raise_error(ZammadAPI::ConfigurationError, /more than one way to authenticate/)
+    end
+
     it 'accepts keyword arguments' do
       expect(described_class.new(url: 'http://zammad.test/', http_token: 'token')).to be_a(described_class)
     end
@@ -98,6 +103,21 @@ RSpec.describe ZammadAPI::Client do
         described_class.from_env(user: 'u', password: 'p', retries: 0).users.find(1)
         expect(stub).to have_been_requested
       end
+    end
+
+    # Two ways to authenticate in the environment, and nothing passed in to
+    # say which is meant.
+    it 'refuses an environment that sets more than one way to authenticate' do
+      stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_TOKEN' => 't', 'ZAMMAD_USER' => 'u', 'ZAMMAD_PASSWORD' => 'p' })
+
+      expect { described_class.from_env }
+        .to raise_error(ZammadAPI::ConfigurationError, /more than one way to authenticate \(http_token, user and password\)/)
+    end
+
+    it 'lets an argument say which of them is meant' do
+      stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_TOKEN' => 't', 'ZAMMAD_USER' => 'u', 'ZAMMAD_PASSWORD' => 'p' })
+
+      expect(described_class.from_env(http_token: 't').config.authentication_scheme).to eq(:http_token)
     end
 
     it 'keeps the user from the environment when only the password is passed in' do

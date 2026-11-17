@@ -38,6 +38,13 @@ RSpec.describe ZammadAPI::Test do
       expect(ZammadAPI::Transport).not_to have_received(:new)
     end
 
+    # The stand-in carries a token of its own, so credentials handed to it
+    # replace that one rather than being refused as a second scheme.
+    it 'accepts credentials of another kind in place of its own token' do
+      zammad = described_class.new(user: 'u', password: 'p')
+      expect(zammad.client.config.authentication_scheme).to eq(:basic)
+    end
+
     it 'accepts configuration overrides' do
       expect(described_class.new(url: 'https://other.test/').client.config.url).to eq('https://other.test/')
     end

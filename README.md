@@ -85,13 +85,18 @@ client = ZammadAPI::Client.new(
 )
 ```
 
+A client authenticates one way. Passing more than one of these — a token beside a user and
+password, say — raises `ZammadAPI::ConfigurationError` rather than quietly sending one of
+them.
+
 ### From the environment
 
 `from_env` reads `ZAMMAD_URL` and `ZAMMAD_TOKEN` (or `ZAMMAD_USER` and
 `ZAMMAD_PASSWORD`, or `ZAMMAD_OAUTH2_TOKEN`), so a script needs no configuration of its
 own. Anything passed in wins over the environment, credentials included — passing
 `user:` and `password:` replaces a token the environment holds rather than sitting beside
-it:
+it. An environment that itself sets more than one way to authenticate is refused, until an
+argument says which is meant:
 
 ```ruby
 client = ZammadAPI::Client.from_env

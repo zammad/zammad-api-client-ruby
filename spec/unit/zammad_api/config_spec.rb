@@ -72,9 +72,44 @@ RSpec.describe ZammadAPI::Config do
       expect(build(http_token: nil, user: 'u', password: 'p').authentication_scheme).to eq(:basic)
     end
 
-    it 'prefers the access token over other credentials' do
-      config = build(http_token: 'token', oauth2_token: 'other', user: 'u', password: 'p')
-      expect(config.authentication_scheme).to eq(:http_token)
+    # Several used to be accepted together, and the first in a fixed order
+    # was sent without a word about the others - which is what let an override
+    # leave the credential it was meant to replace in charge.
+    context 'with more than one way to authenticate' do
+      it 'refuses a token beside a user and password' do
+        expect { build(http_token: 'token', user: 'u', password: 'p') }
+          .to raise_error(ZammadAPI::ConfigurationError, /config names more than one way to authenticate \(http_token, user and password\)/)
+      end
+
+      it 'refuses two kinds of token' do
+        expect { build(http_token: 'token', oauth2_token: 'other') }
+          .to raise_error(ZammadAPI::ConfigurationError, /more than one way to authenticate \(http_token, oauth2_token\)/)
+      end
+
+      it 'refuses all three, naming each' do
+        expect { build(http_token: 'token', oauth2_token: 'other', user: 'u', password: 'p') }
+          .to raise_error(ZammadAPI::ConfigurationError, /\(http_token, oauth2_token, user and password\)/)
+      end
+
+      it 'says what to pass instead' do
+        expect { build(http_token: 'token', oauth2_token: 'other') }
+          .to raise_error(ZammadAPI::ConfigurationError, /Pass http_token:, or oauth2_token:, or user: and password:, and leave the others out/)
+      end
+
+      # Half a scheme is still a second one being named.
+      it 'refuses a token beside a user that has no password' do
+        expect { build(http_token: 'token', user: 'u') }
+          .to raise_error(ZammadAPI::ConfigurationError, /more than one way to authenticate/)
+      end
+
+      it 'keeps the credentials out of the message' do
+        expect { build(http_token: 'tok-s3cret', user: 'u', password: 'pw-s3cret') }
+          .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.message).not_to include('s3cret') }
+      end
+
+      it 'does not count a blank credential as one' do
+        expect(build(http_token: 'token', oauth2_token: '', user: nil, password: '').authentication_scheme).to eq(:http_token)
+      end
     end
 
     it 'rejects a missing user' do
@@ -223,20 +258,18 @@ RSpec.describe ZammadAPI::Config do
   end
 
   describe '#inspect' do
-    subject(:rendered) do
-      build(user: 'u', password: 'pw-s3cret', http_token: 'tok-s3cret', oauth2_token: 'oauth-s3cret').inspect
-    end
+    subject(:rendered) { build(http_token: nil, user: 'u', password: 'pw-s3cret').inspect }
 
     it 'redacts the password' do
       expect(rendered).not_to include('pw-s3cret')
     end
 
     it 'redacts the access token' do
-      expect(rendered).not_to include('tok-s3cret')
+      expect(build(http_token: 'tok-s3cret').inspect).not_to include('tok-s3cret')
     end
 
     it 'redacts the OAuth2 token' do
-      expect(rendered).not_to include('oauth-s3cret')
+      expect(build(http_token: nil, oauth2_token: 'oauth-s3cret').inspect).not_to include('oauth-s3cret')
     end
 
     it 'marks redacted values' do
@@ -260,7 +293,7 @@ RSpec.describe ZammadAPI::Config do
     end
 
     it 'is used for to_s as well' do
-      config = build(password: 'hunter2')
+      config = build(http_token: nil, user: 'u', password: 'hunter2')
       expect(config.to_s).to eq(config.inspect)
     end
 
@@ -338,31 +371,24 @@ RSpec.describe ZammadAPI::Config do
   # without going through #inspect - and pp is what IRB and the Rails console
   # print a value with.
   describe 'pretty printing' do
-    subject(:printed) do
-      build(
-        user: 'u', password: 'pw-s3cret', http_token: 'tok-s3cret', oauth2_token: 'oauth-s3cret',
-        proxy: 'http://puser:pproxy-s3cret@proxy.test:8080'
-      ).pretty_inspect
-    end
-
     it 'redacts the password' do
-      expect(printed).not_to include('pw-s3cret')
+      expect(build(http_token: nil, user: 'u', password: 'pw-s3cret').pretty_inspect).not_to include('pw-s3cret')
     end
 
     it 'redacts the access token' do
-      expect(printed).not_to include('tok-s3cret')
+      expect(build(http_token: 'tok-s3cret').pretty_inspect).not_to include('tok-s3cret')
     end
 
     it 'redacts the OAuth2 token' do
-      expect(printed).not_to include('oauth-s3cret')
+      expect(build(http_token: nil, oauth2_token: 'oauth-s3cret').pretty_inspect).not_to include('oauth-s3cret')
     end
 
     it 'redacts the proxy credentials' do
-      expect(printed).not_to include('pproxy-s3cret')
+      expect(build(proxy: 'http://puser:pproxy-s3cret@proxy.test:8080').pretty_inspect).not_to include('pproxy-s3cret')
     end
 
     it 'prints what inspect prints' do
-      config = build(password: 'hunter2')
+      config = build(http_token: nil, user: 'u', password: 'hunter2')
       expect(config.pretty_inspect).to eq("#{config.inspect}\n")
     end
 
@@ -511,6 +537,19 @@ RSpec.describe ZammadAPI::Config do
 
     it 'does not read an explicit nil as naming a scheme' do
       expect(build.with(oauth2_token: nil).authentication_scheme).to eq(:http_token)
+    end
+
+    # The refusal of two schemes is what makes this necessary: merged beside
+    # the token, the new credential would no longer be ignored but refused.
+    it 'can switch to any scheme from any other without naming two at once' do
+      switched = build.with(oauth2_token: 'o').with(user: 'u', password: 'p').with(http_token: 't')
+      expect(switched.to_h.slice(:http_token, :oauth2_token, :user, :password))
+        .to eq({ http_token: 't', oauth2_token: nil, user: nil, password: nil })
+    end
+
+    it 'still refuses two schemes named in one call' do
+      expect { build.with(oauth2_token: 'o', user: 'u', password: 'p') }
+        .to raise_error(ZammadAPI::ConfigurationError, /more than one way to authenticate/)
     end
   end
 

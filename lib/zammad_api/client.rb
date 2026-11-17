@@ -144,7 +144,10 @@ module ZammadAPI
     # +user:+ and +password:+, or a token, replaces whichever credentials the
     # environment holds rather than sitting beside them. An empty variable
     # counts as unset, and +ZAMMAD_HTTP_TOKEN+ wins over +ZAMMAD_TOKEN+ if
-    # both are set.
+    # both are set. An environment that sets more than one way to
+    # authenticate - a token and a user with a password - is refused like
+    # any other configuration that does, unless an argument names the one to
+    # use.
     #
     # @example
     #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=secret ruby report.rb
@@ -193,7 +196,8 @@ module ZammadAPI
     # @option options [String] :oauth2_token OAuth2 token
     # @option options [String] :user login for basic authentication
     # @option options [String] :password password for basic authentication
-    # @raise [ConfigurationError] when the options are incomplete or invalid
+    # @raise [ConfigurationError] when the options are incomplete or invalid,
+    #   or name more than one way to authenticate
     def initialize(**options)
       config = Config.new(**options)
       setup(config, Transport.new(config))
