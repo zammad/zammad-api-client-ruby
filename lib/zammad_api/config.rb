@@ -99,29 +99,15 @@ module ZammadAPI
     # Where a URL stops being the part a trailing slash belongs on.
     URL_SUFFIX_PATTERN = /[?\#]/
 
-    # The +user:password@+ part of a URL. A proxy URL carries its credentials
-    # inline, so {#inspect} has to blank them while keeping the host visible.
-    #
-    # Anchored on the last +@+ before the path rather than the first, because
-    # a password may carry an unencoded one: +pa@ss+ used to leave +@ss+ in
-    # the rendered URL, and a partly redacted credential still reaches every
-    # log and exception report the whole one was kept out of.
-    #
-    # Bounded by +?+ and +#+ as well as +/+, so that it stays inside the
-    # authority. Bounded only by the path, it crossed into a query string and
-    # read an +@+ there as a credential marker: +https://host?a=b@c+ rendered
-    # as +https://[REDACTED]@c+, a host that does not exist - printed in every
-    # ConnectionError and TimeoutError message and in {#inspect}, so the
-    # operator debugging an outage was shown the wrong instance.
-    #
-    # The scheme is optional, and matched rather than looked behind, because a
-    # proxy is configured without one as often as with: +u:p@proxy:8080+ is
-    # the shape an +http_proxy+ style setting is copied out of, and a
-    # +://+ lookbehind left that password in {#inspect} in full.
-    USERINFO_PATTERN = %r{\A(?<scheme>[a-z][a-z0-9+.-]*://)?(?<userinfo>[^/?\#]+)(?=@)}i
+    # The scheme of a URL, where it has one. A proxy is configured without
+    # one as often as with - +u:p@proxy:8080+ is the shape an +http_proxy+
+    # style setting is copied out of - so the redaction below cannot assume
+    # it.
+    URL_SCHEME_PATTERN = %r{\A[a-z][a-z0-9+.-]*://}i
 
-    # Replacement that keeps the scheme and drops the credential.
-    USERINFO_REPLACEMENT = "\\k<scheme>#{REDACTION}".freeze
+    # What RFC 3986 calls the authority of a URL: everything up to the first
+    # +/+, +?+ or +#+ after the scheme.
+    URL_AUTHORITY_PATTERN = %r{\A[^/?\#]*}
 
     # The options each authentication scheme is made of.
     CREDENTIAL_OPTIONS = {
@@ -266,9 +252,41 @@ module ZammadAPI
 
     private
 
+    # Blanks the +user:password@+ part of a URL, keeping the host visible.
+    #
+    # Everything up to the last +@+ goes, rather than up to the first: a
+    # password may carry an unencoded one, and +pa@ss+ used to leave +@ss+ in
+    # the rendered URL.
+    #
+    # Which +@+ is the last one depends on whether a password can be there at
+    # all. Without a colon in the authority there is none, so the search
+    # stays inside the authority and an +@+ in a path, a query string or a
+    # fragment is left alone: +https://host?a=b@c+ used to render as
+    # +https://[REDACTED]@c+, a host that does not exist, in every
+    # ConnectionError message.
+    #
+    # With a colon, the search runs to the end of the value. A password is
+    # not obliged to be URL-safe, and one carrying +/+, +?+ or +#+ ends the
+    # authority early as far as the syntax goes: +http://user:p#ss@proxy+ has
+    # the authority +user:p+, which holds no +@+, so a search bounded by it
+    # found nothing to blank and printed the password - in {#inspect}, and in
+    # the ConfigurationError that quotes a proxy URL the HTTP stack rejected.
+    # The cost is a URL with a port and an +@+ further on, such as
+    # +https://host:8443/a@b+, which renders with its host blanked. A colon
+    # cannot tell a port from a password, and of the two mistakes that is the
+    # one that leaks nothing.
+    #
     # @param value [String] a URL that may carry inline credentials
     # @return [String] the same URL with the credentials blanked
-    def redact_userinfo(value) = value.sub(USERINFO_PATTERN, USERINFO_REPLACEMENT)
+    def redact_userinfo(value)
+      scheme    = value[URL_SCHEME_PATTERN].to_s
+      rest      = value.delete_prefix(scheme)
+      authority = rest[URL_AUTHORITY_PATTERN].to_s
+      boundary  = authority.include?(':') ? rest.rindex('@') : authority.rindex('@')
+      return value if boundary.nil?
+
+      "#{scheme}#{REDACTION}#{rest[boundary..]}"
+    end
 
     def render(key, value)
       return REDACTION if REDACTED_ATTRIBUTES.include?(key) && value

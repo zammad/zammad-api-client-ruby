@@ -851,6 +851,29 @@ RSpec.describe ZammadAPI::Transport do
         .to raise_error(ZammadAPI::ConfigurationError, %r{http://\[REDACTED\]@proxyhost:3128})
     end
 
+    # A # ends the authority early, so the redaction found no credential in
+    # what was left of it and the message quoted the password in full.
+    context 'when the password carries a character that ends the authority' do
+      let(:proxy) { 'http://user:pa#ss-s3cret@proxyhost:3128' }
+
+      it 'keeps the password out of the message' do
+        expect { unit_transport(proxy: proxy) }
+          .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.message).not_to match(/pa#ss|s3cret/) }
+      end
+
+      it 'still says which value was rejected' do
+        expect { unit_transport(proxy: proxy) }
+          .to raise_error(ZammadAPI::ConfigurationError, %r{http://\[REDACTED\]@proxyhost:3128})
+      end
+    end
+
+    context 'when it is the instance url that carries such a password' do
+      it 'keeps the password out of the message' do
+        expect { unit_transport(url: 'https://admin:pa#ss-s3cret@zammad.test/') }
+          .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.message).not_to match(/pa#ss|s3cret/) }
+      end
+    end
+
     # The error quotes what it rejected through `inspect`, which escapes the
     # backslash - so the text in the message stopped matching the configured
     # value and the substring swap redacted nothing at all.

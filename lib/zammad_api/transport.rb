@@ -511,7 +511,7 @@ module ZammadAPI
     # came back as URI::InvalidURIError with the whole URL, password included,
     # in its message - and that message goes into the ConfigurationError
     # above, which lands in every log and exception report. The one case
-    # {Config#inspect} and USERINFO_PATTERN exist to prevent, reached by
+    # {Config#inspect} and {Config#redacted} exist to prevent, reached by
     # another route.
     #
     # The configured values are swapped for their redacted forms rather than

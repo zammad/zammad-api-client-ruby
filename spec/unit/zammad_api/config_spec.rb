@@ -287,6 +287,30 @@ RSpec.describe ZammadAPI::Config do
       expect(rendered).not_to include('ss-s3cret')
     end
 
+    # A password is not obliged to be URL-safe, and each of these ends the
+    # authority early as far as the syntax goes: `user:p` is all that is left
+    # of it, with no @ in it, so a search bounded by the authority found no
+    # credential to blank and printed the password.
+    {
+      'a #' => 'http://puser:pa#ss-s3cret@proxy.test:8080',
+      'a /' => 'http://puser:pa/ss-s3cret@proxy.test:8080',
+      'a ?' => 'http://puser:pa?ss-s3cret@proxy.test:8080'
+    }.each do |character, proxy|
+      it "redacts a proxy password carrying #{character}" do
+        rendered = build(proxy: proxy).inspect
+
+        expect(rendered).to include('proxy="http://[REDACTED]@proxy.test:8080"')
+        expect(rendered).not_to match(/pa.ss|s3cret/)
+      end
+    end
+
+    it 'redacts such a password on a proxy configured without a scheme' do
+      rendered = build(proxy: 'puser:pa#ss-s3cret@proxy.test:8080').inspect
+
+      expect(rendered).to include('proxy="[REDACTED]@proxy.test:8080"')
+      expect(rendered).not_to include('s3cret')
+    end
+
     it 'leaves a proxy without credentials alone' do
       expect(build(proxy: 'http://proxy.test:8080').inspect).to include('proxy="http://proxy.test:8080"')
     end
@@ -398,9 +422,53 @@ RSpec.describe ZammadAPI::Config do
       expect(build.redacted('https://admin:pa@ss-s3cret@zammad.example.com/'))
         .to eq('https://[REDACTED]@zammad.example.com/')
     end
+
+    # The same three characters, in the instance url. URI cannot read these,
+    # so they are not refused the way a readable url with credentials is, and
+    # stay printable until the connection rejects them.
+    it 'blanks a password carrying a #, which ends the authority early' do
+      expect(build.redacted('https://admin:pa#ss-s3cret@zammad.example.com/'))
+        .to eq('https://[REDACTED]@zammad.example.com/')
+    end
+
+    it 'blanks a password carrying a /' do
+      expect(build.redacted('https://admin:pa/ss-s3cret@zammad.example.com/'))
+        .to eq('https://[REDACTED]@zammad.example.com/')
+    end
+
+    it 'blanks a password carrying a ?' do
+      expect(build.redacted('https://admin:pa?ss-s3cret@zammad.example.com/'))
+        .to eq('https://[REDACTED]@zammad.example.com/')
+    end
+
+    it 'blanks a password carrying both an @ and a /' do
+      expect(build.redacted('https://admin:pa@ss/w0rd@zammad.example.com/'))
+        .to eq('https://[REDACTED]@zammad.example.com/')
+    end
+
+    it 'leaves a host and port alone' do
+      expect(build.redacted('https://zammad.example.com:8443/helpdesk/')).to eq('https://zammad.example.com:8443/helpdesk/')
+    end
+
+    it 'leaves an IPv6 host alone' do
+      expect(build.redacted('http://[::1]:3128')).to eq('http://[::1]:3128')
+    end
+
+    # A colon cannot tell a port from a password, and `user:8443/s3cret@host`
+    # is a password with a slash in it just as much as it is a port and a
+    # path. Blanking too much shows a wrong host; blanking too little shows a
+    # password.
+    it 'blanks rather than guesses where a colon could be either a port or a password' do
+      expect(build.redacted('https://zammad.example.com:8443/tenant@acme/')).to eq('https://[REDACTED]@acme/')
+    end
   end
 
   describe '#redacted_url' do
+    it 'blanks a password the url is too malformed to be refused for' do
+      expect(build(url: 'https://admin:pa#ss-s3cret@zammad.example.com/').redacted_url)
+        .to eq('https://[REDACTED]@zammad.example.com/')
+    end
+
     it 'leaves an @ in the path alone' do
       expect(build(url: 'https://zammad.example.com/tenant@acme/').redacted_url)
         .to eq('https://zammad.example.com/tenant@acme/')

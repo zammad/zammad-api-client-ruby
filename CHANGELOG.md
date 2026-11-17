@@ -510,6 +510,15 @@ A breaking release that modernises the whole gem. See
   in full. `Transport` had no `inspect` at all, so Ruby's default printed the Faraday
   connection it holds, proxy password and access token included, and every record holds its
   transport.
+- A proxy or instance URL whose password carries an unencoded `/`, `?` or `#` is redacted.
+  Each of those ends the authority early as far as URL syntax goes, so `proxy:
+  'http://user:p#ss@proxy:3128'` left `user:p` as the authority, the redaction found no `@`
+  in it, and the password was printed by `Config#inspect` and quoted in the
+  `ConfigurationError` raised when the connection could not be built. Where a colon makes a
+  password possible, everything up to the last `@` of the whole value is blanked now. The
+  price is a URL with a port and an `@` further on, such as `https://host:8443/a@b`, which
+  renders with its host blanked: a colon cannot tell a port from a password, and that is the
+  mistake that leaks nothing.
 
 ### Changed
 

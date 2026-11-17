@@ -17,8 +17,8 @@ module ZammadAPI
     SCHEME_PATTERN: Regexp
     URL_PATTERN: Regexp
     URL_SUFFIX_PATTERN: Regexp
-    USERINFO_PATTERN: Regexp
-    USERINFO_REPLACEMENT: String
+    URL_SCHEME_PATTERN: Regexp
+    URL_AUTHORITY_PATTERN: Regexp
     CREDENTIAL_OPTIONS: Hash[Symbol, Array[Symbol]]
 
     def self.new: (**untyped) -> instance
