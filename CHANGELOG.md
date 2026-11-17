@@ -167,6 +167,10 @@ A breaking release that modernises the whole gem. See
   client authenticates one way by construction now. `from_env` and `with` drop the
   credentials an override replaces, so switching schemes through either still works, and an
   environment that itself sets two schemes is refused until an argument says which is meant.
+- `ticket.article(…)` is `ticket.add_article(…)`. A noun that sends a `POST` sat one letter
+  away from `ticket.articles`, which only reads. `article` still works, as a deprecated
+  alias that warns in Ruby's `deprecated` category the way the singular resource readers do,
+  and will be removed in 3.0.
 
 ### Added
 
@@ -366,7 +370,7 @@ A breaking release that modernises the whole gem. See
   association readers. A destroyed record went on reporting `changed?` and a change set
   that can never be sent, and `record.related` went on requesting a record that no longer
   exists — dropping the memo was not enough on its own, because the reader rebuilt one on
-  the next call. `record.related`, `ticket.articles` and `ticket.article(…)` all raise
+  the next call. `record.related`, `ticket.articles` and `ticket.add_article(…)` all raise
   `ZammadAPI::Error` for a destroyed record now, rather than reaching the server for it.
 - `Config#redacted_url` no longer mangles a URL whose query string contains an `@`.
   `https://host?a=b@c` was rendered as `https://[REDACTED]@c`, a host that does not exist,
@@ -473,7 +477,7 @@ A breaking release that modernises the whole gem. See
   to nil, staged nothing and was still merged into the attributes. The write was dropped
   without a word, `save` returned `true` having sent no request, and the record went on
   reporting a key Zammad never sent it, so `changes` and `attributes` disagreed.
-- `ticket.article(...)` refuses a ticket that has not been saved instead of POSTing
+- `ticket.add_article(...)` refuses a ticket that has not been saved instead of POSTing
   `ticket_id: null` and leaving the caller to read Zammad's 422 for the reason. Every other
   path in the gem that needs a stored id says so locally.
 - The documentation no longer promises that a `has_many` reader refuses a partial list

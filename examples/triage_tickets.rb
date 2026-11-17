@@ -32,7 +32,7 @@ client.tickets.search('state.name:open').first(200).each do |ticket|
     ticket.priority = '3 high'
     ticket.save # sends the one changed attribute, nothing else
 
-    ticket.article(
+    ticket.add_article(
       subject:  'Automated follow-up',
       body:     "No activity for over #{STALE_AFTER / 86_400} days; priority raised.",
       type:     'note',

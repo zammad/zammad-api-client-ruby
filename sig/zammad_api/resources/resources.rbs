@@ -19,7 +19,8 @@ module ZammadAPI
 
     class Ticket < Base
       def articles: () -> Array[TicketArticle]
-      def article: (?Hash[untyped, untyped] attributes) -> TicketArticle
+      def add_article: (?Hash[untyped, untyped] attributes) -> TicketArticle
+      %a{deprecated: use add_article} def article: (?Hash[untyped, untyped] attributes) -> TicketArticle
     end
 
     class TicketArticle < Base

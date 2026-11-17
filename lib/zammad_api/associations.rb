@@ -55,7 +55,7 @@ module ZammadAPI
       end
 
       # Deliberately not memoized: a list can grow while the record is held,
-      # and +ticket.related.articles+ after +ticket.article(...)+ has to show
+      # and +ticket.related.articles+ after +ticket.add_article(...)+ has to show
       # the article that was just added.
       #
       # The path proc is handed the escaped id rather than the record, so that

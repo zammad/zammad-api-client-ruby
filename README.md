@@ -491,6 +491,13 @@ request and comes back as an Array rather than a paginating collection, because 
 association endpoints Zammad routes serve the whole list: `ticket_articles/by_ticket`
 renders every article of the ticket and takes no paging parameter.
 
+A ticket's articles are also reachable without `related`, and `add_article` writes one:
+
+```ruby
+ticket.articles                                              # the same list
+ticket.add_article(body: 'Reset link sent.', type: 'note')  # => the created TicketArticle
+```
+
 The readers live under `related` rather than on the record so that `ticket.customer` keeps
 returning the name it always did — an attribute read that silently became an HTTP request
 would be a poor trade. `belongs_to` targets are memoized, and `reload` or a save drops the
@@ -1113,6 +1120,7 @@ at the call site. Start with the handful of changes that do not.
 | `record.unknown_attribute` → `nil`  | raises `NoMethodError`; use `record[:x]`, `fetch(:x, nil)` or `key?(:x)` | A typo read as `nil` and flowed on into whatever was written with it. Zammad also serves a reduced object where the user may not see the whole record, and that is worth being told about |
 | `client.x.new(id: 5)`               | `client.x.find(5)`                                   | The constructor was the one door that did not refuse a staged id — and the only one whose value reached Zammad, since a new record is sent in full |
 | `client.users.find(ticket.customer_id)` | `ticket.related.customer`                         | Following a foreign key needed the client threaded through           |
+| `ticket.article(body: '…')`         | `ticket.add_article(body: '…')`                      | A noun that sends a `POST`, one letter away from `ticket.articles`, which only reads. `article` still works and warns in Ruby's `deprecated` category; it goes in 3.0 |
 
 ### Errors
 
@@ -1152,9 +1160,9 @@ a `POST`, `PUT` or `DELETE` is never retried. Both are options — see
 ### What did not change
 
 `find`, `all`, `create` and `new` on a resource, `record.destroy`, attribute readers and
-writers, `ticket.articles`, `ticket.article`, and `attachment.download`. The resources
-themselves are reached by their plural names now — `client.tickets` — and the singular
-ones still answer, with a deprecation warning.
+writers, `ticket.articles` and `attachment.download`. The resources themselves are reached
+by their plural names now — `client.tickets` — and adding an article is
+`ticket.add_article`; the old names still answer, with a deprecation warning.
 
 `record.save`, `record.changes` and `record.attributes` still exist and still mean what
 they meant; the tables above only change how they behave at the edges.

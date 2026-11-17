@@ -54,13 +54,13 @@ RSpec.describe ZammadAPI::Resources::Ticket do
     end
 
     it 'refuses to add an article rather than POSTing a dead ticket_id' do
-      expect { ticket.article(body: 'hello') }.to raise_error(ZammadAPI::Error, /was destroyed/)
+      expect { ticket.add_article(body: 'hello') }.to raise_error(ZammadAPI::Error, /was destroyed/)
     end
 
     it 'makes no request at all when an article is refused' do
       stub = stub_request(:post, article_url).with(query: hash_including({}))
       begin
-        ticket.article(body: 'hello')
+        ticket.add_article(body: 'hello')
       rescue ZammadAPI::Error # rubocop:disable Lint/SuppressedException
       end
 
@@ -68,13 +68,13 @@ RSpec.describe ZammadAPI::Resources::Ticket do
     end
   end
 
-  describe '#article' do
+  describe '#add_article' do
     it 'creates the article for this ticket' do
       stub = stub_request(:post, article_url)
         .with(query: { 'expand' => 'true' }, body: '{"body":"hello","ticket_id":42}')
         .to_return(json_response({ id: 9, body: 'hello', ticket_id: 42 }, status: 201))
 
-      ticket.article(body: 'hello')
+      ticket.add_article(body: 'hello')
       expect(stub).to have_been_requested
     end
 
@@ -82,14 +82,14 @@ RSpec.describe ZammadAPI::Resources::Ticket do
       stub_request(:post, article_url).with(query: hash_including({}))
         .to_return(json_response({ id: 9, body: 'hello' }, status: 201))
 
-      expect(ticket.article(body: 'hello')).to be_a(ZammadAPI::Resources::TicketArticle)
+      expect(ticket.add_article(body: 'hello')).to be_a(ZammadAPI::Resources::TicketArticle)
     end
 
     it 'returns a persisted article' do
       stub_request(:post, article_url).with(query: hash_including({}))
         .to_return(json_response({ id: 9 }, status: 201))
 
-      expect(ticket.article(body: 'hello')).to be_persisted
+      expect(ticket.add_article(body: 'hello')).to be_persisted
     end
 
     # An article belongs to a ticket by id. Unchecked, this POSTed
@@ -99,20 +99,62 @@ RSpec.describe ZammadAPI::Resources::Ticket do
       subject(:ticket) { described_class.new(unit_transport, title: 'Help') }
 
       it 'refuses locally' do
-        expect { ticket.article(body: 'hello') }.to raise_error(ZammadAPI::Error, /has no id, save it first/)
+        expect { ticket.add_article(body: 'hello') }.to raise_error(ZammadAPI::Error, /has no id, save it first/)
       end
 
       it 'sends nothing' do
         stub = stub_request(:post, article_url).with(query: hash_including({}))
 
         begin
-          ticket.article(body: 'hello')
+          ticket.add_article(body: 'hello')
         rescue ZammadAPI::Error
           nil
         end
 
         expect(stub).not_to have_been_requested
       end
+    end
+  end
+
+  # The name the method had in 1.x: a noun that sends a POST, one letter away
+  # from the reader beside it.
+  describe '#article' do
+    around do |example|
+      enabled = Warning[:deprecated]
+      Warning[:deprecated] = true
+      example.run
+    ensure
+      Warning[:deprecated] = enabled
+    end
+
+    before do
+      stub_request(:post, article_url).with(query: hash_including({}))
+        .to_return(json_response({ id: 9, body: 'hello', ticket_id: 42 }, status: 201))
+    end
+
+    it 'still adds the article' do
+      added = nil
+
+      expect { added = ticket.article(body: 'hello') }.to output.to_stderr
+      expect(added.id).to eq(9)
+    end
+
+    it 'warns, naming the replacement' do
+      expect { ticket.article(body: 'hello') }
+        .to output(/ZammadAPI::Resources::Ticket#article is deprecated and will be removed in 3\.0: use #add_article instead/).to_stderr
+    end
+
+    it 'names the line that made the call' do
+      expect { ticket.article(body: 'hello') }.to output(/#{Regexp.escape(__FILE__)}:#{__LINE__}: warning: /).to_stderr
+    end
+
+    it 'says nothing unless deprecation warnings are on' do
+      Warning[:deprecated] = false
+      expect { ticket.article(body: 'hello') }.not_to output.to_stderr
+    end
+
+    it 'does not warn for add_article' do
+      expect { ticket.add_article(body: 'hello') }.not_to output.to_stderr
     end
   end
 end

@@ -85,7 +85,7 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
     expect(articles[0].subject).to eq('some subject')
     expect(articles[0].body).to eq('some body')
 
-    ticket.article(
+    ticket.add_article(
       subject: 'some subject2',
       body:    'some body2',
     )
@@ -97,7 +97,7 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
     expect(articles[1].body).to eq('some body2')
     expect(articles[1].attachments.count).to eq(0)
 
-    ticket.article(
+    ticket.add_article(
       subject:     'some subject3',
       body:        'some body3',
       attachments: [

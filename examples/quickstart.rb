@@ -33,7 +33,7 @@ ticket = client.tickets.find(ticket.id)
 puts "state #{ticket.state}, priority #{ticket.priority}, group #{ticket.group}"
 
 # Add another article.
-ticket.article(subject: 'Update', body: 'Reset link sent.', type: 'note')
+ticket.add_article(subject: 'Update', body: 'Reset link sent.', type: 'note')
 puts "#{ticket.articles.size} article(s)"
 
 # Assignments are staged, and `save` sends only what changed.

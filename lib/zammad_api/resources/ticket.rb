@@ -39,11 +39,19 @@ module ZammadAPI
 
       # Adds an article to this ticket.
       #
+      # Named for what it does. It was +article+, a noun that sends a POST,
+      # next to +articles+, a noun that only reads - so the one letter
+      # between them was the difference between reading a ticket's history
+      # and writing to it.
+      #
+      # @example
+      #   ticket.add_article(subject: 'Update', body: 'Reset link sent.', type: 'note')
+      #
       # @param attributes [Hash] article attributes, e.g. +body:+, +type:+
       # @return [TicketArticle] the created article
       # @raise [Error] when the ticket has no id yet, or was destroyed
       # @raise [ResponseError] when Zammad rejected the request
-      def article(attributes = {})
+      def add_article(attributes = {})
         # A destroyed ticket takes no articles, and says so here rather than
         # one request later. `require_id!` passes on its own, because destroy
         # leaves the id readable, so without this the POST went out naming a
@@ -60,6 +68,20 @@ module ZammadAPI
         record = TicketArticle.new(transport, attributes.merge(ticket_id: require_id!))
         record.save!
         record
+      end
+
+      # Adds an article to this ticket, under the name the method had in 1.x.
+      #
+      # Warns in Ruby's +deprecated+ category, the way the singular readers
+      # on {Client} do: silent unless the application asks for deprecation
+      # warnings.
+      #
+      # @deprecated Use {#add_article}.
+      # @param attributes [Hash] article attributes
+      # @return [TicketArticle] the created article
+      def article(attributes = {})
+        warn("#{Ticket.name}#article is deprecated and will be removed in 3.0: use #add_article instead", uplevel: 1, category: :deprecated)
+        add_article(attributes)
       end
     end
   end

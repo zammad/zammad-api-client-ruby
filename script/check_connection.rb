@@ -270,7 +270,7 @@ end
 check('read its articles') { "#{@ticket.articles.size} article(s)" }
 
 check('add another article') do
-  CLIENT.tickets.find(@ticket.id).article(subject: 'second', body: 'another one', type: 'note').id
+  CLIENT.tickets.find(@ticket.id).add_article(subject: 'second', body: 'another one', type: 'note').id
 end
 
 check('article count grew') do
@@ -281,7 +281,7 @@ check('article count grew') do
 end
 
 check('attachment metadata and download') do
-  CLIENT.tickets.find(@ticket.id).article(
+  CLIENT.tickets.find(@ticket.id).add_article(
     subject:     'with attachment',
     body:        'see attachment',
     type:        'note',
