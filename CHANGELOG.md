@@ -439,11 +439,15 @@ A breaking release that modernises the whole gem. See
 - `ticket.article(...)` refuses a ticket that has not been saved instead of POSTing
   `ticket_id: null` and leaving the caller to read Zammad's 422 for the reason. Every other
   path in the gem that needs a stored id says so locally.
-- A `has_many` reader refuses a response that is one page of several, with
-  `ZammadAPI::PaginationError`, rather than handing back a short list. These are the one
-  kind of list read in a single request, because the association endpoints Zammad routes
-  serve the whole thing; an endpoint that started paging would have returned its first page
-  and nothing to say so, while `all` and `search` walk to the end.
+- The documentation no longer promises that a `has_many` reader refuses a partial list
+  with `ZammadAPI::PaginationError`. The check behind that promise read a total from an
+  `x-total-count` response header, which Zammad has never sent, so it never ran and was
+  removed — see the entry on that header under Breaking — while this entry, the README and
+  the comment on `has_many` went on describing it. A `has_many` list is read in a single
+  request because the association endpoints Zammad routes serve the whole thing:
+  `ticket_articles/by_ticket` renders every article of the ticket and reads no paging
+  parameter. Nothing in a response tells a whole list from the first page of one, so
+  there is no honest check to put in its place.
 - The documented page sizes are sizes the endpoints actually serve. Every `find_each` and
   `in_batches` example used `of: 500` against `client.ticket`, which caps at 100, so each
   headline example did something other than what it showed. The clamp itself stands — a

@@ -277,10 +277,18 @@ module ZammadAPI
         # served by an endpoint of its own.
         #
         # The path has to name an endpoint that serves the whole list in one
-        # response, which is what the association endpoints Zammad routes do.
-        # The reader spends one request and hands back an Array rather than a
-        # walking {Collection}, and refuses a response that turns out to be
-        # one page of several rather than returning a short list quietly.
+        # response, which is what the association endpoints Zammad routes do:
+        # TicketArticlesController#index_by_ticket renders every article of
+        # the ticket and reads no paging parameter. The reader spends one
+        # request and hands back an Array rather than a walking {Collection}.
+        #
+        # Nothing here can tell a whole list from the first page of one, so
+        # declaring this for an endpoint that pages would return that page
+        # and no more. This comment used to promise a refusal instead. The
+        # check behind that promise read a total from a response header
+        # Zammad has never sent, so it never ran, and it was removed for that
+        # reason. For an endpoint that pages, declare a resource and walk it
+        # as a {Collection}.
         #
         # @param name [Symbol] name of the reader on {Base#related}
         # @param class_name [String] the target resource
