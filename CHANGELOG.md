@@ -7,7 +7,9 @@ A breaking release that modernises the whole gem. See
 
 ### Breaking
 
-- Minimum Ruby version is now 3.4.
+- Minimum Ruby version is now 3.4. 3.0 through 3.2 are end-of-life, and 3.3 is in security
+  maintenance until March 2027. The library needs nothing from 3.4 but the `it` block
+  parameter, so the floor is a choice rather than a dependency.
 - `Client.new` takes keyword arguments, so a configuration Hash has to be splatted:
   `Client.new(**config)`. A positional Hash raises `ArgumentError`.
 - An unknown client option raises `ArgumentError: unknown keyword` instead of being

@@ -14,6 +14,14 @@ Gem::Specification.new do |spec|
   spec.licenses    = ['AGPL-3.0-only', 'MIT']
 
   # Keep in sync with TargetRubyVersion in .rubocop.yml and the CI matrix.
+  #
+  # 3.4 rather than 3.3, the one older line still maintained - for security
+  # fixes, until March 2027 - and for a single reason: the `it` block
+  # parameter, which lib/ uses throughout. Nothing else here needs 3.4. On
+  # Ruby 3.3.13, with every `it` rewritten to `_1`, the unit suite passed but
+  # for five examples that assert the format Hash#inspect has had since 3.4.
+  # So the floor is a choice of style over reach rather than a dependency, and
+  # lowering it is that rewrite, those five expectations and a CI entry.
   spec.required_ruby_version = '>= 3.4'
 
   spec.metadata['allowed_push_host']      = 'https://rubygems.org'
