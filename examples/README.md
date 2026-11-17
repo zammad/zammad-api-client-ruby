@@ -18,16 +18,17 @@ ruby examples/quickstart.rb
 > disposable instance.
 
 None of them set a timeout or a retry policy: requests time out after 60s and
-transient failures are retried with backoff out of the box, so the examples
-show what is left for your own code to do.
+a read that fails transiently is retried with backoff out of the box, so the
+examples show what is left for your own code to do. A write is never repeated;
+`error_handling.rb` shows what that leaves to you.
 
 | Script | What it does | API features it shows |
 | ------ | ------------ | --------------------- |
 | [`quickstart.rb`](quickstart.rb) | Creates a ticket, reads it back, adds an article, updates it | The basics end to end |
-| [`pagination.rb`](pagination.rb) | Reads a collection every available way | `each`, `find_each`, `in_batches`, `page(n, per_page: m)`, `where`, `count`, `empty?`, `lazy`, `first(n)`, collection immutability |
+| [`pagination.rb`](pagination.rb) | Reads a collection every available way | `each`, `find_each`, `in_batches`, `page(n, per_page: m)`, `search`, `order`, `count`, `empty?`, `lazy`, `first(n)`, `detect`, collection immutability |
 | [`manual_batches.rb`](manual_batches.rb) | Drives pagination by hand: pull-based, numbered, resumable | `in_batches` as an Enumerator (`next`, `with_index`), an explicit `page(n, per_page: m)` loop with a persisted cursor |
 | [`ticket_report.rb`](ticket_report.rb) | Exports every ticket to CSV | Automatic pagination, `in_batches` batching, `fetch` for required attributes |
-| [`triage_tickets.rb`](triage_tickets.rb) | Flags urgent tickets, nudges stale ones | `search`, `case/in` pattern matching on records, staged `changes` so only diffs are sent, `article` |
+| [`triage_tickets.rb`](triage_tickets.rb) | Flags urgent tickets, nudges stale ones | `search`, `case/in` pattern matching on records, staged `changes` so only diffs are sent, `add_article` |
 | [`onboard_customer.rb`](onboard_customer.rb) | Creates an organization, a user, and a welcome ticket raised as that user | `find_by`, `create`, `on_behalf_of` as a scoped client and as a block |
 | [`download_attachments.rb`](download_attachments.rb) | Saves a ticket's attachments to disk | `articles`, attachment metadata, binary-safe `download` |
 | [`error_handling.rb`](error_handling.rb) | Handles the failures that are yours to handle | The error hierarchy, `save` → `false` with `record.error`, rescuing by category, `client.with` for different retry settings |
