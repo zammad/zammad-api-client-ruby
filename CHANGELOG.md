@@ -177,9 +177,12 @@ A breaking release that modernises the whole gem. See
 - Request and connection timeouts (`timeout`, `open_timeout`), on by default at 60 and
   10 seconds. 1.x waited as long as the server took, so a call that used to hang now
   raises `TimeoutError`.
-- Automatic retry with exponential backoff for idempotent requests on connection failures,
-  timeouts and transient statuses. `POST` is never retried, so a failed create cannot
-  produce duplicate records.
+- Automatic retry with exponential backoff for a `GET` on connection failures, timeouts
+  and transient statuses. A write is never retried. `POST` would create a second record,
+  and `PUT` and `DELETE` are not safe to repeat against Zammad either: a ticket update
+  carrying an `article` adds that article, and sends its e-mail, once per delivery, and a
+  `DELETE` repeated after a lost answer comes back as a 404 for a record that was just
+  deleted, so `destroy` raised `NotFoundError` and left the record looking live.
 - A specific error class per status: `AuthenticationError` (401), `AuthorizationError`
   (403), `NotFoundError` (404), `ValidationError` (422) and `RateLimitError` (429, with
   `#retry_after`). Network failures raise `ConnectionError` or `TimeoutError` instead of

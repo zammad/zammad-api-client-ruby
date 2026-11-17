@@ -30,7 +30,7 @@ module ZammadAPI
   # @!attribute [r] open_timeout
   #   @return [Numeric] seconds to wait for the connection
   # @!attribute [r] retries
-  #   @return [Integer] retry attempts for idempotent requests
+  #   @return [Integer] retry attempts for a request that only reads
   # @!attribute [r] retry_interval
   #   @return [Numeric] seconds before the first retry, doubling after that
   # @!attribute [r] ssl_verify
@@ -70,7 +70,7 @@ module ZammadAPI
     # Seconds to wait for the connection to be established.
     DEFAULT_OPEN_TIMEOUT = 10
 
-    # How often an idempotent request is retried on a transient failure.
+    # How often a request that only reads is retried on a transient failure.
     DEFAULT_RETRIES = 2
 
     # Seconds to wait before the first retry; doubles on each attempt.

@@ -107,7 +107,7 @@ client = ZammadAPI::Client.from_env(timeout: 300)
 | `password`       | `nil`              | Password for basic authentication.                                 |
 | `timeout`        | `60`               | Seconds to wait for a response.                                    |
 | `open_timeout`   | `10`               | Seconds to wait for the connection.                                |
-| `retries`        | `2`                | Retry attempts for idempotent requests. `0` disables retrying.      |
+| `retries`        | `2`                | Retry attempts for a `GET` that failed transiently. `0` disables retrying. |
 | `retry_interval` | `0.5`              | Seconds before the first retry; doubles on each attempt.           |
 | `ssl_verify`     | `true`             | Set to `false` only against a server with a self-signed certificate. |
 | `proxy`          | `nil`              | Proxy URL.                                                         |
@@ -213,7 +213,7 @@ endpoint, and `full=true` on the index endpoints that render through
 
 Paths are relative to the instance URL, and a leading slash is ignored, so they can be
 pasted straight from the Zammad documentation. A non-2xx response raises the same error
-class it would raise for a modelled resource, and `POST` is not retried.
+class it would raise for a modelled resource, and only a `GET` is retried.
 
 ## Working with records
 
@@ -748,9 +748,24 @@ end
 
 ### Timeouts and retries
 
-Idempotent requests (`GET`, `PUT`, `DELETE`) are retried on connection failures, timeouts
-and the transient statuses 429, 500, 502, 503 and 504, with exponential backoff. `POST` is
-never retried, so a failed create cannot silently produce duplicate records.
+A `GET` is retried on connection failures, timeouts and the transient statuses 429, 500,
+502, 503 and 504, with exponential backoff.
+
+A write is never retried. `POST` would create a second record, and `PUT` and `DELETE` are
+not safe to repeat against Zammad either, whatever HTTP says about them: a ticket update
+carrying an `article` adds that article — and sends its e-mail — once per delivery, and a
+`DELETE` repeated after a lost answer comes back as a 404 for a record that was just
+deleted. So a write that fails raises, and the code that knows what the request carried
+decides whether to send it again:
+
+```ruby
+begin
+  ticket.update!(state: 'closed')
+rescue ZammadAPI::TransportError, ZammadAPI::ServerError
+  ticket.reload              # did it arrive?
+  retry if ticket.state != 'closed'
+end
+```
 
 ```ruby
 client = ZammadAPI::Client.new(
@@ -1008,10 +1023,10 @@ roughly a tenth of the round trips. `page(n)` without `per_page:` is a page of t
 it with `page(n, per_page: 100)` if a persisted page number has to keep meaning what it did.
 
 A request now times out after 60 seconds (10 to connect) where 1.x waited as long as the
-server took, so a call that used to hang raises `ZammadAPI::TimeoutError`. `GET`, `PUT`
-and `DELETE` are retried twice with exponential backoff on connection failures, timeouts
-and the transient statuses, which means a genuinely broken endpoint takes a little longer
-to report itself; `POST` is never retried. Both are options — see
+server took, so a call that used to hang raises `ZammadAPI::TimeoutError`. A `GET` is
+retried twice with exponential backoff on connection failures, timeouts and the transient
+statuses, which means a genuinely broken endpoint takes a little longer to report itself;
+a `POST`, `PUT` or `DELETE` is never retried. Both are options — see
 [Timeouts and retries](#timeouts-and-retries). The `User-Agent` is now
 `zammad_api-ruby/<version>` rather than `Zammad API Ruby`.
 

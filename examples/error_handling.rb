@@ -4,9 +4,11 @@
 # What to rescue, and what the client has already handled for you.
 #
 # Timeouts, connection failures and the transient statuses (429, 500, 502,
-# 503, 504) are retried with backoff on GET, PUT and DELETE before any error
-# reaches your code, so what is left to handle is what only you can decide
-# about: a missing record, a rejected attribute, bad credentials.
+# 503, 504) are retried with backoff on a GET before any error reaches your
+# code. A write is never repeated, because only you know whether sending it
+# twice is safe. So what is left to handle is what only you can decide about:
+# a missing record, a rejected attribute, bad credentials, a write that may or
+# may not have arrived.
 #
 #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=... \
 #     ruby examples/error_handling.rb

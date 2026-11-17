@@ -46,10 +46,19 @@ module ZammadAPI
 
     include Verbs
 
-    # HTTP methods that Zammad handles idempotently and that are therefore
-    # safe to retry. POST is excluded on purpose - retrying it could create
-    # duplicate tickets or users.
-    RETRIABLE_METHODS = %i[get put delete head options].freeze
+    # HTTP methods that are safe to repeat against Zammad: the ones that only
+    # read.
+    #
+    # PUT and DELETE are idempotent in HTTP and used to be here for that
+    # reason, but neither is safe to repeat against Zammad. A ticket update
+    # carrying an `article` creates that article on every delivery, so an
+    # update answered with a 504 and then a 200 added the article twice and
+    # sent its e-mail twice, while `update` reported success once. And a
+    # DELETE whose first answer was lost was repeated into a 404, so
+    # `destroy` raised NotFoundError for a record it had just deleted. A
+    # write that fails is reported instead, the way a POST always was, and
+    # the caller - who knows what the request carried - decides.
+    RETRIABLE_METHODS = %i[get head options].freeze
 
     # Transient statuses worth retrying.
     RETRIABLE_STATUSES = [429, 500, 502, 503, 504].freeze
@@ -102,7 +111,7 @@ module ZammadAPI
     # first attempt - so how often a request was retried depended on which
     # adapter a caller picked, and `request` already documents these as
     # failures this class expects to see. The retry middleware still only
-    # retries RETRIABLE_METHODS, so a POST is not repeated.
+    # retries RETRIABLE_METHODS, so a write is not repeated.
     RETRIABLE_EXCEPTIONS = [
       Faraday::RetriableResponse,
       Faraday::ConnectionFailed,

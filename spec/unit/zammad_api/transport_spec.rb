@@ -357,6 +357,31 @@ RSpec.describe ZammadAPI::Transport do
       expect(a_request(:post, url)).to have_been_made.once
     end
 
+    # A ticket update carrying an article creates that article on every
+    # delivery, so repeating it sent the article - and its e-mail - twice.
+    it 'does not retry PUT, which Zammad does not always handle idempotently' do
+      stub_request(:put, "#{url}/1").to_return({ status: 504 }, json_response({ id: 1 }))
+      expect { unit_transport(retries: 2, retry_interval: 0.01).put('api/v1/groups/1', operation: 'test', body: { a: 1 }) }
+        .to raise_error(ZammadAPI::ServerError)
+      expect(a_request(:put, "#{url}/1")).to have_been_made.once
+    end
+
+    it 'does not retry PUT after a timeout either' do
+      stub_request(:put, "#{url}/1").to_raise(Net::ReadTimeout).then.to_return(json_response({ id: 1 }))
+      expect { unit_transport(retries: 2, retry_interval: 0.01).put('api/v1/groups/1', operation: 'test', body: { a: 1 }) }
+        .to raise_error(ZammadAPI::TimeoutError)
+      expect(a_request(:put, "#{url}/1")).to have_been_made.once
+    end
+
+    # Repeated after a lost answer, the second DELETE met a 404 and reported a
+    # record that had just been deleted as one that could not be found.
+    it 'does not retry DELETE, which would answer a lost success with a 404' do
+      stub_request(:delete, "#{url}/1").to_raise(Net::ReadTimeout).then.to_return(json_response({ error: 'gone' }, status: 404))
+      expect { unit_transport(retries: 2, retry_interval: 0.01).delete('api/v1/groups/1', operation: 'test') }
+        .to raise_error(ZammadAPI::TimeoutError)
+      expect(a_request(:delete, "#{url}/1")).to have_been_made.once
+    end
+
     it 'does not retry a client error' do
       stub_request(:get, url).to_return(json_response({ error: 'nope' }, status: 404))
       expect { unit_transport(retries: 2, retry_interval: 0.01).get('api/v1/groups', operation: 'test') }
