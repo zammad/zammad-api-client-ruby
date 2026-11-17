@@ -8,7 +8,7 @@
 # is checked against, and naming Forwardable there would make `rbs validate`
 # fail for anyone who has not loaded the stdlib declarations for it.
 module ZammadAPI
-  class ResourceProxy
+  class ResourceProxy[R < Resources::Base]
     extend Forwardable
   end
 end

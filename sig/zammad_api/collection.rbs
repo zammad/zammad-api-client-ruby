@@ -1,6 +1,9 @@
 module ZammadAPI
-  class Collection
-    include Enumerable[untyped]
+  # Generic over the resource it holds, so that what a walk yields is a
+  # Resources::Ticket rather than something untyped: `client.tickets.all` is a
+  # Collection[Resources::Ticket].
+  class Collection[R < Resources::Base]
+    include Enumerable[R]
 
     # Both are private_constant in the source; RBS has no way to say so.
     SORT_DIRECTIONS: Array[String]
@@ -32,23 +35,23 @@ module ZammadAPI
       ?countable: bool
     ) -> void
 
-    def each: () { (untyped) -> void } -> Collection
-            | () -> Enumerator[untyped, Collection]
-    def find_each: (?batch_size: Integer?) { (untyped) -> void } -> Collection
-                 | (?batch_size: Integer?) -> Enumerator[untyped, Collection]
-    def in_batches: (?of: Integer?) { (Array[untyped]) -> void } -> Collection
-                  | (?of: Integer?) -> Enumerator[Array[untyped], Collection]
-    def page: (Integer number, ?per_page: Integer?) -> Collection
-    def first: () -> untyped
-             | (Integer count) -> Array[untyped]
-    def take: (Integer count) -> Array[untyped]
-    def find: (?untyped ifnone) { (untyped) -> boolish } -> untyped
+    def each: () { (R) -> void } -> Collection[R]
+            | () -> Enumerator[R, Collection[R]]
+    def find_each: (?batch_size: Integer?) { (R) -> void } -> Collection[R]
+                 | (?batch_size: Integer?) -> Enumerator[R, Collection[R]]
+    def in_batches: (?of: Integer?) { (Array[R]) -> void } -> Collection[R]
+                  | (?of: Integer?) -> Enumerator[Array[R], Collection[R]]
+    def page: (Integer number, ?per_page: Integer?) -> Collection[R]
+    def first: () -> R?
+             | (Integer count) -> Array[R]
+    def take: (Integer count) -> Array[R]
+    def find: (?untyped ifnone) { (R) -> boolish } -> R?
             | (*untyped) -> untyped
-    def order: (*(Symbol | String) attributes, **(Symbol | String) directions) -> Collection
+    def order: (*(Symbol | String) attributes, **(Symbol | String) directions) -> Collection[R]
     def pluck: (*(Symbol | String) keys) -> Array[untyped]
-    def count: (*untyped) ?{ (untyped) -> boolish } -> Integer
-    def size: (*untyped) ?{ (untyped) -> boolish } -> Integer
-    def length: (*untyped) ?{ (untyped) -> boolish } -> Integer
+    def count: (*untyped) ?{ (R) -> boolish } -> Integer
+    def size: (*untyped) ?{ (R) -> boolish } -> Integer
+    def length: (*untyped) ?{ (R) -> boolish } -> Integer
     def empty?: () -> bool
     def inspect: () -> String
 
@@ -63,9 +66,9 @@ module ZammadAPI
     def sorted_by: () -> Hash[String, String]
     def positive_integer!: (untyped, String) -> Integer
     def page_size!: (untyped, String) -> Integer
-    def walk: () { (Array[untyped]) -> void } -> void
-    def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped]) -> Collection
-    def fetch: (Integer, Integer) -> [ Array[untyped], Integer ]
+    def walk: () { (Array[R]) -> void } -> void
+    def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped]) -> Collection[R]
+    def fetch: (Integer, Integer) -> [ Array[R], Integer ]
     def total_count: () -> Integer?
     def clamp_per_page: (untyped) -> Integer
   end

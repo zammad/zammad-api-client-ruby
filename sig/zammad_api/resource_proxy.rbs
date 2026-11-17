@@ -1,6 +1,9 @@
 module ZammadAPI
-  class ResourceProxy
-    include Enumerable[untyped]
+  # Generic over the resource it is the entry point for: `client.tickets` is a
+  # ResourceProxy[Resources::Ticket], so `find` answers with a Ticket and a
+  # block over it is handed one.
+  class ResourceProxy[R < Resources::Base]
+    include Enumerable[R]
 
     SEARCH_MAX_PER_PAGE: Integer
     SEARCH_FILTER_KEYS: Array[Symbol]
@@ -12,37 +15,37 @@ module ZammadAPI
     @transport: Transport
 
     def initialize: (Transport, untyped resource_class) -> void
-    def new: (?Hash[untyped, untyped] attributes) -> untyped
-    def create: (?Hash[untyped, untyped] attributes) -> untyped
-    def find: (Integer | String id) -> untyped
-    def find_by: (**untyped) -> untyped
-    def find_by!: (**untyped) -> untyped
+    def new: (?Hash[untyped, untyped] attributes) -> R
+    def create: (?Hash[untyped, untyped] attributes) -> R
+    def find: (Integer | String id) -> R
+    def find_by: (**untyped) -> R?
+    def find_by!: (**untyped) -> R
     def exists?: (Integer | String id) -> bool
     def destroy: (Integer | String id) -> true
-    def all: () -> Collection
-    def order: (*(Symbol | String) attributes, **(Symbol | String) directions) -> Collection
+    def all: () -> Collection[R]
+    def order: (*(Symbol | String) attributes, **(Symbol | String) directions) -> Collection[R]
 
-    def each: () { (untyped) -> void } -> Collection
-            | () -> Enumerator[untyped, Collection]
-    def find_each: (?batch_size: Integer?) { (untyped) -> void } -> Collection
-                 | (?batch_size: Integer?) -> Enumerator[untyped, Collection]
-    def in_batches: (?of: Integer?) { (Array[untyped]) -> void } -> Collection
-                  | (?of: Integer?) -> Enumerator[Array[untyped], Collection]
-    def page: (Integer number, ?per_page: Integer?) -> Collection
+    def each: () { (R) -> void } -> Collection[R]
+            | () -> Enumerator[R, Collection[R]]
+    def find_each: (?batch_size: Integer?) { (R) -> void } -> Collection[R]
+                 | (?batch_size: Integer?) -> Enumerator[R, Collection[R]]
+    def in_batches: (?of: Integer?) { (Array[R]) -> void } -> Collection[R]
+                  | (?of: Integer?) -> Enumerator[Array[R], Collection[R]]
+    def page: (Integer number, ?per_page: Integer?) -> Collection[R]
     def pluck: (*(Symbol | String) keys) -> Array[untyped]
-    def count: (*untyped) ?{ (untyped) -> boolish } -> Integer
+    def count: (*untyped) ?{ (R) -> boolish } -> Integer
     def size: () -> Integer
     def length: () -> Integer
     def empty?: () -> bool
-    def first: () -> untyped
-             | (Integer count) -> Array[untyped]
-    def take: (Integer count) -> Array[untyped]
-    def search: (String term, ?condition: Hash[untyped, untyped], ?ids: Array[Integer | String], ?role_ids: Array[Integer | String], ?group_ids: Array[Integer | String], ?permissions: Array[String]) -> Collection
+    def first: () -> R?
+             | (Integer count) -> Array[R]
+    def take: (Integer count) -> Array[R]
+    def search: (String term, ?condition: Hash[untyped, untyped], ?ids: Array[Integer | String], ?role_ids: Array[Integer | String], ?group_ids: Array[Integer | String], ?permissions: Array[String]) -> Collection[R]
     def inspect: () -> String
 
     private
 
-    def collection: (String, String, ?query: Hash[Symbol, untyped], ?max_per_page: Integer, ?sortable: bool, ?countable: bool) -> Collection
+    def collection: (String, String, ?query: Hash[Symbol, untyped], ?max_per_page: Integer, ?sortable: bool, ?countable: bool) -> Collection[R]
     def search_filters: (Hash[untyped, untyped] filters) -> Hash[Symbol, untyped]
     def unknown_search_filter_message: (Array[Symbol] unknown) -> String
     def searchable!: () -> void

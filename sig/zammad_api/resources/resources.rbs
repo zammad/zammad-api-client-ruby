@@ -1,23 +1,155 @@
 module ZammadAPI
+  # The attributes declared on each resource are the ones every Zammad the
+  # gem supports serves for it: the columns of its table, as they have been
+  # since Zammad 5, typed the way their JSON arrives - a timestamp is a
+  # String, and `preferences` is a Hash with Symbol keys.
+  #
+  # They are declarations only. A record answers them through
+  # method_missing, from whatever the response carried, so nothing here makes
+  # an attribute exist: these say what a typed caller may rely on.
+  #
+  # What is left out, on purpose:
+  #
+  # - Attributes an administrator added. Reach one with `record[:name]`, or
+  #   declare it in your own signatures by reopening the class:
+  #
+  #     class ZammadAPI::Resources::Ticket
+  #       attr_accessor escalation_reason: String?
+  #     end
+  #
+  # - Columns that newer Zammad versions added, which an older instance does
+  #   not serve.
+  #
+  # - The name `expand` adds for an association that may be empty, such as
+  #   `organization` on a ticket or a user. Zammad leaves the key out rather
+  #   than sending null, so the reader would raise rather than answer nil.
+  #   `record[:organization]` is nil in that case, and `organization_id` is
+  #   always there.
   module Resources
     class Group < Base
+      attr_accessor name: String
+      attr_accessor signature_id: Integer?
+      attr_accessor email_address_id: Integer?
+      attr_accessor assignment_timeout: Integer?
+      attr_accessor follow_up_possible: String
+      attr_accessor follow_up_assignment: bool
+      attr_accessor active: bool
+      attr_accessor note: String?
     end
 
     class Organization < Base
+      attr_accessor name: String
+      attr_accessor shared: bool
+      attr_accessor domain: String?
+      attr_accessor domain_assignment: bool
+      attr_accessor active: bool
+      attr_accessor note: String?
     end
 
     class TicketPriority < Base
+      attr_accessor name: String
+      attr_accessor default_create: bool
+      attr_accessor ui_icon: String?
+      attr_accessor ui_color: String?
+      attr_accessor active: bool
+      attr_accessor note: String?
     end
 
     class TicketState < Base
+      attr_accessor name: String
+      attr_accessor state_type_id: Integer
+      attr_accessor next_state_id: Integer?
+      attr_accessor ignore_escalation: bool
+      attr_accessor default_create: bool
+      attr_accessor default_follow_up: bool
+      attr_accessor active: bool
+      attr_accessor note: String?
     end
 
     class User < Base
       # Narrowed from Base so Client#me returns the concrete user type.
       def self.from_response: (Transport, Hash[untyped, untyped] attributes) -> User
+
+      attr_accessor login: String
+      attr_accessor firstname: String?
+      attr_accessor lastname: String?
+      attr_accessor email: String?
+      attr_accessor organization_id: Integer?
+      attr_accessor image: String?
+      attr_accessor image_source: String?
+      attr_accessor web: String?
+      attr_accessor phone: String?
+      attr_accessor fax: String?
+      attr_accessor mobile: String?
+      attr_accessor department: String?
+      attr_accessor street: String?
+      attr_accessor zip: String?
+      attr_accessor city: String?
+      attr_accessor country: String?
+      attr_accessor address: String?
+      attr_accessor vip: bool
+      attr_accessor verified: bool
+      attr_accessor active: bool
+      attr_accessor note: String?
+      attr_accessor out_of_office: bool
+      attr_accessor out_of_office_start_at: String?
+      attr_accessor out_of_office_end_at: String?
+      attr_accessor out_of_office_replacement_id: Integer?
+      attr_accessor preferences: Hash[Symbol, untyped]?
+
+      # Set by Zammad as the user signs in, so there is nothing to write.
+      attr_reader last_login: String?
+      attr_reader login_failed: Integer
+      attr_reader source: String?
+
+      # Zammad takes a password and never serves one.
+      attr_writer password: String
     end
 
     class Ticket < Base
+      attr_accessor title: String
+      attr_accessor group_id: Integer
+      attr_accessor state_id: Integer
+      attr_accessor priority_id: Integer
+      attr_accessor owner_id: Integer
+      attr_accessor customer_id: Integer
+      attr_accessor organization_id: Integer?
+      attr_accessor note: String?
+      attr_accessor pending_time: String?
+      attr_accessor type: String?
+      attr_accessor preferences: Hash[Symbol, untyped]?
+
+      # The name `expand` puts beside each of the ids above that cannot be
+      # empty. Writing one is how a ticket is moved by name:
+      # `ticket.update(state: 'closed', group: 'Support')`.
+      attr_accessor group: String
+      attr_accessor state: String
+      attr_accessor priority: String
+      attr_accessor owner: String
+      attr_accessor customer: String
+
+      # Kept by Zammad as the ticket moves, so there is nothing to write.
+      attr_reader number: String
+      attr_reader article_count: Integer?
+      attr_reader create_article_type_id: Integer?
+      attr_reader create_article_sender_id: Integer?
+      attr_reader first_response_at: String?
+      attr_reader first_response_escalation_at: String?
+      attr_reader first_response_in_min: Integer?
+      attr_reader first_response_diff_in_min: Integer?
+      attr_reader close_at: String?
+      attr_reader close_escalation_at: String?
+      attr_reader close_in_min: Integer?
+      attr_reader close_diff_in_min: Integer?
+      attr_reader update_escalation_at: String?
+      attr_reader update_in_min: Integer?
+      attr_reader update_diff_in_min: Integer?
+      attr_reader escalation_at: String?
+      attr_reader last_contact_at: String?
+      attr_reader last_contact_agent_at: String?
+      attr_reader last_contact_customer_at: String?
+      attr_reader last_owner_update_at: String?
+
       def articles: () -> Array[TicketArticle]
       def add_article: (?Hash[untyped, untyped] attributes) -> TicketArticle
       %a{deprecated: use add_article} def article: (?Hash[untyped, untyped] attributes) -> TicketArticle
@@ -30,6 +162,29 @@ module ZammadAPI
       # private_constant in the source; RBS has no way to say so.
       ATTACHMENTS_OPERATION: String
 
+      attr_accessor ticket_id: Integer
+      attr_accessor type_id: Integer
+      attr_accessor sender_id: Integer
+      attr_accessor from: String?
+      attr_accessor to: String?
+      attr_accessor cc: String?
+      attr_accessor subject: String?
+      attr_accessor reply_to: String?
+      attr_accessor in_reply_to: String?
+      attr_accessor content_type: String
+      attr_accessor body: String
+      attr_accessor internal: bool
+      attr_accessor preferences: Hash[Symbol, untyped]?
+
+      # The name `expand` puts beside type_id and sender_id, which is also
+      # how an article is given either: `add_article(type: 'note')`.
+      attr_accessor type: String
+      attr_accessor sender: String
+
+      attr_reader message_id: String?
+      attr_reader message_id_md5: String?
+      attr_reader origin_by_id: Integer?
+
       def attachments: () -> Array[TicketArticleAttachment]
 
       private
@@ -41,6 +196,11 @@ module ZammadAPI
       include AttributeAccess
 
       @transport: Transport
+
+      # What Zammad lists for each attachment of an article.
+      attr_reader filename: String
+      attr_reader size: String
+      attr_reader preferences: Hash[Symbol, untyped]
 
       def initialize: (Transport, ?Hash[untyped, untyped]? attributes) -> void
       def download: () -> String

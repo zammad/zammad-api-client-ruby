@@ -323,6 +323,16 @@ A breaking release that modernises the whole gem. See
   endpoint; what was missing since `const_get` went was a public way to a proxy for one,
   which left raw requests as the only way to the rest of the API. An association on such a
   class can point at another by its full name, `class_name: 'Acme::Role'`.
+- Typed records. `ResourceProxy` and `Collection` are generic over the resource they hold,
+  so `client.tickets` is a `ResourceProxy[Resources::Ticket]` and `find`, `first`,
+  `find_by`, the block of `each` and a search all answer with a `Ticket` where the
+  signatures said `untyped`. Each resource declares the attributes every supported Zammad
+  serves for it — the columns of its table, typed the way their JSON arrives — so
+  `ticket.title` is a `String` and `ticket.titel` is a type error. Attributes an
+  administrator added are read with `record[:name]` or declared by reopening the class in a
+  project's own signatures; the README's Type signatures section says what else is left
+  undeclared and why. `spec/typed/usage.rb` is checked by `rake steep` the way a caller's
+  code is, and pins these types from the outside.
 
 ### Fixed
 

@@ -9,6 +9,18 @@ module ZammadAPI
       attr_reader error: ValidationError?
       attr_reader transport: Transport
 
+      # What Zammad stamps every record with. These four are columns of every
+      # table, and the two names beside them are what `expand` adds: the login
+      # of each user. A record that was built with `new` and not saved yet
+      # carries none of them, and reading one then raises NoMethodError - the
+      # types here, and on every resource, describe a record Zammad served.
+      attr_reader created_by_id: Integer
+      attr_reader updated_by_id: Integer
+      attr_reader created_at: String
+      attr_reader updated_at: String
+      attr_reader created_by: String
+      attr_reader updated_by: String
+
       @new_record: bool
       @destroyed: bool
       @saved: bool

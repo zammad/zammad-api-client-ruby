@@ -1011,6 +1011,49 @@ one unscoped as above.
 RBS signatures ship in `sig/` and are checked in CI with [Steep](https://github.com/soutaro/steep).
 Add the gem to your own RBS collection to type-check calls into this client.
 
+Records are typed, not only the client. `client.tickets` is a
+`ResourceProxy[Resources::Ticket]`, so `find`, `first`, `find_by`, the block of `each` and
+a search all hand you a `Ticket`, and each resource declares the attributes every
+supported Zammad serves for it:
+
+```ruby
+ticket = client.tickets.find(1)
+
+ticket.title                   # String
+ticket.organization_id         # Integer?
+ticket.related.customer&.email # String?
+ticket.titel                   # a type error, where it used to be untyped
+```
+
+Three things are deliberately not declared, and each has a way through:
+
+- **Attributes an administrator added.** Read one with `ticket[:escalation_reason]`, or
+  declare it in your own signatures by reopening the class:
+
+  ```rbs
+  class ZammadAPI::Resources::Ticket
+    attr_accessor escalation_reason: String?
+  end
+  ```
+
+- **Columns only newer Zammad versions have**, which an older instance does not serve.
+  `record[:name]` reads those too.
+- **The name `expand` adds for an association that may be empty**, such as `organization`
+  on a ticket or a user. Zammad leaves the key out rather than sending `null`, so a reader
+  would raise rather than answer `nil`; `ticket[:organization]` is `nil` in that case, and
+  `ticket.organization_id` is always there.
+
+A proxy for [a resource of your own](#resources-this-gem-does-not-model) is untyped until
+you say what it holds, because a signature cannot carry a class into its own return type:
+
+```ruby
+roles = client.resource(Role) #: ZammadAPI::ResourceProxy[Role]
+```
+
+The types describe a record Zammad served. One built with `new` carries only what it was
+given until it is saved, and reading anything else from it raises `NoMethodError`, whatever
+the signature says the type would be.
+
 ## Examples
 
 Runnable scripts covering pagination, pattern matching, acting on behalf of a user,
@@ -1029,7 +1072,7 @@ bundle exec rake     # unit specs, RuboCop and Steep
 | `rake spec:integration`  | Integration specs against a live Zammad               |
 | `rake check_connection`  | Drives a live Zammad end to end and prints a transcript |
 | `rake rubocop`           | Style checks                                          |
-| `rake steep`             | Type-check `lib/` against `sig/`                      |
+| `rake steep`             | Type-check `lib/` against `sig/`, and `spec/typed/` the way a caller is checked |
 
 Set `COVERAGE=true` to produce a coverage report in `coverage/`.
 
