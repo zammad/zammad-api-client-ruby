@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe ZammadAPI::ResourceProxy do
-  subject(:proxy) { client.group }
+  subject(:proxy) { client.groups }
 
   let(:client) { unit_client }
   let(:url) { "#{ClientHelper::BASE_URL}api/v1/groups" }
@@ -307,17 +307,17 @@ RSpec.describe ZammadAPI::ResourceProxy do
     # /api/v1/ticket_states/search is not routed, so the 404 arrived here as a
     # NotFoundError from a method documented to answer nil.
     it 'refuses a resource Zammad routes no search endpoint for' do
-      expect { client.ticket_state.find_by(name: 'open') }
+      expect { client.ticket_states.find_by(name: 'open') }
         .to raise_error(ZammadAPI::Error, /routes no search endpoint for ZammadAPI::Resources::TicketState/)
     end
 
     it 'points a refused lookup at walking the records' do
-      expect { client.ticket_priority.find_by(name: '2 normal') }
+      expect { client.ticket_priorities.find_by(name: '2 normal') }
         .to raise_error(ZammadAPI::Error, /all\.detect/)
     end
 
     it 'makes no request for a resource that cannot be searched' do
-      expect { client.ticket_state.find_by(name: 'open') }.to raise_error(ZammadAPI::Error)
+      expect { client.ticket_states.find_by(name: 'open') }.to raise_error(ZammadAPI::Error)
       expect(a_request(:get, "#{ClientHelper::BASE_URL}api/v1/ticket_states/search").with(query: hash_including({})))
         .not_to have_been_made
     end
@@ -474,7 +474,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
 
     context 'with an endpoint that does not even sort' do
       it 'says so, naming what it does honour' do
-        expect { unit_client.ticket.where(sort_by: 'created_at') }
+        expect { unit_client.tickets.where(sort_by: 'created_at') }
           .to raise_error(ArgumentError, /honours nothing beyond paging/)
       end
     end
@@ -635,12 +635,12 @@ RSpec.describe ZammadAPI::ResourceProxy do
 
   describe '#search' do
     it 'refuses a resource Zammad routes no search endpoint for' do
-      expect { client.ticket_state.search('open') }
+      expect { client.ticket_states.search('open') }
         .to raise_error(ZammadAPI::Error, /routes no search endpoint for ZammadAPI::Resources::TicketState/)
     end
 
     it 'refuses a search of ticket articles, which Zammad indexes but does not route' do
-      expect { client.ticket_article.search('hello') }
+      expect { client.ticket_articles.search('hello') }
         .to raise_error(ZammadAPI::Error, /routes no search endpoint/)
     end
 

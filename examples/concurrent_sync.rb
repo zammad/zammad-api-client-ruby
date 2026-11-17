@@ -26,7 +26,7 @@ client = ZammadAPI::Client.from_env
 
 # Collect the work first; `first` stops paginating once it has enough.
 queue = Queue.new
-client.ticket.all.first(40).each { queue << it.id }
+client.tickets.all.first(40).each { queue << it.id }
 queue.close # so a worker draining an empty queue stops instead of blocking
 
 results = Queue.new
@@ -37,7 +37,7 @@ workers = Array.new(WORKERS) do
     # making a request, so there is nothing to synchronise.
     while (id = queue.pop)
       results << begin
-        client.ticket.find(id)
+        client.tickets.find(id)
         :ok
       rescue ZammadAPI::Error => e
         # Transient failures were already retried, so anything arriving here

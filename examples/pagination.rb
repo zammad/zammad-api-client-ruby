@@ -14,7 +14,7 @@
 require 'zammad_api'
 
 client  = ZammadAPI::Client.from_env
-tickets = client.ticket.all # no request yet
+tickets = client.tickets.all # no request yet
 
 # Walk every record. Pages are fetched as the iteration reaches them, so only
 # one page is ever held in memory.
@@ -44,13 +44,13 @@ puts "page(2, per_page: 10)  #{tickets.page(2, per_page: 10).map(&:id).inspect}"
 # Narrowing by a value is `search`, not `where`: Zammad's index endpoints sort
 # and page and drop every other parameter, so `where(state: 'open')` raises
 # rather than handing back every ticket. Searches compose with all of the above.
-puts "search                 #{client.ticket.search('state.name:open').first(5).size} open tickets"
+puts "search                 #{client.tickets.search('state.name:open').first(5).size} open tickets"
 
 # Counting a search is one request, because Zammad can answer `only_total_count`
 # without serving the records. An index endpoint has no answer for it and no
 # total to report, so counting one means walking it.
-puts "search.count           #{client.ticket.search('state.name:open').count}, one request"
-puts "empty?                 #{client.ticket.search('state.name:merged').empty?}, asks for a single record"
+puts "search.count           #{client.tickets.search('state.name:open').count}, one request"
+puts "empty?                 #{client.tickets.search('state.name:merged').empty?}, asks for a single record"
 
 # `search` and `page` return a new collection, so scoping one never disturbs
 # the original.

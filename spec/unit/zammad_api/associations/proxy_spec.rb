@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe ZammadAPI::Associations::Proxy do
-  subject(:ticket) { client.ticket.find(42) }
+  subject(:ticket) { client.tickets.find(42) }
 
   let(:client) { unit_client }
   let(:ticket_url) { "#{ClientHelper::BASE_URL}api/v1/tickets/42" }

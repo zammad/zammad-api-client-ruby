@@ -19,7 +19,7 @@ flagged = 0
 nudged  = 0
 
 # `first` stops paginating as soon as it has what it asked for.
-client.ticket.search('state.name:open').first(200).each do |ticket|
+client.tickets.search('state.name:open').first(200).each do |ticket|
   # Records implement `deconstruct_keys`, so case/in works on them.
   case ticket
   in { priority: '3 high', owner_id: 1 } # 1 is Zammad's "-", i.e. unassigned

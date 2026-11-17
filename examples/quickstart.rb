@@ -14,7 +14,7 @@ client = ZammadAPI::Client.from_env
 puts "connected to Zammad #{client.version} as #{client.me.email}"
 
 # Create a ticket together with its first article.
-ticket = client.ticket.create(
+ticket = client.tickets.create(
   title:    'Cannot log in',
   group:    'Users',
   customer: 'nicole.braun@zammad.org',
@@ -29,7 +29,7 @@ puts "created ##{ticket.number} - #{ticket.title}"
 
 # Read it back. Associations come expanded, so these are plain attribute
 # reads rather than further requests.
-ticket = client.ticket.find(ticket.id)
+ticket = client.tickets.find(ticket.id)
 puts "state #{ticket.state}, priority #{ticket.priority}, group #{ticket.group}"
 
 # Add another article.
@@ -42,6 +42,6 @@ puts "sending #{ticket.changes.inspect}"
 ticket.save
 
 # Collections paginate themselves, and `first` stops as soon as it has enough.
-client.ticket.search('state.name:open').first(5).each do |open_ticket|
+client.tickets.search('state.name:open').first(5).each do |open_ticket|
   puts "open: ##{open_ticket.number} #{open_ticket.title}"
 end

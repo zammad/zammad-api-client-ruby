@@ -24,7 +24,7 @@ RSpec.describe ZammadAPI::Resources::Base do
   end
 
   describe 'attributes' do
-    subject(:group) { client.group.new(name: 'Support', 'note' => 'from a string key') }
+    subject(:group) { client.groups.new(name: 'Support', 'note' => 'from a string key') }
 
     it 'reads an attribute' do
       expect(group.name).to eq('Support')
@@ -83,7 +83,7 @@ RSpec.describe ZammadAPI::Resources::Base do
     end
 
     it 'drops the change when an attribute the record carries is set back to its nil original' do
-      carrying_nil = client.group.new(name: 'Support', note: nil)
+      carrying_nil = client.groups.new(name: 'Support', note: nil)
       carrying_nil.note = 'Renamed'
       carrying_nil.note = nil
       expect(carrying_nil.changes).to be_empty
@@ -113,7 +113,7 @@ RSpec.describe ZammadAPI::Resources::Base do
   end
 
   describe 'attribute state a record hands out' do
-    subject(:group) { client.group.new(name: 'Support', preferences: { 'note' => 'keep' }) }
+    subject(:group) { client.groups.new(name: 'Support', preferences: { 'note' => 'keep' }) }
 
     it 'cannot be written through #attributes, which would not stage a change' do
       expect { group.attributes[:name] = 'Sneaky' }.to raise_error(FrozenError)
@@ -157,7 +157,7 @@ RSpec.describe ZammadAPI::Resources::Base do
 
   describe '#save' do
     context 'with a new record' do
-      subject(:group) { client.group.new(name: 'Support') }
+      subject(:group) { client.groups.new(name: 'Support') }
 
       before do
         stub_request(:post, url)
@@ -192,7 +192,7 @@ RSpec.describe ZammadAPI::Resources::Base do
     end
 
     context 'with an existing record' do
-      subject(:group) { client.group.find(1) }
+      subject(:group) { client.groups.find(1) }
 
       before do
         stub_request(:get, "#{url}/1").with(query: hash_including({}))
@@ -241,12 +241,12 @@ RSpec.describe ZammadAPI::Resources::Base do
       stub_request(:post, url).with(query: hash_including({}))
         .to_return(json_response([], status: 201))
 
-      expect { client.group.new(name: 'x').save }
+      expect { client.groups.new(name: 'x').save }
         .to raise_error(ZammadAPI::ParseError, /expected a JSON object, got Array/)
     end
 
     context 'when Zammad rejects the attributes' do
-      subject(:group) { client.group.new }
+      subject(:group) { client.groups.new }
 
       before do
         stub_request(:post, url).with(query: hash_including({}))
@@ -284,14 +284,14 @@ RSpec.describe ZammadAPI::Resources::Base do
         stub_request(:post, url).with(query: hash_including({}))
           .to_return(json_response({ error: 'no' }, status: 403))
 
-        expect { client.group.new(name: 'x').save }.to raise_error(ZammadAPI::AuthorizationError)
+        expect { client.groups.new(name: 'x').save }.to raise_error(ZammadAPI::AuthorizationError)
       end
 
       it 'still raises for a 500' do
         stub_request(:post, url).with(query: hash_including({}))
           .to_return(json_response({}, status: 500))
 
-        expect { client.group.new(name: 'x').save }.to raise_error(ZammadAPI::ServerError)
+        expect { client.groups.new(name: 'x').save }.to raise_error(ZammadAPI::ServerError)
       end
     end
 
@@ -299,7 +299,7 @@ RSpec.describe ZammadAPI::Resources::Base do
       stub_request(:post, url).with(query: hash_including({}))
         .to_return(json_response({ error: 'Name is required' }, status: 422), json_response({ id: 7, name: 'Support' }))
 
-      group = client.group.new
+      group = client.groups.new
       group.save
       group.name = 'Support'
 
@@ -332,7 +332,7 @@ RSpec.describe ZammadAPI::Resources::Base do
   end
 
   describe '#save!' do
-    subject(:group) { client.group.new(name: 'Support') }
+    subject(:group) { client.groups.new(name: 'Support') }
 
     it 'returns true' do
       stub_request(:post, url).with(query: hash_including({})).to_return(json_response({ id: 7 }, status: 201))
@@ -357,7 +357,7 @@ RSpec.describe ZammadAPI::Resources::Base do
   end
 
   describe '#assign_attributes' do
-    subject(:group) { client.group.new(name: 'Support') }
+    subject(:group) { client.groups.new(name: 'Support') }
 
     it 'stages every attribute as a change' do
       group.assign_attributes(name: 'Renamed', note: 'Why')
@@ -431,7 +431,7 @@ RSpec.describe ZammadAPI::Resources::Base do
       stub = stub_request(:post, url).with(query: hash_including({}), body: '{"name":"Support"}')
         .to_return(json_response({ id: 7, name: 'Support' }, status: 201))
 
-      expect(client.group.new.update(name: 'Support')).to be(true)
+      expect(client.groups.new.update(name: 'Support')).to be(true)
       expect(stub).to have_been_requested
     end
   end
@@ -532,7 +532,7 @@ RSpec.describe ZammadAPI::Resources::Base do
     end
 
     it 'raises for a record that was never saved' do
-      expect { client.group.new.destroy }.to raise_error(ZammadAPI::Error, /has not been saved, so there is nothing to destroy/)
+      expect { client.groups.new.destroy }.to raise_error(ZammadAPI::Error, /has not been saved, so there is nothing to destroy/)
     end
 
     # `destroy` asked only whether the record was already destroyed, so one
@@ -542,7 +542,7 @@ RSpec.describe ZammadAPI::Resources::Base do
     it 'sends nothing for a record built with an id it was never saved with' do
       stub = stub_request(:delete, "#{url}/99")
 
-      expect { client.group.new(id: 99, name: 'X').destroy }
+      expect { client.groups.new(id: 99, name: 'X').destroy }
         .to raise_error(ZammadAPI::Error, /is what addresses this record/)
       expect(stub).not_to have_been_requested
     end
@@ -732,7 +732,7 @@ RSpec.describe ZammadAPI::Resources::Base do
   # The attributes are frozen and replaced on write, so a copy never saw the
   # original's next write. The change set is written in place, and was shared.
   describe 'a copy made with dup or clone' do
-    let(:original) { client.group.find(1) }
+    let(:original) { client.groups.find(1) }
 
     before do
       stub_request(:get, "#{url}/1").with(query: { expand: 'true' }).to_return(json_response({ id: 1, name: 'A', note: 'n' }))
@@ -795,8 +795,8 @@ RSpec.describe ZammadAPI::Resources::Base do
     it 'treats two separately fetched records as the same record' do
       stub_request(:get, "#{url}/1").with(query: hash_including({})).to_return(json_response({ id: 1, name: 'Users' }))
 
-      first_fetch  = client.group.find(1)
-      second_fetch = client.group.find(1)
+      first_fetch  = client.groups.find(1)
+      second_fetch = client.groups.find(1)
 
       expect(first_fetch).not_to equal(second_fetch)
       expect(first_fetch).to eq(second_fetch)
@@ -811,7 +811,7 @@ RSpec.describe ZammadAPI::Resources::Base do
 
     it 'identifies a record by its id once its first save assigns one' do
       stub_request(:post, url).with(query: hash_including({})).to_return(json_response({ id: 7, name: 'Support' }))
-      group = client.group.new(name: 'Support')
+      group = client.groups.new(name: 'Support')
 
       expect(group).not_to eq(ZammadAPI::Resources::Group.from_response(unit_transport, id: 7))
       group.save!
@@ -1074,7 +1074,7 @@ RSpec.describe ZammadAPI::Resources::Base do
     # the only one whose value reached the wire: a new record is sent in full,
     # so `new(id: 5).save` POSTed the id nothing had checked.
     it 'is refused by the constructor too' do
-      expect { client.group.new(id: 5) }.to raise_error(ZammadAPI::Error, /is what addresses this record/)
+      expect { client.groups.new(id: 5) }.to raise_error(ZammadAPI::Error, /is what addresses this record/)
     end
 
     it 'still lets a record Zammad served carry one' do
@@ -1116,7 +1116,7 @@ RSpec.describe ZammadAPI::Resources::Base do
 
     it 'still says the record was saved where a save is what left it this way' do
       stub_request(:post, url).with(query: hash_including({})).to_return(status: 201, body: '<html>proxy</html>')
-      new_group = client.group.new(name: 'Support')
+      new_group = client.groups.new(name: 'Support')
       begin
         new_group.save
       rescue ZammadAPI::ParseError
@@ -1135,7 +1135,7 @@ RSpec.describe ZammadAPI::Resources::Base do
   # either, and nothing staged to send, so the retry has to say so rather than
   # take the "nothing to send" short circuit and report success.
   describe 'a create whose success body cannot be parsed' do
-    subject(:group) { client.group.new(name: 'Support') }
+    subject(:group) { client.groups.new(name: 'Support') }
 
     before { stub_request(:post, url).with(query: hash_including({})).to_return(status: 201, body: '<html>proxy</html>') }
 

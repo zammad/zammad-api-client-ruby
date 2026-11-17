@@ -7,7 +7,7 @@ RSpec.describe ZammadAPI, 'group object basics' do
   group = nil
 
   it 'new with invalid attributes' do
-    group_invalid = client.group.new
+    group_invalid = client.groups.new
 
     expect(group_invalid.class).to eq(ZammadAPI::Resources::Group)
     expect(group_invalid.new_record?).to be(true)
@@ -16,7 +16,7 @@ RSpec.describe ZammadAPI, 'group object basics' do
   end
 
   it 'new with valid attributes' do
-    group = client.group.new(
+    group = client.groups.new(
       name:                 name,
       assignment_timeout:   100,
       follow_up_assignment: false,
@@ -78,7 +78,7 @@ RSpec.describe ZammadAPI, 'group object basics' do
 
   it 'find' do
     group = established!(group, 'new with valid attributes')
-    group_lookup = client.group.find(group.id)
+    group_lookup = client.groups.find(group.id)
 
     expect(group_lookup.class).to eq(ZammadAPI::Resources::Group)
     expect(group_lookup.id).to eq(group.id)
@@ -92,7 +92,7 @@ RSpec.describe ZammadAPI, 'group object basics' do
 
   it 'all' do
     group = established!(group, 'new with valid attributes')
-    groups = client.group.all
+    groups = client.groups.all
 
     group_exists = nil
     groups.each do |local_group|
@@ -112,7 +112,7 @@ RSpec.describe ZammadAPI, 'group object basics' do
     group_exists.active = true
     group_exists.save
 
-    group_lookup = client.group.find(group.id)
+    group_lookup = client.groups.find(group.id)
     expect(group_lookup.class).to eq(ZammadAPI::Resources::Group)
     expect(group_lookup.id).to eq(group.id)
     expect(group_lookup.name).to eq("#{name}-2")
@@ -124,7 +124,7 @@ RSpec.describe ZammadAPI, 'group object basics' do
   end
 
   it 'pagination with all' do
-    groups = client.group.all
+    groups = client.groups.all
 
     expect(groups.first.class).to eq(ZammadAPI::Resources::Group)
 
@@ -136,7 +136,7 @@ RSpec.describe ZammadAPI, 'group object basics' do
     expect(count).to eq(3)
 
     count = 0
-    groups = client.group.all
+    groups = client.groups.all
     groups.page(1, per_page: 3).each do |local_group|
       expect(local_group.class).to eq(ZammadAPI::Resources::Group)
       count += 1

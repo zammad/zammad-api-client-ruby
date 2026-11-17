@@ -7,7 +7,7 @@ RSpec.describe ZammadAPI, 'ticket priority object basics' do
   ticket_priority = nil
 
   it 'new with invalid attributes' do
-    ticket_priority_invalid = client.ticket_priority.new
+    ticket_priority_invalid = client.ticket_priorities.new
 
     expect(ticket_priority_invalid.class).to eq(ZammadAPI::Resources::TicketPriority)
     expect(ticket_priority_invalid.new_record?).to be(true)
@@ -16,7 +16,7 @@ RSpec.describe ZammadAPI, 'ticket priority object basics' do
   end
 
   it 'new with valid attributes' do
-    ticket_priority = client.ticket_priority.new(
+    ticket_priority = client.ticket_priorities.new(
       name:   name,
       note:   '',
       active: true,
@@ -63,7 +63,7 @@ RSpec.describe ZammadAPI, 'ticket priority object basics' do
 
   it 'find' do
     ticket_priority = established!(ticket_priority, 'new with valid attributes')
-    ticket_priority_lookup = client.ticket_priority.find(ticket_priority.id)
+    ticket_priority_lookup = client.ticket_priorities.find(ticket_priority.id)
 
     expect(ticket_priority_lookup.class).to eq(ZammadAPI::Resources::TicketPriority)
     expect(ticket_priority_lookup.id).to eq(ticket_priority.id)
@@ -74,7 +74,7 @@ RSpec.describe ZammadAPI, 'ticket priority object basics' do
 
   it 'all' do
     ticket_priority = established!(ticket_priority, 'new with valid attributes')
-    ticket_priorities = client.ticket_priority.all
+    ticket_priorities = client.ticket_priorities.all
 
     ticket_priority_exists = nil
     ticket_priorities.each do |local_ticket_priority|
@@ -91,7 +91,7 @@ RSpec.describe ZammadAPI, 'ticket priority object basics' do
     ticket_priority_exists.active = true
     ticket_priority_exists.save
 
-    ticket_priority_lookup = client.ticket_priority.find(ticket_priority.id)
+    ticket_priority_lookup = client.ticket_priorities.find(ticket_priority.id)
     expect(ticket_priority_lookup.class).to eq(ZammadAPI::Resources::TicketPriority)
     expect(ticket_priority_lookup.id).to eq(ticket_priority.id)
     expect(ticket_priority_lookup.name).to eq("#{name}-2")
@@ -100,7 +100,7 @@ RSpec.describe ZammadAPI, 'ticket priority object basics' do
   end
 
   it 'pagination with all' do
-    ticket_priorities = client.ticket_priority.all
+    ticket_priorities = client.ticket_priorities.all
 
     expect(ticket_priorities.first.class).to eq(ZammadAPI::Resources::TicketPriority)
 
@@ -112,7 +112,7 @@ RSpec.describe ZammadAPI, 'ticket priority object basics' do
     expect(count).to eq(4)
 
     count = 0
-    ticket_priorities = client.ticket_priority.all
+    ticket_priorities = client.ticket_priorities.all
     ticket_priorities.page(1, per_page: 2).each do |local_ticket_priority|
       expect(local_ticket_priority.class).to eq(ZammadAPI::Resources::TicketPriority)
       count += 1

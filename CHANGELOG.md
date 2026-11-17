@@ -69,14 +69,14 @@ A breaking release that modernises the whole gem. See
   operators end in `=` too, so `record <= 5` invented an attribute called `<` the same way;
   a writer is now recognised only by a plain attribute name.
 - `record.destroy` and `record.reload` refuse a record that was never saved, instead of
-  acting on an id it was merely built with. `client.group.new(id: 99).destroy` reported
+  acting on an id it was merely built with. `client.groups.new(id: 99).destroy` reported
   `new_record?` true and `persisted?` false and still sent `DELETE /api/v1/groups/99`.
 - `record.id = ...` raises. The id is what addresses the record, so a staged one took
   effect for every path that builds a URL from the attributes and not at all for the record
   those paths then reported on: `group.id = 99; group.destroy` sent `DELETE` to group 99
   and left the record saying group 1 was the one destroyed. Zammad does not let an id be
   set either, so no call that used to reach the server is lost. The constructor refuses it
-  too: `client.group.new(id: 5)` raises, because a new record is sent in full, so the one
+  too: `client.groups.new(id: 5)` raises, because a new record is sent in full, so the one
   spelling that reached the wire was the one nothing checked. `Resource.from_response` is
   how a body Zammad served becomes a record carrying its id.
 - `record.destroy` marks the record `destroyed?`, and `persisted?` answers false for one.
@@ -98,6 +98,16 @@ A breaking release that modernises the whole gem. See
 - `ZammadAPI::ListBase`, `ListAll` and `ListSearch` were replaced by `ZammadAPI::Collection`.
 - `ZammadAPI::Log` and `ZammadAPI::JsonHelper` were removed. Pass any `Logger` via `logger:`.
 - `ZammadAPI::Dispatcher` was replaced by `ZammadAPI::ResourceProxy`.
+- The resource readers on a client are plural: `client.tickets`, `client.users`,
+  `client.groups`, `client.organizations`, `client.ticket_articles`,
+  `client.ticket_priorities` and `client.ticket_states`. A resource is `Enumerable` over
+  every record of its kind, so `client.ticket.each` and `client.ticket.first(5)` read as if
+  they acted on one ticket; the singular dates from 1.x, when a resource was only a
+  dispatcher for `find` and `create`. The singular names still work, as deprecated aliases
+  that warn in Ruby's `deprecated` category — silent unless the application asks for
+  deprecation warnings, with `ruby -W:deprecated` or `Warning[:deprecated] = true` — and
+  will be removed in 3.0. `client.resource(:ticket)` is answered the same way, and
+  `client.resource_names` lists the plural names.
 - The resources a client exposes are a fixed list. 1.x resolved `client.<name>` to
   `ZammadAPI::Resources::<Name>` through `const_get`, so a subclass of `Base` defined in
   application code could be reached that way. `client.role` now raises
@@ -115,8 +125,8 @@ A breaking release that modernises the whole gem. See
   authenticated user may not see the whole record, and the message says so.
 - `Collection#find` raises `ArgumentError` when given an id. `find` on a resource proxy is
   the lookup by id; on a collection it is `Enumerable#find`, whose argument is an ifnone
-  callable — so `client.ticket.all.find(1)` answered with an `Enumerator`, made no request
-  and raised nothing. Use `client.ticket.find(1)`, or `detect { … }` for the block form.
+  callable — so `client.tickets.all.find(1)` answered with an `Enumerator`, made no request
+  and raised nothing. Use `client.tickets.find(1)`, or `detect { … }` for the block form.
 - `TicketArticle#attachments` raises `ParseError` for attachment metadata that is not a
   list of objects, where it used to die with a bare `NoMethodError` from inside the gem —
   past the `rescue ZammadAPI::Error` every caller is told to write.
@@ -194,8 +204,8 @@ A breaking release that modernises the whole gem. See
   parameters on a `/search` endpoint — and raises `ArgumentError` for anything else.
   Zammad drops a parameter it does not know rather than refusing it, so an attribute
   filter on an index endpoint came back as the whole unfiltered list.
-- A resource proxy is `Enumerable` over `all`, so `client.ticket.each`,
-  `client.ticket.first(5)`, `client.ticket.map`, `#find_each`, `#in_batches`, `#page`,
+- A resource proxy is `Enumerable` over `all`, so `client.tickets.each`,
+  `client.tickets.first(5)`, `client.tickets.map`, `#find_each`, `#in_batches`, `#page`,
   `#pluck` and `#count` all work without naming `all`. `client.x.find(id)` keeps
   its own meaning rather than becoming `Enumerable#find`; `detect` is the block form.
 - `Collection#count` costs a single request on a search endpoint, which Zammad can count
@@ -260,7 +270,7 @@ A breaking release that modernises the whole gem. See
 - `record.related` reaches the records a record points at: `ticket.related.customer`,
   `ticket.related.group`, `ticket.related.articles`, `user.related.organization`, and
   `created_by` / `updated_by` on everything. Following a foreign key used to mean
-  `client.user.find(ticket.customer_id)` by hand. The readers sit under `related` rather
+  `client.users.find(ticket.customer_id)` by hand. The readers sit under `related` rather
   than on the record because Zammad expands an association into a name under the plain
   attribute, and `ticket.customer` has to keep returning that name rather than turning
   into a request. `Resource.associations` lists what a resource declares.
@@ -274,7 +284,7 @@ A breaking release that modernises the whole gem. See
   fell through to `Object#to_json`, which serialized a record as the string
   `"#<ZammadAPI::Resources::Ticket:0x...>"`.
 - `Collection#empty?`, and `#size` / `#length` as names for `#count`. `Enumerable` supplies
-  none of the three, so `client.ticket.all.empty?` used to raise `NoMethodError`. `empty?`
+  none of the three, so `client.tickets.all.empty?` used to raise `NoMethodError`. `empty?`
   costs one request and asks for a single record rather than a whole page, except on a
   collection limited to one page, where the page size decides which records that page holds.
   A resource proxy forwards all three.
@@ -449,7 +459,7 @@ A breaking release that modernises the whole gem. See
   parameter. Nothing in a response tells a whole list from the first page of one, so
   there is no honest check to put in its place.
 - The documented page sizes are sizes the endpoints actually serve. Every `find_each` and
-  `in_batches` example used `of: 500` against `client.ticket`, which caps at 100, so each
+  `in_batches` example used `of: 500` against `client.tickets`, which caps at 100, so each
   headline example did something other than what it showed. The clamp itself stands — a
   batch size says how much to fetch at a time, not which records you get, which is why
   `page` refuses an oversize size and a walk reduces it.

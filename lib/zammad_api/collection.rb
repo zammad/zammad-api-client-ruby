@@ -17,16 +17,16 @@ module ZammadAPI
   # download everything.
   #
   # @example Iterate every ticket
-  #   client.ticket.all.each { |ticket| puts ticket.title }
+  #   client.tickets.all.each { |ticket| puts ticket.title }
   #
   # @example Narrow to matches, then stop after the first five
-  #   client.ticket.search('state.name:open').first(5)
+  #   client.tickets.search('state.name:open').first(5)
   #
   # @example Work in batches, e.g. for an import
-  #   client.ticket.all.in_batches(of: 50) { |tickets| import(tickets) }
+  #   client.tickets.all.in_batches(of: 50) { |tickets| import(tickets) }
   #
   # @example One explicit page
-  #   client.ticket.all.page(2, per_page: 50).to_a
+  #   client.tickets.all.page(2, per_page: 50).to_a
   class Collection
     include Enumerable
 
@@ -124,7 +124,7 @@ module ZammadAPI
     # had already handled and never reached the rest.
     #
     # @example
-    #   client.ticket.all.page(2, per_page: 50).to_a
+    #   client.tickets.all.page(2, per_page: 50).to_a
     #
     # @param number [Integer] one-based page number
     # @param per_page [Integer, nil] records on the page, as many as the endpoint
@@ -145,7 +145,7 @@ module ZammadAPI
     #
     # Only parameters the endpoint actually reads are accepted. Zammad drops
     # the ones it does not know rather than refusing them, so
-    # +client.user.where(email: 'someone@example.com')+ used to come back as
+    # +client.users.where(email: 'someone@example.com')+ used to come back as
     # the whole user index and nothing said otherwise - the caller iterated
     # every user believing they had matched one. An endpoint that cannot
     # answer the question has to say so.
@@ -179,8 +179,8 @@ module ZammadAPI
     # this shapes the result rather than shrinking the request.
     #
     # @example
-    #   client.user.all.pluck(:email)          # => ["a@example.com", ...]
-    #   client.ticket.all.pluck(:id, :title)   # => [[1, "Help"], ...]
+    #   client.users.all.pluck(:email)          # => ["a@example.com", ...]
+    #   client.tickets.all.pluck(:id, :title)   # => [[1, "Help"], ...]
     #
     # @param keys [Array<Symbol, String>] attribute names
     # @return [Array] one value per record for a single key, one array of
@@ -248,9 +248,9 @@ module ZammadAPI
     # +Enumerable#find+, which takes a block.
     #
     # Defined only to refuse the other reading of it. {ResourceProxy#find}
-    # takes an id - +client.ticket.find(1)+ is the lookup by id - and the same
+    # takes an id - +client.tickets.find(1)+ is the lookup by id - and the same
     # word on a collection is +Enumerable#find+, whose argument is an ifnone
-    # callable rather than an id. So +client.ticket.all.find(1)+ made no
+    # callable rather than an id. So +client.tickets.all.find(1)+ made no
     # request, raised nothing, and answered with an Enumerator: a silent
     # no-op, on the one spelling a caller is most likely to reach for.
     #
@@ -312,7 +312,7 @@ module ZammadAPI
     # records that page holds and so cannot be narrowed.
     #
     # @example
-    #   client.ticket.search('state.name:merged').empty?
+    #   client.tickets.search('state.name:merged').empty?
     #
     # @return [Boolean]
     def empty? = first.nil?
@@ -344,12 +344,13 @@ module ZammadAPI
     end
 
     # The resource as a client names it: ZammadAPI::Resources::TicketArticle
-    # is reached as client.ticket_article. Derived rather than looked up in
+    # is reached as client.ticket_articles. Derived rather than looked up in
     # {Client::RESOURCES}, because a resource a caller subclasses themselves is
-    # in no list, and this is a sentence in an error message either way.
-    def resource_name
-      @resource_class.name.to_s.split('::').last.gsub(/([a-z\d])([A-Z])/, '\1_\2').downcase
-    end
+    # in no list, and this is a sentence in an error message either way. From
+    # the path rather than the class name, because the path is already the
+    # plural Zammad itself uses: a class name would need "priority" turned
+    # into "priorities" by a rule this gem has no other use for.
+    def resource_name = @resource_class.resource_path.split('/').last.to_s
 
     def ignored_message(ignored)
       honoured = @filterable.empty? ? 'nothing beyond paging' : @filterable.join(', ')

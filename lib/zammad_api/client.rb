@@ -14,7 +14,7 @@ module ZammadAPI
   #     url:        'https://zammad.example.com/',
   #     http_token: 'your-access-token'
   #   )
-  #   client.ticket.find(1).title
+  #   client.tickets.find(1).title
   #
   # @example Basic authentication with a custom timeout and logger
   #   client = ZammadAPI::Client.new(
@@ -26,14 +26,33 @@ module ZammadAPI
   #   )
   class Client
     # Maps the reader methods of this client to their resource classes.
+    #
+    # Plural, because what a reader hands back stands for every record of
+    # its kind: a {ResourceProxy} is +Enumerable+ over all of them, so
+    # +client.tickets.each+ and +client.tickets.first(5)+ say what they do,
+    # where the singular the readers had in 1.x read as if it acted on one
+    # ticket. That name dates from when a proxy was only a dispatcher for
+    # +find+ and +create+.
     RESOURCES = {
-      group:           Resources::Group,
-      organization:    Resources::Organization,
-      ticket:          Resources::Ticket,
-      ticket_article:  Resources::TicketArticle,
-      ticket_priority: Resources::TicketPriority,
-      ticket_state:    Resources::TicketState,
-      user:            Resources::User
+      groups:            Resources::Group,
+      organizations:     Resources::Organization,
+      tickets:           Resources::Ticket,
+      ticket_articles:   Resources::TicketArticle,
+      ticket_priorities: Resources::TicketPriority,
+      ticket_states:     Resources::TicketState,
+      users:             Resources::User
+    }.freeze
+
+    # The names the readers had in 1.x, mapped to the ones they have now.
+    # Each still works, as a deprecated alias - see {#resource}.
+    DEPRECATED_RESOURCES = {
+      group:           :groups,
+      organization:    :organizations,
+      ticket:          :tickets,
+      ticket_article:  :ticket_articles,
+      ticket_priority: :ticket_priorities,
+      ticket_state:    :ticket_states,
+      user:            :users
     }.freeze
 
     # Methods Ruby calls implicitly for type coercion. They must keep raising
@@ -44,22 +63,67 @@ module ZammadAPI
     #   from its +inspect+ output
     attr_reader :config
 
-    # @!method group
+    # @!method groups
     #   @return [ResourceProxy] proxy for {Resources::Group}
-    # @!method organization
+    # @!method organizations
     #   @return [ResourceProxy] proxy for {Resources::Organization}
-    # @!method ticket
+    # @!method tickets
     #   @return [ResourceProxy] proxy for {Resources::Ticket}
-    # @!method ticket_article
+    # @!method ticket_articles
     #   @return [ResourceProxy] proxy for {Resources::TicketArticle}
-    # @!method ticket_priority
+    # @!method ticket_priorities
     #   @return [ResourceProxy] proxy for {Resources::TicketPriority}
-    # @!method ticket_state
+    # @!method ticket_states
     #   @return [ResourceProxy] proxy for {Resources::TicketState}
-    # @!method user
+    # @!method users
     #   @return [ResourceProxy] proxy for {Resources::User}
-    RESOURCES.each_key do |name|
-      define_method(name) { resource(name) } # steep:ignore NoMethod
+    RESOURCES.each do |name, resource_class|
+      define_method(name) { @resources.fetch(resource_class) }
+    end
+
+    # @!method group
+    #   @deprecated Use {#groups}.
+    #   @return [ResourceProxy]
+    # @!method organization
+    #   @deprecated Use {#organizations}.
+    #   @return [ResourceProxy]
+    # @!method ticket
+    #   @deprecated Use {#tickets}.
+    #   @return [ResourceProxy]
+    # @!method ticket_article
+    #   @deprecated Use {#ticket_articles}.
+    #   @return [ResourceProxy]
+    # @!method ticket_priority
+    #   @deprecated Use {#ticket_priorities}.
+    #   @return [ResourceProxy]
+    # @!method ticket_state
+    #   @deprecated Use {#ticket_states}.
+    #   @return [ResourceProxy]
+    # @!method user
+    #   @deprecated Use {#users}.
+    #   @return [ResourceProxy]
+    DEPRECATED_RESOURCES.each do |old_name, name|
+      define_method(old_name) do
+        Client.warn_deprecated_resource(old_name, name)
+        @resources.fetch(RESOURCES.fetch(name))
+      end
+    end
+
+    # Says that a reader was called by the name it had in 1.x.
+    #
+    # In Ruby's own +deprecated+ category, so it is silent unless the
+    # application asks for deprecation warnings - +ruby -W:deprecated+, or
+    # +Warning[:deprecated] = true+, which is what a test suite turns on -
+    # and a script that has not been migrated yet does not print a line per
+    # request in production. +uplevel+ names the line that made the call,
+    # past the two frames of this class in between.
+    #
+    # @api private
+    # @param old_name [Symbol]
+    # @param name [Symbol]
+    # @return [void]
+    def self.warn_deprecated_resource(old_name, name)
+      warn("ZammadAPI::Client##{old_name} is deprecated and will be removed in 3.0: use ##{name} instead", uplevel: 2, category: :deprecated)
     end
 
     # Environment variables {.from_env} reads, mapped to the options they set.
@@ -135,12 +199,24 @@ module ZammadAPI
       setup(config, Transport.new(config))
     end
 
+    # The proxy for a resource, by name.
+    #
+    # A name from 1.x - +:ticket+ for +:tickets+ - is still answered, with
+    # a deprecation warning.
+    #
     # @param name [Symbol, String] a key of {RESOURCES}
     # @return [ResourceProxy]
     # @raise [UnknownResourceError] when the resource is not known
     def resource(name)
-      resource_class = RESOURCES.fetch(name.to_sym) { raise UnknownResourceError, unknown_resource_message(name) }
-      @resources.fetch(resource_class)
+      key = name.to_sym
+
+      if !RESOURCES.key?(key)
+        current = DEPRECATED_RESOURCES.fetch(key) { raise UnknownResourceError, unknown_resource_message(name) }
+        Client.warn_deprecated_resource(key, current)
+        key = current
+      end
+
+      @resources.fetch(RESOURCES.fetch(key))
     end
 
     # @return [Array<Symbol>] every resource name this client supports
@@ -159,7 +235,7 @@ module ZammadAPI
         # Derived from the resource that declares the endpoint, not spelled
         # out again: `member_path` exists for the same reason, and a path kept
         # in two places is one that moves in one of them. Spelled out here,
-        # `client.user` would follow the users endpoint wherever it went and
+        # `client.users` would follow the users endpoint wherever it went and
         # `client.me` would keep requesting the old one.
         "#{Resources::User.resource_path}/me",
         operation:      'find current user',
@@ -273,7 +349,7 @@ module ZammadAPI
     #
     # @example A longer timeout for one bulk job
     #   bulk = client.with(timeout: 300, retries: 5)
-    #   bulk.ticket.all.each { |ticket| archive(ticket) }
+    #   bulk.tickets.all.each { |ticket| archive(ticket) }
     #
     # @param options [Hash] any option accepted by {Config}
     # @return [Client]
@@ -290,11 +366,11 @@ module ZammadAPI
     #
     # @example Scoped client
     #   support = client.on_behalf_of('agent@example.com')
-    #   support.ticket.create(title: 'Help', group: 'Users', customer_id: 1)
+    #   support.tickets.create(title: 'Help', group: 'Users', customer_id: 1)
     #
     # @example Block form
     #   client.on_behalf_of('agent@example.com') do |scoped|
-    #     scoped.ticket.find(1)
+    #     scoped.tickets.find(1)
     #   end
     #
     # @param identifier [String, Integer] login, email address or user id
@@ -343,7 +419,7 @@ module ZammadAPI
     # The proxies are built here rather than memoized on first use, because a
     # client is documented - and used, in examples/concurrent_sync.rb - as
     # immutable once built and safe to share between threads without locking.
-    # A memo populated by the first `client.ticket` in each worker is a write
+    # A memo populated by the first `client.tickets` in each worker is a write
     # to shared state, and while CRuby's GVL makes it harmless, a contract
     # that only holds on one implementation is not the contract that was
     # written down. Building all seven up front costs an allocation each and

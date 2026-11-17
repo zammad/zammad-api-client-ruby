@@ -24,13 +24,13 @@ abort "usage: #{$PROGRAM_NAME} COMPANY EMAIL FIRSTNAME LASTNAME" if [company, em
 # What the search surfaces is Zammad's business, so a value it has not indexed
 # is a record this will not find, and the `|| create` below would then make a
 # second organization. Searching by hand has the same gap.
-organization = client.organization.find_by(name: company) ||
-               client.organization.create(name: company)
+organization = client.organizations.find_by(name: company) ||
+               client.organizations.create(name: company)
 
 puts "organization: #{organization.name} (id=#{organization.id})"
 
-user = client.user.find_by(email: email) ||
-       client.user.create(
+user = client.users.find_by(email: email) ||
+       client.users.create(
          firstname:       firstname,
          lastname:        lastname,
          email:           email,
@@ -44,7 +44,7 @@ puts "user:         #{user.firstname} #{user.lastname} <#{user.email}> (id=#{use
 # admin client stays unscoped and both remain safe to use.
 as_customer = client.on_behalf_of(user.email)
 
-ticket = as_customer.ticket.create(
+ticket = as_customer.tickets.create(
   title:    "Welcome, #{firstname}!",
   group:    'Users',
   customer: user.email,
@@ -58,6 +58,6 @@ ticket = as_customer.ticket.create(
 puts "ticket:       ##{ticket.number} raised as #{user.email}"
 
 # The block form scopes a single operation.
-own_tickets = client.on_behalf_of(user.email) { |scoped| scoped.ticket.all.count }
+own_tickets = client.on_behalf_of(user.email) { |scoped| scoped.tickets.all.count }
 
 puts "the customer can see #{own_tickets} ticket(s) of their own"

@@ -9,7 +9,7 @@ RSpec.describe ZammadAPI, 'authentication' do
     let(:client) { Helper.client(user: 'not_existing', password: 'not_existing') }
 
     it 'raises AuthenticationError with the failing operation' do
-      expect { client.user.find(1) }.to raise_error(ZammadAPI::AuthenticationError) do |error|
+      expect { client.users.find(1) }.to raise_error(ZammadAPI::AuthenticationError) do |error|
         expect(error.status).to eq(401)
         expect(error.operation).to eq('find object')
         expect(error.resource_class).to eq(ZammadAPI::Resources::User)
@@ -17,7 +17,7 @@ RSpec.describe ZammadAPI, 'authentication' do
     end
 
     it 'raises a ClientError, so both can be rescued together' do
-      expect { client.user.find(1) }.to raise_error(ZammadAPI::ClientError)
+      expect { client.users.find(1) }.to raise_error(ZammadAPI::ClientError)
     end
 
     %i[organization group ticket_priority ticket_state].each do |resource|

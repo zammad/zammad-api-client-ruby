@@ -30,7 +30,7 @@ CSV.open(destination, 'w') do |csv|
   csv << %w[id number title state priority group customer created_at]
 
   # Nothing is loaded until the block runs, and each call is one page.
-  client.ticket.all.in_batches(of: 100) do |tickets|
+  client.tickets.all.in_batches(of: 100) do |tickets|
     tickets.each do |ticket|
       row = [
         ticket.fetch(:id), # raises KeyError if it is missing

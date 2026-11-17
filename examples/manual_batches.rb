@@ -15,7 +15,7 @@ PER_PAGE = 50
 CURSOR   = File.join(Dir.tmpdir, 'zammad_batch_cursor')
 
 client  = ZammadAPI::Client.from_env
-tickets = client.ticket.all
+tickets = client.tickets.all
 
 # 1. Pull a page when you are ready for it -----------------------------------
 #

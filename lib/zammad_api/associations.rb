@@ -16,7 +16,7 @@ module ZammadAPI
     # two apart at the call site.
     #
     # @example
-    #   ticket = client.ticket.find(1)
+    #   ticket = client.tickets.find(1)
     #
     #   ticket.customer               # => "customer@example.com", already loaded
     #   ticket.related.customer       # => the User record, one request

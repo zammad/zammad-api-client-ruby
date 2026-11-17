@@ -63,8 +63,8 @@ def cleanup
   return if @group.nil? && @ticket.nil?
 
   section 'Cleanup'
-  check('destroy the ticket') { CLIENT.ticket.destroy(@ticket.id) } if @ticket
-  check('destroy the group')  { CLIENT.group.destroy(@group.id) }   if @group
+  check('destroy the ticket') { CLIENT.tickets.destroy(@ticket.id) } if @ticket
+  check('destroy the group')  { CLIENT.groups.destroy(@group.id) }   if @group
 end
 
 def finish
@@ -94,7 +94,7 @@ check!('auto wizard or already configured') do
   # /api/v1/getting_started, so the setup state cannot be read from there.
   # An authenticated request answers the only question that matters.
   ZammadAPI::Client.new(url: URL, user: LOGIN, password: PASSWORD, retries: 0)
-    .group.all.page(1, per_page: 1).to_a
+    .groups.all.page(1, per_page: 1).to_a
   'already set up'
 end
 
@@ -119,14 +119,14 @@ end
 section 'Records'
 
 check!('create a group') do
-  @group = CLIENT.group.create(name: "smoke-#{SUFFIX}", note: 'created by check_connection.rb')
+  @group = CLIENT.groups.create(name: "smoke-#{SUFFIX}", note: 'created by check_connection.rb')
   raise 'no id assigned' if @group.id.nil?
 
   "id=#{@group.id}"
 end
 
 check('find it back') do
-  found = CLIENT.group.find(@group.id)
+  found = CLIENT.groups.find(@group.id)
   raise "name mismatch: #{found.name}" if found.name != "smoke-#{SUFFIX}"
 
   found.name
@@ -137,7 +137,7 @@ check('update only the changed attribute') do
   raise 'change not staged' if !@group.changed?
 
   @group.save
-  CLIENT.group.find(@group.id).note
+  CLIENT.groups.find(@group.id).note
 end
 
 check('reload discards local changes') do
@@ -146,7 +146,7 @@ check('reload discards local changes') do
 end
 
 check('pattern match a record') do
-  case CLIENT.group.find(@group.id)
+  case CLIENT.groups.find(@group.id)
   in { name: String => name, active: true } then name
   else raise 'record did not match the expected pattern'
   end
@@ -155,28 +155,28 @@ end
 section 'Collections'
 
 check('iterate every group across pages') do
-  names = CLIENT.group.all.map(&:name)
+  names = CLIENT.groups.all.map(&:name)
   raise 'created group missing from .all' if !names.include?("smoke-#{SUFFIX}")
 
   "#{names.size} groups"
 end
 
-check('fetch a single page') { "#{CLIENT.group.all.page(1, per_page: 1).to_a.size} record" }
+check('fetch a single page') { "#{CLIENT.groups.all.page(1, per_page: 1).to_a.size} record" }
 
-check('lazy enumeration stops early') { CLIENT.group.all.lazy.map(&:id).first(1).inspect }
+check('lazy enumeration stops early') { CLIENT.groups.all.lazy.map(&:id).first(1).inspect }
 
 check('page by page') do
   pages = 0
-  CLIENT.group.all.in_batches(of: 1) { pages += 1 }
+  CLIENT.groups.all.in_batches(of: 1) { pages += 1 }
   "#{pages} page(s)"
 end
 
-check('search') { "#{CLIENT.user.search(LOGIN).to_a.size} hits" }
+check('search') { "#{CLIENT.users.search(LOGIN).to_a.size} hits" }
 
 # These were never driven against a live Zammad, which is why nobody noticed
 # that an attribute passed to `where` never reached the query at all.
 check('find_by returns a record that matches') do
-  found = CLIENT.group.find_by(name: "smoke-#{SUFFIX}")
+  found = CLIENT.groups.find_by(name: "smoke-#{SUFFIX}")
   raise 'no record found' if found.nil?
   raise "found the wrong record: #{found.name}" if found.name != "smoke-#{SUFFIX}"
 
@@ -190,8 +190,8 @@ end
 # column does, so a record that exists comes back as nil. A stubbed unit spec
 # cannot see that; it answers whatever term it is handed.
 check('find_by matches on two string attributes') do
-  group = CLIENT.group.find(@group.id)
-  found = CLIENT.group.find_by(name: group.name, note: group.note)
+  group = CLIENT.groups.find(@group.id)
+  found = CLIENT.groups.find_by(name: group.name, note: group.note)
   raise 'no record found' if found.nil?
   raise "found the wrong record: #{found.name}" if found.id != group.id
 
@@ -199,54 +199,54 @@ check('find_by matches on two string attributes') do
 end
 
 check('find_by returns nil for no match') do
-  found = CLIENT.group.find_by(name: "no-such-group-#{SUFFIX}")
+  found = CLIENT.groups.find_by(name: "no-such-group-#{SUFFIX}")
   raise "expected nil, got #{found.inspect}" if !found.nil?
 
   'nil'
 end
 
 check('find_by! raises for no match') do
-  CLIENT.group.find_by!(name: "no-such-group-#{SUFFIX}")
+  CLIENT.groups.find_by!(name: "no-such-group-#{SUFFIX}")
   raise 'expected NotFoundError'
 rescue ZammadAPI::NotFoundError
   'raised'
 end
 
 check('exists?') do
-  raise 'the created group is missing' if !CLIENT.group.exists?(@group.id)
-  raise 'a made-up id exists' if CLIENT.group.exists?(0)
+  raise 'the created group is missing' if !CLIENT.groups.exists?(@group.id)
+  raise 'a made-up id exists' if CLIENT.groups.exists?(0)
 
   'true and false'
 end
 
 check('pluck') do
-  names = CLIENT.group.all.pluck(:name)
+  names = CLIENT.groups.all.pluck(:name)
   raise 'created group missing' if !names.include?("smoke-#{SUFFIX}")
 
   "#{names.size} names"
 end
 
 check('empty? on a search with no hits') do
-  raise 'expected empty' if !CLIENT.group.search("no-such-group-#{SUFFIX}").empty?
+  raise 'expected empty' if !CLIENT.groups.search("no-such-group-#{SUFFIX}").empty?
 
   'true'
 end
 
 check('where refuses a filter the endpoint would drop') do
-  CLIENT.group.where(name: "smoke-#{SUFFIX}").to_a
+  CLIENT.groups.where(name: "smoke-#{SUFFIX}").to_a
   raise 'expected ArgumentError'
 rescue ArgumentError => e
   e.message.split('.').first
 end
 
 check('where accepts a parameter the endpoint honours') do
-  "#{CLIENT.group.all.where(sort_by: 'name').page(1, per_page: 2).to_a.size} record(s)"
+  "#{CLIENT.groups.all.where(sort_by: 'name').page(1, per_page: 2).to_a.size} record(s)"
 end
 
 section 'Tickets'
 
 check!('create a ticket with its first article') do
-  @ticket = CLIENT.ticket.create(
+  @ticket = CLIENT.tickets.create(
     title:    "smoke ticket #{SUFFIX}",
     group:    'Users',
     customer: LOGIN,
@@ -258,7 +258,7 @@ end
 check('read its articles') { "#{@ticket.articles.size} article(s)" }
 
 check('add another article') do
-  CLIENT.ticket.find(@ticket.id).article(subject: 'second', body: 'another one', type: 'note').id
+  CLIENT.tickets.find(@ticket.id).article(subject: 'second', body: 'another one', type: 'note').id
 end
 
 check('article count grew') do
@@ -269,7 +269,7 @@ check('article count grew') do
 end
 
 check('attachment metadata and download') do
-  CLIENT.ticket.find(@ticket.id).article(
+  CLIENT.tickets.find(@ticket.id).article(
     subject:     'with attachment',
     body:        'see attachment',
     type:        'note',
@@ -289,32 +289,32 @@ end
 section 'On behalf of another user'
 
 check('sends the From header') do
-  CLIENT.on_behalf_of(LOGIN) { |scoped| scoped.ticket.find(@ticket.id).number }
+  CLIENT.on_behalf_of(LOGIN) { |scoped| scoped.tickets.find(@ticket.id).number }
 end
 
 check('block form leaves the outer client unscoped') do
-  CLIENT.on_behalf_of(LOGIN) { |scoped| scoped.group.find(@group.id) }
-  CLIENT.group.find(@group.id).name
+  CLIENT.on_behalf_of(LOGIN) { |scoped| scoped.groups.find(@group.id) }
+  CLIENT.groups.find(@group.id).name
 end
 
 section 'Errors'
 
 check('missing record raises NotFoundError') do
-  CLIENT.group.find(0)
+  CLIENT.groups.find(0)
   raise 'expected NotFoundError'
 rescue ZammadAPI::NotFoundError => e
   "status=#{e.status}"
 end
 
 check('invalid attributes raise a ClientError') do
-  CLIENT.group.create({})
+  CLIENT.groups.create({})
   raise 'expected a ClientError'
 rescue ZammadAPI::ClientError => e
   "status=#{e.status}"
 end
 
 check('bad credentials raise AuthenticationError') do
-  ZammadAPI::Client.new(url: URL, user: 'nobody', password: 'wrong', retries: 0).group.find(1)
+  ZammadAPI::Client.new(url: URL, user: 'nobody', password: 'wrong', retries: 0).groups.find(1)
   raise 'expected AuthenticationError'
 rescue ZammadAPI::AuthenticationError => e
   "status=#{e.status}"

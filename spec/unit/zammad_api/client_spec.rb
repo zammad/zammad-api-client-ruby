@@ -95,7 +95,7 @@ RSpec.describe ZammadAPI::Client do
           .with(query: hash_including({}), basic_auth: %w[u p])
           .to_return(json_response({ id: 1 }))
 
-        described_class.from_env(user: 'u', password: 'p', retries: 0).user.find(1)
+        described_class.from_env(user: 'u', password: 'p', retries: 0).users.find(1)
         expect(stub).to have_been_requested
       end
     end
@@ -200,7 +200,7 @@ RSpec.describe ZammadAPI::Client do
     end
 
     it 'returns a proxy' do
-      expect(unit_client.group).to be_a(ZammadAPI::ResourceProxy)
+      expect(unit_client.groups).to be_a(ZammadAPI::ResourceProxy)
     end
 
     it 'lists the supported resource names' do
@@ -208,13 +208,69 @@ RSpec.describe ZammadAPI::Client do
     end
   end
 
+  # A proxy is Enumerable over every record of its kind, so the readers are
+  # plural. The singular names are what they were called in 1.x, when a proxy
+  # was only a dispatcher for find and create.
+  describe 'the singular names the readers had in 1.x' do
+    around do |example|
+      enabled = Warning[:deprecated]
+      Warning[:deprecated] = true
+      example.run
+    ensure
+      Warning[:deprecated] = enabled
+    end
+
+    ZammadAPI::Client::DEPRECATED_RESOURCES.each do |old_name, name|
+      it "still answers ##{old_name} with what ##{name} answers" do
+        client = unit_client
+        proxy  = nil
+
+        expect { proxy = client.public_send(old_name) }.to output.to_stderr
+        expect(proxy).to be(client.public_send(name))
+      end
+    end
+
+    it 'covers every reader' do
+      expect(ZammadAPI::Client::DEPRECATED_RESOURCES.values).to eq(ZammadAPI::Client::RESOURCES.keys)
+    end
+
+    it 'warns, naming the replacement' do
+      expect { unit_client.ticket }
+        .to output(/ZammadAPI::Client#ticket is deprecated and will be removed in 3\.0: use #tickets instead/).to_stderr
+    end
+
+    it 'names the line that made the call, not one inside the gem' do
+      expect { unit_client.ticket }.to output(/#{Regexp.escape(__FILE__)}:#{__LINE__}: warning: /).to_stderr
+    end
+
+    it 'does not warn for the plural name' do
+      expect { unit_client.tickets }.not_to output.to_stderr
+    end
+
+    # Ruby's own category for this, so an application decides whether to hear
+    # it: a script that has not been migrated does not print a line per call.
+    it 'says nothing unless deprecation warnings are on' do
+      Warning[:deprecated] = false
+      expect { unit_client.ticket }.not_to output.to_stderr
+    end
+
+    it 'is not listed among the resource names' do
+      expect(unit_client.resource_names).not_to include(:ticket)
+    end
+  end
+
   describe '#resource' do
     it 'accepts a symbol' do
-      expect(unit_client.resource(:group).resource_class).to eq(ZammadAPI::Resources::Group)
+      expect(unit_client.resource(:groups).resource_class).to eq(ZammadAPI::Resources::Group)
     end
 
     it 'accepts a string' do
-      expect(unit_client.resource('group').resource_class).to eq(ZammadAPI::Resources::Group)
+      expect(unit_client.resource('groups').resource_class).to eq(ZammadAPI::Resources::Group)
+    end
+
+    it 'answers with the proxy the reader answers with' do
+      client = unit_client
+      expect(client.resource(:ticket_priorities)).to be(client.ticket_priorities)
     end
 
     it 'raises for an unknown resource' do
@@ -223,7 +279,30 @@ RSpec.describe ZammadAPI::Client do
     end
 
     it 'lists the available resources in the error' do
-      expect { unit_client.resource(:unicorn) }.to raise_error(/available resources are: group, organization/)
+      expect { unit_client.resource(:unicorn) }.to raise_error(/available resources are: groups, organizations/)
+    end
+
+    context 'with a name from 1.x' do
+      around do |example|
+        enabled = Warning[:deprecated]
+        Warning[:deprecated] = true
+        example.run
+      ensure
+        Warning[:deprecated] = enabled
+      end
+
+      it 'still answers, with the proxy the plural answers with' do
+        client = unit_client
+        proxy  = nil
+
+        expect { proxy = client.resource(:ticket) }.to output.to_stderr
+        expect(proxy).to be(client.tickets)
+      end
+
+      it 'warns, naming the line that made the call' do
+        expect { unit_client.resource('ticket') }
+          .to output(/#{Regexp.escape(__FILE__)}:#{__LINE__ - 1}: warning: ZammadAPI::Client#ticket is deprecated/).to_stderr
+      end
     end
   end
 
@@ -254,7 +333,7 @@ RSpec.describe ZammadAPI::Client do
     end
 
     it 'defines resource readers on the client itself, so they win over inherited methods' do
-      expect(described_class.instance_method(:user).owner).to eq(described_class)
+      expect(described_class.instance_method(:users).owner).to eq(described_class)
     end
   end
 
@@ -552,7 +631,7 @@ RSpec.describe ZammadAPI::Client do
         .with(query: hash_including({}), headers: { 'From' => 'agent@example.com' })
         .to_return(json_response({ id: 1 }))
 
-      unit_client.on_behalf_of('agent@example.com').user.find(1)
+      unit_client.on_behalf_of('agent@example.com').users.find(1)
       expect(stub).to have_been_requested
     end
 
@@ -564,15 +643,15 @@ RSpec.describe ZammadAPI::Client do
     it 'leaves the original client unscoped' do
       client = unit_client
       client.on_behalf_of('someone')
-      client.user.find(1)
+      client.users.find(1)
 
       expect(a_request(:get, url).with { |request| request.headers.key?('From') }).not_to have_been_made
     end
 
     it 'keeps the scoped client usable for several requests' do
       scoped = unit_client.on_behalf_of('agent@example.com')
-      scoped.user.find(1)
-      scoped.user.find(1)
+      scoped.users.find(1)
+      scoped.users.find(1)
 
       expect(a_request(:get, url).with(query: hash_including({}), headers: { 'From' => 'agent@example.com' }))
         .to have_been_made.twice
@@ -580,7 +659,7 @@ RSpec.describe ZammadAPI::Client do
 
     describe 'block form' do
       it 'yields a scoped client' do
-        unit_client.on_behalf_of('agent@example.com') { |scoped| scoped.user.find(1) }
+        unit_client.on_behalf_of('agent@example.com') { |scoped| scoped.users.find(1) }
 
         expect(a_request(:get, url).with(query: hash_including({}), headers: { 'From' => 'agent@example.com' }))
           .to have_been_made
@@ -595,7 +674,7 @@ RSpec.describe ZammadAPI::Client do
 
         expect { client.on_behalf_of('agent@example.com') { raise 'boom' } }.to raise_error('boom')
 
-        client.user.find(1)
+        client.users.find(1)
         expect(a_request(:get, url).with { |request| request.headers.key?('From') }).not_to have_been_made
       end
     end
@@ -646,7 +725,7 @@ RSpec.describe ZammadAPI::Client do
           .with(query: hash_including({}), headers: { 'Authorization' => 'Bearer x' })
           .to_return(json_response({ id: 1 }))
 
-        unit_client.with(oauth2_token: 'x').user.find(1)
+        unit_client.with(oauth2_token: 'x').users.find(1)
         expect(stub).to have_been_requested
       end
 
@@ -677,13 +756,13 @@ RSpec.describe ZammadAPI::Client do
         .with(query: hash_including({}), headers: { 'From' => 'agent@example.com' })
         .to_return(json_response({ id: 1 }))
 
-      unit_client.on_behalf_of('agent@example.com').with(timeout: 5).user.find(1)
+      unit_client.on_behalf_of('agent@example.com').with(timeout: 5).users.find(1)
       expect(stub).to have_been_requested
     end
 
     it 'still works for requests' do
       stub_request(:get, url).with(query: hash_including({})).to_return(json_response({ id: 1 }))
-      expect(unit_client.with(timeout: 5).user.find(1).id).to eq(1)
+      expect(unit_client.with(timeout: 5).users.find(1).id).to eq(1)
     end
   end
 
@@ -695,9 +774,9 @@ RSpec.describe ZammadAPI::Client do
       logins = %w[a@example.com b@example.com c@example.com]
 
       threads = logins.map do |login|
-        Thread.new { 5.times { client.on_behalf_of(login).user.find(1) } }
+        Thread.new { 5.times { client.on_behalf_of(login).users.find(1) } }
       end
-      threads << Thread.new { 5.times { client.user.find(1) } }
+      threads << Thread.new { 5.times { client.users.find(1) } }
       threads.each(&:join)
 
       logins.each do |login|
@@ -711,11 +790,11 @@ RSpec.describe ZammadAPI::Client do
 
       client = unit_client
       threads = %w[a@example.com b@example.com].map do |login|
-        Thread.new { 5.times { client.on_behalf_of(login).user.find(1) } }
+        Thread.new { 5.times { client.on_behalf_of(login).users.find(1) } }
       end
       threads.each(&:join)
 
-      client.user.find(1)
+      client.users.find(1)
 
       expect(
         a_request(:get, url).with(query: hash_including({})) { |request| !request.headers.key?('From') }
@@ -742,25 +821,25 @@ RSpec.describe ZammadAPI::Client do
   end
 
   # A proxy holds nothing but the client's transport and the resource class,
-  # and `client.ticket` is the idiom every call starts with - each one used to
+  # and `client.tickets` is the idiom every call starts with - each one used to
   # allocate a fresh one.
   describe 'resource proxies' do
     subject(:client) { unit_client }
 
     it 'hands out the same proxy for the same resource' do
-      first = client.ticket
+      first = client.tickets
 
-      expect(client.ticket).to be(first)
+      expect(client.tickets).to be(first)
     end
 
     # Built up front rather than memoized on first use. A client is documented
     # as immutable once built and safe to share between threads without
-    # locking, and a memo filled in by the first `client.ticket` in each worker
+    # locking, and a memo filled in by the first `client.tickets` in each worker
     # is a write to shared state - harmless under CRuby's GVL, but not the
     # contract that was written down.
     it 'is not mutated by reading a proxy off it' do
       before_read = client.instance_variable_get(:@resources)
-      client.ticket
+      client.tickets
 
       expect(client.instance_variable_get(:@resources)).to be(before_read)
     end
@@ -774,17 +853,17 @@ RSpec.describe ZammadAPI::Client do
     end
 
     it 'hands out a different proxy per resource' do
-      expect(client.ticket).not_to be(client.user)
+      expect(client.tickets).not_to be(client.users)
     end
 
     # The cache belongs to one transport, so a derived client must not be
     # handed proxies still wired to the transport it was derived from.
     it 'does not carry a proxy over to an on_behalf_of client' do
-      expect(client.on_behalf_of('agent@example.com').ticket).not_to be(client.ticket)
+      expect(client.on_behalf_of('agent@example.com').tickets).not_to be(client.tickets)
     end
 
     it 'does not carry a proxy over to a client built with #with' do
-      expect(client.with(timeout: 5).ticket).not_to be(client.ticket)
+      expect(client.with(timeout: 5).tickets).not_to be(client.tickets)
     end
 
     # The point of not sharing the cache: a proxy from the derived client has
@@ -793,8 +872,8 @@ RSpec.describe ZammadAPI::Client do
       stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/tickets/1")
         .with(query: hash_including({})).to_return(json_response({ id: 1 }))
 
-      client.ticket
-      client.on_behalf_of('agent@example.com').ticket.find(1)
+      client.tickets
+      client.on_behalf_of('agent@example.com').tickets.find(1)
 
       expect(a_request(:get, "#{ClientHelper::BASE_URL}api/v1/tickets/1")
         .with(query: hash_including({}), headers: { 'From' => 'agent@example.com' })).to have_been_made

@@ -16,7 +16,7 @@ client = ZammadAPI::Client.from_env
 ticket_id = Integer(ARGV.fetch(0) { abort "usage: #{$PROGRAM_NAME} TICKET_ID [DIRECTORY]" })
 directory = ARGV.fetch(1, "ticket-#{ticket_id}")
 
-ticket = client.ticket.find(ticket_id)
+ticket = client.tickets.find(ticket_id)
 FileUtils.mkdir_p(directory)
 
 # The filename comes from the server, so `File.basename` strips any directory

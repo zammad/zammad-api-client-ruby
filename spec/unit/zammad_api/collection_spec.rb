@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
 RSpec.describe ZammadAPI::Collection do
-  subject(:collection) { client.group.all }
+  subject(:collection) { client.groups.all }
 
   let(:client) { unit_client }
   let(:url) { "#{ClientHelper::BASE_URL}api/v1/groups" }
   # `condition` is only honoured by a search endpoint, so the nested-filter
   # examples need one.
-  let(:search_collection) { client.ticket.search('x') }
+  let(:search_collection) { client.tickets.search('x') }
 
   # What a collection over this endpoint fetches per request when nothing asks
   # for another size: as many as the endpoint serves. Read off the resource
@@ -352,43 +352,43 @@ RSpec.describe ZammadAPI::Collection do
     it 'clamps a walk to what a generic index endpoint serves' do
       stub_page(1, [], per_page: 1000)
 
-      client.group.all.find_each(batch_size: 5000).to_a
+      client.groups.all.find_each(batch_size: 5000).to_a
       expect(a_request(:get, url).with(query: hash_including('per_page' => '1000'))).to have_been_made
     end
 
     it 'refuses a page larger than a generic index endpoint serves' do
-      expect { client.group.all.page(1, per_page: 5000) }
+      expect { client.groups.all.page(1, per_page: 5000) }
         .to raise_error(ArgumentError, /serves at most 1000 records per page/)
     end
 
     it 'refuses a page larger than the ticket index endpoint serves' do
-      expect { client.ticket.all.page(1, per_page: 5000) }
+      expect { client.tickets.all.page(1, per_page: 5000) }
         .to raise_error(ArgumentError, /serves at most 100 records per page/)
     end
 
     it 'refuses a page larger than a search endpoint serves' do
-      expect { client.user.search('smith').page(1, per_page: 5000) }
+      expect { client.users.search('smith').page(1, per_page: 5000) }
         .to raise_error(ArgumentError, /serves at most 200 records per page/)
     end
 
     it 'names the page that would have been served instead' do
-      expect { client.ticket.all.page(3, per_page: 500) }
+      expect { client.tickets.all.page(3, per_page: 500) }
         .to raise_error(ArgumentError, /page\(3, per_page: 500\) would be sent as page 3 of 100/)
     end
 
     it 'names a page size the endpoint does serve' do
-      expect { client.ticket.all.page(3, per_page: 500) }
+      expect { client.tickets.all.page(3, per_page: 500) }
         .to raise_error(ArgumentError, /Ask for page\(3, per_page: 100\) or fewer/)
     end
 
     it 'accepts a page exactly the size the endpoint serves' do
-      expect(client.ticket.all.page(2, per_page: 100).inspect).to include('per_page=100')
+      expect(client.tickets.all.page(2, per_page: 100).inspect).to include('per_page=100')
     end
 
     it 'walks the whole list when asked for more per page than the endpoint serves' do
       stub_capped_endpoint("#{ClientHelper::BASE_URL}api/v1/tickets", total: 250, max: 100)
 
-      expect(client.ticket.all.find_each(batch_size: 250).map(&:id)).to eq((1..250).to_a)
+      expect(client.tickets.all.find_each(batch_size: 250).map(&:id)).to eq((1..250).to_a)
     end
   end
 
@@ -432,7 +432,7 @@ RSpec.describe ZammadAPI::Collection do
     # Pointing at find_by would send the caller in a circle: find_by needs the
     # search endpoint this resource has none of.
     it 'points at detect for a resource Zammad does not search' do
-      expect { client.ticket_state.all.where(name: 'open') }
+      expect { client.ticket_states.all.where(name: 'open') }
         .to raise_error(ArgumentError, /routes none for this resource, so walk the records and pick with detect/)
     end
 
@@ -517,7 +517,7 @@ RSpec.describe ZammadAPI::Collection do
         .with(query: { 'expand' => 'true', 'query' => 'smith', 'only_total_count' => 'true' })
         .to_return(json_response({ total_count: 4711 }))
 
-      expect(client.user.search('smith').count).to eq(4711)
+      expect(client.users.search('smith').count).to eq(4711)
     end
 
     # model_index_render reads sort_by, order_by and the paging and drops
@@ -542,7 +542,7 @@ RSpec.describe ZammadAPI::Collection do
       stub_request(:get, search_url).with(query: hash_including('only_total_count' => 'true'))
         .to_return(json_response({ total_count: -3 }))
 
-      expect(client.user.search('smith').count).to eq(1)
+      expect(client.users.search('smith').count).to eq(1)
     end
 
     it 'walks the pages when a search endpoint answers with no total at all' do
@@ -553,7 +553,7 @@ RSpec.describe ZammadAPI::Collection do
       stub_request(:get, search_url).with(query: hash_including('only_total_count' => 'true'))
         .to_return(json_response({}))
 
-      expect(client.user.search('smith').count).to eq(1)
+      expect(client.users.search('smith').count).to eq(1)
     end
 
     it 'walks the pages when the total it answers with is not a count' do
@@ -564,7 +564,7 @@ RSpec.describe ZammadAPI::Collection do
       stub_request(:get, search_url).with(query: hash_including('only_total_count' => 'true'))
         .to_return(json_response({ total_count: 'lots' }))
 
-      expect(client.user.search('smith').count).to eq(1)
+      expect(client.users.search('smith').count).to eq(1)
     end
 
     # Not an endpoint Zammad has - all four search actions route through
@@ -579,7 +579,7 @@ RSpec.describe ZammadAPI::Collection do
       stub_request(:get, search_url).with(query: hash_including('only_total_count' => 'true'))
         .to_return(json_response([{ id: 1 }, { id: 2 }]))
 
-      expect(client.user.search('smith').count).to eq(2)
+      expect(client.users.search('smith').count).to eq(2)
     end
 
     it 'counts one page only when limited to a page' do
@@ -607,7 +607,7 @@ RSpec.describe ZammadAPI::Collection do
         .with(query: { 'expand' => 'true', 'query' => 'smith', 'only_total_count' => 'true' })
         .to_return(json_response({ total_count: 4711 }))
 
-      expect(client.user.search('smith').size).to eq(4711)
+      expect(client.users.search('smith').size).to eq(4711)
     end
 
     it 'is also spelled #length' do
@@ -703,12 +703,12 @@ RSpec.describe ZammadAPI::Collection do
     end
 
     it 'names the lookup that does take an id' do
-      expect { collection.find(1) }.to raise_error(ArgumentError, /client\.group\.find\(1\)/)
+      expect { collection.find(1) }.to raise_error(ArgumentError, /client\.groups\.find\(1\)/)
     end
 
     it 'names the resource the way a client does, for a multi-word one' do
-      expect { client.ticket_article.all.find(7) }
-        .to raise_error(ArgumentError, /client\.ticket_article\.find\(7\)/)
+      expect { client.ticket_articles.all.find(7) }
+        .to raise_error(ArgumentError, /client\.ticket_articles\.find\(7\)/)
     end
 
     it 'points at detect for the block form' do

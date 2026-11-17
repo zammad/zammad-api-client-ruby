@@ -245,7 +245,7 @@ RSpec.describe ZammadAPI::Transport do
       end
 
       it 'is raised by a record save carrying such a value' do
-        group = unit_client.group.new(name: 'Support', weight: Float::INFINITY)
+        group = unit_client.groups.new(name: 'Support', weight: Float::INFINITY)
         expect { group.save }.to raise_error(ZammadAPI::Error, /Infinity not allowed in JSON/)
       end
     end
@@ -631,7 +631,7 @@ RSpec.describe ZammadAPI::Transport do
       it 'sends nothing before refusing' do
         stub = stub_request(:post, url).with(query: hash_including({}))
 
-        expect { unit_client(middleware: ->(builder) { builder.response(:json) }).group.create(name: 'X') }
+        expect { unit_client(middleware: ->(builder) { builder.response(:json) }).groups.create(name: 'X') }
           .to raise_error(ZammadAPI::ConfigurationError)
         expect(stub).not_to have_been_requested
       end

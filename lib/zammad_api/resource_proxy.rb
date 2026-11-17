@@ -8,24 +8,24 @@ require_relative 'errors'
 module ZammadAPI
   # Entry point for working with one kind of Zammad record.
   #
-  # Obtained from {Client}, e.g. +client.ticket+, and exposes the operations
+  # Obtained from {Client}, e.g. +client.tickets+, and exposes the operations
   # that are not tied to an individual record.
   #
   # @example
-  #   client.group.find(1)
-  #   client.group.create(name: 'Support')
-  #   client.group.all.each { |group| puts group.name }
-  #   client.group.all.where(sort_by: 'name').first(5)
-  #   client.group.search('support').first
+  #   client.groups.find(1)
+  #   client.groups.create(name: 'Support')
+  #   client.groups.all.each { |group| puts group.name }
+  #   client.groups.all.where(sort_by: 'name').first(5)
+  #   client.groups.search('support').first
   #
   # A proxy is +Enumerable+ over {#all}, so the collection surface is reachable
   # without naming it:
   #
   # @example
-  #   client.group.each { |group| puts group.name }
-  #   client.group.first(5)
-  #   client.group.map(&:name)
-  #   client.group.find_each(batch_size: 500) { |group| archive(group) }
+  #   client.groups.each { |group| puts group.name }
+  #   client.groups.first(5)
+  #   client.groups.map(&:name)
+  #   client.groups.find_each(batch_size: 500) { |group| archive(group) }
   #
   # {#find} takes an id and is not +Enumerable#find+; +detect+ is still the
   # block form.
@@ -160,7 +160,7 @@ module ZammadAPI
     # those few.
     #
     # @example
-    #   client.user.find_by(email: 'someone@example.com')&.id
+    #   client.users.find_by(email: 'someone@example.com')&.id
     #
     # @param params [Hash] attribute names and the values to match exactly
     # @return [Resources::Base, nil] nil when nothing matched
@@ -253,7 +253,7 @@ module ZammadAPI
     #   Yields every record of this kind, fetching pages as needed.
     #
     #   This is what makes a proxy +Enumerable+, so +first+, +map+, +lazy+
-    #   and the rest work straight off +client.group+.
+    #   and the rest work straight off +client.groups+.
     #   @yieldparam record [Resources::Base]
     #   @return [Enumerator] when no block is given
     #   @see Collection#each

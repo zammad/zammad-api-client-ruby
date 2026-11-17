@@ -7,7 +7,7 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
   ticket = nil
 
   it 'new with invalid attributes' do
-    ticket_invalid = client.ticket.new
+    ticket_invalid = client.tickets.new
 
     expect(ticket_invalid.class).to eq(ZammadAPI::Resources::Ticket)
     expect(ticket_invalid.new_record?).to be(true)
@@ -16,7 +16,7 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
   end
 
   it 'new with valid attributes' do
-    ticket = client.ticket.new(
+    ticket = client.tickets.new(
       title:    title,
       state:    'new',
       priority: '2 normal',
@@ -123,7 +123,7 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
 
   it 'find' do
     ticket = established!(ticket, 'new with valid attributes')
-    ticket_lookup = client.ticket.find(ticket.id)
+    ticket_lookup = client.tickets.find(ticket.id)
 
     expect(ticket_lookup.class).to eq(ZammadAPI::Resources::Ticket)
     expect(ticket_lookup.id).to eq(ticket.id)
@@ -138,7 +138,7 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
 
   it 'all' do
     ticket = established!(ticket, 'new with valid attributes')
-    tickets = client.ticket.all
+    tickets = client.tickets.all
 
     ticket_exists = nil
     tickets.each do |local_ticket|
@@ -159,7 +159,7 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
     ticket_exists.state = 'closed'
     ticket_exists.save
 
-    ticket_lookup = client.ticket.find(ticket.id)
+    ticket_lookup = client.tickets.find(ticket.id)
     expect(ticket_lookup.class).to eq(ZammadAPI::Resources::Ticket)
     expect(ticket_lookup.id).to eq(ticket.id)
     expect(ticket_lookup.title).to eq("#{title}-2")
@@ -174,7 +174,7 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
   it 'pagination with all' do
     ticket = established!(ticket, 'new with valid attributes')
     (1..10).each do |local_count|
-      client.ticket.create(
+      client.tickets.create(
         title:    "test count ticket #{local_count}",
         state:    'new',
         priority: '2 normal',
@@ -191,7 +191,7 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
       )
     end
 
-    tickets = client.ticket.all
+    tickets = client.tickets.all
     expect(tickets.first.class).to eq(ZammadAPI::Resources::Ticket)
     count = 0
     tickets.each do |local_ticket|
@@ -201,7 +201,7 @@ RSpec.describe ZammadAPI, 'ticket object basics' do
     expect(count).to eq(12)
 
     count = 0
-    tickets = client.ticket.all
+    tickets = client.tickets.all
     tickets.page(1, per_page: 5).each do |local_ticket|
       expect(local_ticket.class).to eq(ZammadAPI::Resources::Ticket)
       count += 1

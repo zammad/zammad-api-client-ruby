@@ -114,7 +114,7 @@ module ZammadAPI
     # Enables Ruby pattern matching against a record's attributes.
     #
     # @example
-    #   case client.ticket.find(1)
+    #   case client.tickets.find(1)
     #   in {state: 'closed'}
     #     nil
     #   in {state: String => state, priority: '3 high'}
@@ -134,8 +134,8 @@ module ZammadAPI
     # one used as a Hash key before being saved has to be rehashed after.
     #
     # @example
-    #   client.ticket.find(1) == client.ticket.find(1)             # => true
-    #   [client.ticket.find(1), client.ticket.find(1)].uniq.size   # => 1
+    #   client.tickets.find(1) == client.tickets.find(1)             # => true
+    #   [client.tickets.find(1), client.tickets.find(1)].uniq.size   # => 1
     #
     # @param other [Object]
     # @return [Boolean]
@@ -170,7 +170,7 @@ module ZammadAPI
     # what +Object#to_json+ falls back to.
     #
     # @example
-    #   client.group.find(1).to_json # => "{\"id\":1,\"name\":\"Support\"}"
+    #   client.groups.find(1).to_json # => "{\"id\":1,\"name\":\"Support\"}"
     #
     # @param state [JSON::State, nil] passed by +JSON.generate+ when a record
     #   is nested in a structure it is serializing

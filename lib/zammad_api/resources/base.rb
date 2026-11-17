@@ -13,7 +13,7 @@ module ZammadAPI
     # Attributes are read and written through +method_missing+, because Zammad
     # records can carry administrator-defined custom attributes:
     #
-    #   group      = client.group.find(1)
+    #   group      = client.groups.find(1)
     #   group.name             # read
     #   group.name = 'Support' # stage a change
     #   group.changed?         # => true
@@ -313,7 +313,7 @@ module ZammadAPI
         given = attributes || {}
         # The same refusal the writers make, at the one door that did not make
         # it. `group.id = 99` is refused with a sentence about what an id is
-        # for, and `client.group.new(id: 99)` was accepted in silence - and
+        # for, and `client.groups.new(id: 99)` was accepted in silence - and
         # then `save` POSTed `{"id": 99, ...}`, because a new record is sent in
         # full. So the one spelling that reached the wire was the one nothing
         # checked, and Zammad's answer to it was the first news of the
@@ -613,7 +613,7 @@ module ZammadAPI
       # Refuses an operation on a record Zammad never had.
       #
       # `destroyed?` was the only thing these asked, so a record built with an
-      # id it was simply handed - `client.group.new(id: 99)`, which the
+      # id it was simply handed - `client.groups.new(id: 99)`, which the
       # attribute writers refuse but the constructor still allows - reported
       # `new_record?` true and `persisted?` false and then issued a real DELETE
       # against group 99. The id addresses a record this one does not stand

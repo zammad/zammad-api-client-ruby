@@ -26,7 +26,7 @@ client = ZammadAPI::Client.from_env
 
 # A missing record is a decision to make, not a failure to retry.
 ticket = begin
-  client.ticket.find(0)
+  client.tickets.find(0)
 rescue ZammadAPI::NotFoundError
   nil
 end
@@ -35,7 +35,7 @@ puts "missing ticket:   #{ticket.inspect}"
 
 # A rejected attribute (422) makes `save` return false and leaves the reason
 # on the record, so branching needs no begin/rescue.
-group = client.group.new(name: '')
+group = client.groups.new(name: '')
 
 if group.save
   puts "created group:    #{group.id}"
@@ -47,14 +47,14 @@ end
 
 # `create` and `save!` raise instead, which is what a script wants.
 begin
-  client.group.create(name: '')
+  client.groups.create(name: '')
 rescue ZammadAPI::ValidationError => e
   puts "raised instead:   #{e.class}"
 end
 
 # Rescue by category where the exact class does not matter.
 begin
-  client.ticket.find(0)
+  client.tickets.find(0)
 rescue ZammadAPI::ClientError => e     # any 4xx
   puts "client error:     #{e.status}"
 rescue ZammadAPI::ServerError => e     # any 5xx, including an HTML proxy page
@@ -65,7 +65,7 @@ end
 
 # Or catch everything this gem raises in one place.
 begin
-  client.ticket.find(0)
+  client.tickets.find(0)
 rescue ZammadAPI::Error => e
   puts "any gem error:    #{e.class}"
 end

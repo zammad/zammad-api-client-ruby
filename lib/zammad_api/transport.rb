@@ -664,7 +664,7 @@ module ZammadAPI
     # still the only thing that has happened.
     #
     # `raw_body!` below catches the same mistake, but only once a response is
-    # in hand - which is one request too late: `client.group.create(...)` sent
+    # in hand - which is one request too late: `client.groups.create(...)` sent
     # the POST, Zammad created the group, and only then did a
     # ConfigurationError come back, so a caller retrying what looked like a
     # configuration failure created a second one. The middleware is fully

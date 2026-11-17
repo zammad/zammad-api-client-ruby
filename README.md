@@ -170,9 +170,15 @@ faithful to return.
 
 ## Available resources
 
-`group`, `organization`, `ticket`, `ticket_article`, `ticket_priority`, `ticket_state`, `user`
+`groups`, `organizations`, `tickets`, `ticket_articles`, `ticket_priorities`,
+`ticket_states`, `users`
 
 `client.resource_names` returns the current list.
+
+The names are plural because what each one hands back stands for every record of its kind:
+`client.tickets.each` walks them all, and `client.tickets.find(1)` picks one out. The
+singular names from 1.x — `client.ticket` and the rest — still work as deprecated aliases;
+see [Migrating from 1.x](#the-client).
 
 Anything not in that list is reachable with [raw requests](#raw-requests).
 
@@ -229,7 +235,7 @@ class it would raise for a modelled resource, and only a `GET` is retried.
 ### Create
 
 ```ruby
-group = client.group.new(name: 'Support', note: 'Some note')
+group = client.groups.new(name: 'Support', note: 'Some note')
 group.save
 
 group.id   # => 42
@@ -239,13 +245,13 @@ group.name # => "Support"
 Or in one call:
 
 ```ruby
-group = client.group.create(name: 'Support', note: 'Some note')
+group = client.groups.create(name: 'Support', note: 'Some note')
 ```
 
 ### Fetch
 
 ```ruby
-group = client.group.find(42)
+group = client.groups.find(42)
 group.name         # => "Support"
 group[:name]       # same, and nil rather than an error when it is absent
 group.fetch(:name) # raises KeyError if the attribute is absent
@@ -256,9 +262,9 @@ group.to_h         # every attribute, as a Hash you may modify
 Or by attribute value:
 
 ```ruby
-client.user.find_by(email: 'someone@example.com') # => the record, or nil
-client.user.find_by!(email: 'nobody@example.com') # raises NotFoundError
-client.group.exists?(42)                          # => true
+client.users.find_by(email: 'someone@example.com') # => the record, or nil
+client.users.find_by!(email: 'nobody@example.com') # raises NotFoundError
+client.groups.exists?(42)                          # => true
 ```
 
 `find_by` searches and then checks the hits itself, because Zammad's index endpoints
@@ -272,10 +278,10 @@ containing `"true"` and find none. Give at least one string value to search on �
 other value is matched exactly against the record:
 
 ```ruby
-client.user.find_by(email: 'someone@example.com', active: true) # searches the email, matches both
-client.user.find_by(firstname: 'Jane', lastname: 'Doe')         # searches "Jane", matches both
-client.user.find_by(active: true)                               # raises ArgumentError
-client.ticket_state.all.detect { it.name == 'open' }            # short list, no search needed
+client.users.find_by(email: 'someone@example.com', active: true) # searches the email, matches both
+client.users.find_by(firstname: 'Jane', lastname: 'Doe')         # searches "Jane", matches both
+client.users.find_by(active: true)                               # raises ArgumentError
+client.ticket_states.all.detect { it.name == 'open' }            # short list, no search needed
 ```
 
 The values are never joined into one term. An instance searching without Elasticsearch
@@ -322,7 +328,7 @@ group.to_h                            # a deep copy, yours to modify
 Records implement `deconstruct_keys`, so they work with `case/in`:
 
 ```ruby
-case client.ticket.find(1)
+case client.tickets.find(1)
 in {state: 'closed'}
   nil
 in {state: String => state, priority: '3 high'}
@@ -346,7 +352,7 @@ end
 ### Update
 
 ```ruby
-group = client.group.find(42)
+group = client.groups.find(42)
 group.name = 'Support 2'
 
 group.changed? # => true
@@ -377,7 +383,7 @@ group.assign_attributes(name: 'Support 3')        # assigns without saving
 `save` returns whether the record was stored, and leaves a rejection in `error`:
 
 ```ruby
-group = client.group.new(name: '')
+group = client.groups.new(name: '')
 
 if group.save
   puts group.id
@@ -398,7 +404,7 @@ group.save!               # raises ZammadAPI::ValidationError
 group.update!(name: '')   # the same, in one call
 ```
 
-`client.group.create(...)` uses `save!`, so it raises rather than handing back a record
+`client.groups.create(...)` uses `save!`, so it raises rather than handing back a record
 that looks created but is not. Use `new` plus `save` when you need to branch instead.
 
 ### Associations
@@ -407,7 +413,7 @@ Zammad expands an association into a name under the plain attribute, so those re
 already loaded and free:
 
 ```ruby
-ticket = client.ticket.find(1)
+ticket = client.tickets.find(1)
 
 ticket.customer    # => "customer@example.com"
 ticket.state       # => "open"
@@ -423,7 +429,7 @@ ticket.related.group.note
 ticket.related.articles               # => [TicketArticle, ...]
 ticket.related.created_by.email
 
-client.user.find(7).related.organization
+client.users.find(7).related.organization
 ```
 
 A `has_many` reader such as `articles` is the one list here that is read in a single
@@ -444,12 +450,12 @@ records of the same kind carrying the same id are equal. That makes `uniq`, `Set
 and records-as-Hash-keys behave:
 
 ```ruby
-client.ticket.find(1) == client.ticket.find(1)  # => true
+client.tickets.find(1) == client.tickets.find(1)  # => true
 
-[client.ticket.find(1), client.ticket.find(1)].uniq.size # => 1
-Set[client.ticket.find(1), client.ticket.find(1)].size   # => 1
-seen = { client.ticket.find(1) => :handled }
-seen[client.ticket.find(1)]                              # => :handled
+[client.tickets.find(1), client.tickets.find(1)].uniq.size # => 1
+Set[client.tickets.find(1), client.tickets.find(1)].size   # => 1
+seen = { client.tickets.find(1) => :handled }
+seen[client.tickets.find(1)]                              # => :handled
 ```
 
 A record with no id is equal only to itself, because two unsaved records are two records
@@ -461,8 +467,8 @@ save has to be rehashed after it.
 and nests inside a structure being generated:
 
 ```ruby
-client.group.find(1).to_json          # => "{\"id\":1,\"name\":\"Support\"}"
-JSON.generate(group: client.group.find(1))
+client.groups.find(1).to_json          # => "{\"id\":1,\"name\":\"Support\"}"
+JSON.generate(group: client.groups.find(1))
 ```
 
 `as_json` returns the same attributes as a Hash, for ActiveSupport and any encoder that
@@ -480,7 +486,7 @@ group.save        # raises: the record is gone, and a PUT would only 404
 group.update(...) # raises too, and stages nothing, so the record stays unchanged
 group.name = 'X'  # raises as well: a destroyed record reads as it last was in Zammad
 
-client.group.destroy(42) # delete by id, without fetching first
+client.groups.destroy(42) # delete by id, without fetching first
 ```
 
 ## Collections
@@ -491,34 +497,34 @@ is made until you iterate, and pages are fetched as needed.
 A resource proxy is itself `Enumerable` over `all`, so `.all` is optional:
 
 ```ruby
-client.ticket.each { |ticket| puts ticket.title }
-client.ticket.first(5)
-client.ticket.pluck(:title)
-client.ticket.find_each(batch_size: 50) { |ticket| archive(ticket) }
+client.tickets.each { |ticket| puts ticket.title }
+client.tickets.first(5)
+client.tickets.pluck(:title)
+client.tickets.find_each(batch_size: 50) { |ticket| archive(ticket) }
 ```
 
-`find` keeps its own meaning there — `client.ticket.find(1)` is a lookup by id, not
+`find` keeps its own meaning there — `client.tickets.find(1)` is a lookup by id, not
 `Enumerable#find`. Use `detect` for the block form.
 
 ```ruby
 # Walks every page automatically.
-client.ticket.all.each do |ticket|
+client.tickets.all.each do |ticket|
   puts ticket.title
 end
 
 # Stops after the first page, because Enumerable stops consuming.
-first_five = client.ticket.all.first(5)
+first_five = client.tickets.all.first(5)
 
 # Lazy chains work as expected.
-client.ticket.all.lazy.select { |t| t.state == 'open' }.first(10)
+client.tickets.all.lazy.select { |t| t.state == 'open' }.first(10)
 
 # One array of records per request, e.g. for a bulk import.
-client.ticket.all.in_batches(of: 50) do |tickets|
+client.tickets.all.in_batches(of: 50) do |tickets|
   import(tickets)
 end
 
 # Record by record, with the page size set inline.
-client.ticket.all.find_each(batch_size: 50) do |ticket|
+client.tickets.all.find_each(batch_size: 50) do |ticket|
   archive(ticket)
 end
 ```
@@ -534,8 +540,8 @@ So `where` accepts only what the endpoint actually reads, and says so about anyt
 rather than handing back an unfiltered list:
 
 ```ruby
-client.group.all.where(sort_by: 'name', order_by: 'DESC')  # honoured
-client.ticket.where(state: 'open')
+client.groups.all.where(sort_by: 'name', order_by: 'DESC')  # honoured
+client.tickets.where(state: 'open')
 # ArgumentError: api/v1/tickets ignores state, so where would hand back unfiltered
 # records. That endpoint honours nothing beyond paging. Zammad filters by attribute
 # value only through a search endpoint, so use find_by for one record or search for many.
@@ -544,17 +550,17 @@ client.ticket.where(state: 'open')
 Narrow by a value with [`find_by`](#fetch) for one record, or `search` for many:
 
 ```ruby
-client.user.find_by(email: 'someone@example.com')
-client.ticket.search('state.name:open').first(10)
+client.users.find_by(email: 'someone@example.com')
+client.tickets.search('state.name:open').first(10)
 ```
 
-Zammad routes a search endpoint per model, not for every model. `user`, `organization`,
-`ticket` and `group` have one; `ticket_state`, `ticket_priority` and `ticket_article` do
-not, and `search` and `find_by` on those raise `ZammadAPI::Error` rather than reaching a
+Zammad routes a search endpoint per model, not for every model. `users`, `organizations`,
+`tickets` and `groups` have one; `ticket_states`, `ticket_priorities` and `ticket_articles`
+do not, and `search` and `find_by` on those raise `ZammadAPI::Error` rather than reaching a
 404 that would read as a missing record. Those lists are short, so walk them:
 
 ```ruby
-client.ticket_state.all.detect { it.name == 'open' }
+client.ticket_states.all.detect { it.name == 'open' }
 ```
 
 Paging is not a filter either: that is what `page`, `in_batches` and `find_each` are for,
@@ -567,7 +573,7 @@ A `nil` value raises too. There is no query string that means "this field is nul
 ### Search
 
 ```ruby
-client.organization.search('zammad').each do |organization|
+client.organizations.search('zammad').each do |organization|
   puts organization.name
 end
 ```
@@ -575,7 +581,7 @@ end
 ### Explicit pages
 
 ```ruby
-tickets = client.ticket.all
+tickets = client.tickets.all
 
 tickets.page(2)           # page 2 at the size the endpoint serves
 tickets.page(2, per_page: 10)   # records 11 to 20
@@ -591,13 +597,13 @@ A request fetches as many records as the endpoint will serve — 100 for `/api/v
 as it can. Three calls take another size, each for its own kind of work:
 
 ```ruby
-client.ticket.all.find_each(batch_size: 50) { |ticket| archive(ticket) }  # walking
-client.ticket.all.in_batches(of: 50) { |tickets| import(tickets) }        # batching
-client.ticket.all.page(2, per_page: 100)                                  # one page
+client.tickets.all.find_each(batch_size: 50) { |ticket| archive(ticket) }  # walking
+client.tickets.all.in_batches(of: 50) { |tickets| import(tickets) }        # batching
+client.tickets.all.page(2, per_page: 100)                                  # one page
 ```
 
 `find_each` without a block is an Enumerator, so it is also how you read at a chosen page
-size: `client.ticket.all.find_each(batch_size: 50).first(7)`.
+size: `client.tickets.all.find_each(batch_size: 50).first(7)`.
 
 `page` and a batch size are two ways of naming the same thing, so combining them raises:
 `page(3, per_page: 50)` already says which records the collection holds, and re-sizing it would
@@ -619,9 +625,9 @@ iteration at the first page.
 sized for walking, so the cheap-looking call is cheap:
 
 ```ruby
-client.ticket.all.first        # one request, for one record
-client.ticket.all.first(5)     # one request, for five
-client.ticket.all.take(5)      # the same, and the same cost
+client.tickets.all.first        # one request, for one record
+client.tickets.all.first(5)     # one request, for five
+client.tickets.all.take(5)      # the same, and the same cost
 ```
 
 They size the request, not the collection, so they still read on where a page comes back
@@ -632,8 +638,8 @@ since that size says which records it holds.
 ### Reading single attributes
 
 ```ruby
-client.user.all.pluck(:email)        # => ["a@example.com", ...]
-client.ticket.all.pluck(:id, :title) # => [[1, "Help"], ...]
+client.users.all.pluck(:email)        # => ["a@example.com", ...]
+client.tickets.all.pluck(:id, :title) # => [[1, "Help"], ...]
 ```
 
 Zammad cannot be asked for a subset of the fields, so this shapes the result rather than
@@ -647,22 +653,22 @@ Every other endpoint has to be walked, because an index endpoint offers nothing 
 parameter, so it has no answer for `only_total_count` and no total to report.
 
 ```ruby
-client.ticket.search('state.name:open').count   # one request
-client.ticket.all.count                         # one request per page
+client.tickets.search('state.name:open').count   # one request
+client.tickets.all.count                         # one request per page
 ```
 
 `size` and `length` are `count`, and cost the same. `empty?` and `first` ask for a single
 record rather than a page:
 
 ```ruby
-client.ticket.search('state.name:merged').empty? # one request, for one record
-client.group.all.size                            # => 12, having walked
+client.tickets.search('state.name:merged').empty? # one request, for one record
+client.groups.all.size                            # => 12, having walked
 ```
 
 A block or an argument is `Enumerable#count` counting matches, and walks either way:
 
 ```ruby
-client.ticket.all.count { it.state == 'open' }  # walks every page
+client.tickets.all.count { it.state == 'open' }  # walks every page
 ```
 
 Nothing is cached, so every traversal of a collection fetches again.
@@ -674,10 +680,10 @@ block — and its argument is an ifnone callable, not an id, so passing one is r
 than answered with an Enumerator and no request:
 
 ```ruby
-client.ticket.find(1)                 # the lookup by id
-client.ticket.all.detect { ... }      # the block form
-client.ticket.all.find { ... }        # the same
-client.ticket.all.find(1)             # ArgumentError, naming both of the above
+client.tickets.find(1)                 # the lookup by id
+client.tickets.all.detect { ... }      # the block form
+client.tickets.all.find { ... }        # the same
+client.tickets.all.find(1)             # ArgumentError, naming both of the above
 ```
 
 ## Deriving clients
@@ -687,7 +693,7 @@ them and carrying over any `on_behalf_of` scope:
 
 ```ruby
 bulk = client.with(timeout: 300, retries: 5)
-bulk.ticket.all.each { |ticket| archive(ticket) }
+bulk.tickets.all.each { |ticket| archive(ticket) }
 ```
 
 Naming credentials replaces the ones the client has, whichever kind they were, so
@@ -705,14 +711,14 @@ client, so the original is unaffected and both are safe to use concurrently.
 
 ```ruby
 support = client.on_behalf_of('agent@example.com')
-support.ticket.create(title: 'Help', group: 'Users', customer_id: 1)
+support.tickets.create(title: 'Help', group: 'Users', customer_id: 1)
 ```
 
 Or scoped to a block:
 
 ```ruby
 client.on_behalf_of('agent@example.com') do |scoped|
-  scoped.ticket.find(1)
+  scoped.tickets.find(1)
 end
 ```
 
@@ -744,7 +750,7 @@ ZammadAPI::Error
 
 ```ruby
 begin
-  client.ticket.find(1)
+  client.tickets.find(1)
 rescue ZammadAPI::NotFoundError
   nil
 rescue ZammadAPI::RateLimitError => e
@@ -872,7 +878,7 @@ would answer it:
 ```ruby
 zammad.stub(:get, 'api/v1/groups', body: [{id: 1, name: 'Users'}, {id: 2, name: 'Sales'}])
 
-client.group.all.map(&:name) # => ["Users", "Sales"]
+client.groups.all.map(&:name) # => ["Users", "Sales"]
 ```
 
 Stub the endpoint again to describe a list that changes between reads. A read is one step
@@ -883,8 +889,8 @@ last one answers every read after it:
 zammad.stub(:get, 'api/v1/groups', body: [{id: 1, name: 'Users'}])
 zammad.stub(:get, 'api/v1/groups', body: [{id: 1, name: 'Users'}, {id: 2, name: 'Sales'}])
 
-client.group.all.count # => 1
-client.group.all.count # => 2
+client.groups.all.count # => 1
+client.groups.all.count # => 2
 ```
 
 Name a `page` to say what each one holds, and the stub is served exactly as written:
@@ -903,7 +909,7 @@ are two separate answers rather than a sequence:
 zammad.stub(:get, 'api/v1/tickets/search', body: {total_count: 42}, query: {only_total_count: true})
 zammad.stub(:get, 'api/v1/tickets/search', body: [{id: 1}])
 
-client.ticket.search('urgent').count # => 42, however often it is asked
+client.tickets.search('urgent').count # => 42, however often it is asked
 ```
 
 Two stubs whose scopes match a request equally well raise
@@ -994,6 +1000,7 @@ at the call site. Start with the handful of changes that do not.
 | `Client.new(config_hash)`              | `Client.new(**config_hash)`                      | Options are keyword arguments now, so a Hash has to be splatted      |
 | an unknown option was ignored          | raises `ArgumentError: unknown keyword`          | A typo'd option used to be dropped without a word                    |
 | `logger: true`                         | `logger: Logger.new($stderr)`                    | The flag became an object, so you choose the device and level. Anything that answers `debug` is accepted; `true` raises `ConfigurationError` |
+| `client.ticket`, `client.user`, …      | `client.tickets`, `client.users`, …              | A resource is `Enumerable` over every record now, so `client.ticket.each` read as if it acted on one ticket. The singular names still work and warn in Ruby's `deprecated` category; run with `RUBYOPT=-W:deprecated` to find them. They go in 3.0 |
 | `client.on_behalf_of = 'login'`        | `client.on_behalf_of('login')` → new client      | The setter mutated the client and leaked across threads              |
 | `client.perform_on_behalf_of('x') { }` | `client.on_behalf_of('x') { \|scoped\| ... }`    | The old block form left the header set if the block raised           |
 | `ZammadAPI::Resources::Role < Base` reached by `client.role` | `client.get('api/v1/roles')`  | Resources are a fixed list; [raw requests](#raw-requests) reach the rest |
@@ -1025,7 +1032,7 @@ at the call site. Start with the handful of changes that do not.
 | `resource.url` (instance)           | `Resource.resource_path` (class)                     | Clashed with an attribute named `url`                                |
 | `record.unknown_attribute` → `nil`  | raises `NoMethodError`; use `record[:x]`, `fetch(:x, nil)` or `key?(:x)` | A typo read as `nil` and flowed on into whatever was written with it. Zammad also serves a reduced object where the user may not see the whole record, and that is worth being told about |
 | `client.x.new(id: 5)`               | `client.x.find(5)`                                   | The constructor was the one door that did not refuse a staged id — and the only one whose value reached Zammad, since a new record is sent in full |
-| `client.user.find(ticket.customer_id)` | `ticket.related.customer`                         | Following a foreign key needed the client threaded through           |
+| `client.users.find(ticket.customer_id)` | `ticket.related.customer`                         | Following a foreign key needed the client threaded through           |
 
 ### Errors
 
@@ -1064,8 +1071,10 @@ a `POST`, `PUT` or `DELETE` is never retried. Both are options — see
 
 ### What did not change
 
-`client.<resource>.find/all/create/new`, `record.destroy`, attribute readers and writers,
-`ticket.articles`, `ticket.article`, and `attachment.download`.
+`find`, `all`, `create` and `new` on a resource, `record.destroy`, attribute readers and
+writers, `ticket.articles`, `ticket.article`, and `attachment.download`. The resources
+themselves are reached by their plural names now — `client.tickets` — and the singular
+ones still answer, with a deprecation warning.
 
 `record.save`, `record.changes` and `record.attributes` still exist and still mean what
 they meant; the tables above only change how they behave at the edges.
