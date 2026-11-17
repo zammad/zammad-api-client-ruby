@@ -1,9 +1,13 @@
 # Changelog
 
-## [2.0.0] - 2026-08-27
+## [2.0.0.alpha1] - 2026-11-17
 
-A breaking release that modernises the whole gem. See
+The first prerelease of 2.0, a breaking release that modernises the whole gem. See
 [Migrating from 1.x](README.md#migrating-from-1x) for the complete before/after guide.
+
+Everything below is what changed since 1.4.0. It is published as an alpha so that it can
+still change: names, defaults and behaviour may differ in 2.0.0. A prerelease has to be
+asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.alpha'`.
 
 ### Breaking
 

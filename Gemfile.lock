@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    zammad_api (2.0.0)
+    zammad_api (2.0.0.alpha1)
       faraday (~> 2.9)
       faraday-retry (~> 2.2)
 

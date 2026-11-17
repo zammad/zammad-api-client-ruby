@@ -8,9 +8,10 @@
 > [!IMPORTANT]
 > ## 📣 2.0 is taking shape — tell us what you think
 >
-> **Version 2.0 is a breaking release, and it is not finished yet.** This is the moment when
-> your feedback can still change it: names, defaults, what is missing, what reads wrong, and
-> anything that makes upgrading from 1.x harder than it should be.
+> **Version 2.0 is a breaking release, and it is not finished yet: this is `2.0.0.alpha1`,
+> its first prerelease.** This is the moment when your feedback can still change it: names,
+> defaults, what is missing, what reads wrong, and anything that makes upgrading from 1.x
+> harder than it should be.
 >
 > **[→ Open an issue and tell us](https://github.com/zammad/zammad-api-client-ruby/issues/new)**
 >
@@ -46,15 +47,20 @@ Ruby client for the Zammad API v1.0.
 
 ## Installation
 
+2.0 is a prerelease for now, `2.0.0.alpha1`, and a prerelease has to be asked for:
+
 ```ruby
-gem 'zammad_api', '~> 2.0'
+gem 'zammad_api', '~> 2.0.0.alpha'
 ```
 
 Or:
 
 ```sh
-gem install zammad_api
+gem install zammad_api --pre
 ```
+
+`'~> 2.0'` does not match an alpha, and `gem install zammad_api` without `--pre` installs
+1.x.
 
 ## Creating a client
 
