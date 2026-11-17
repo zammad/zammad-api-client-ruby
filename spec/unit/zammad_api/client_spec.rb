@@ -302,6 +302,92 @@ RSpec.describe ZammadAPI::Client do
       expect { unit_client.resource(:unicorn) }.to raise_error(/available resources are: groups, organizations/)
     end
 
+    # The way to the parts of the API this gem does not model: 1.x reached any
+    # subclass of Base through const_get, 2.0 closed that, and raw requests
+    # were all that was left.
+    context 'with a resource class a caller declared' do
+      let(:client)    { unit_client }
+      let(:roles_url) { "#{ClientHelper::BASE_URL}api/v1/roles" }
+
+      before do
+        stub_const('Role', Class.new(ZammadAPI::Resources::Base) { path 'api/v1/roles' })
+      end
+
+      it 'answers with a proxy for that class' do
+        expect(client.resource(Role).resource_class).to be(Role)
+      end
+
+      it 'reads records of that class from the path it declares' do
+        stub_request(:get, roles_url).with(query: hash_including({}))
+          .to_return(json_response([{ id: 1, name: 'Admin' }]), json_response([]))
+
+        expect(client.resource(Role).map { [it.class, it.name] }).to eq([[Role, 'Admin']])
+      end
+
+      it 'finds one by id' do
+        stub_request(:get, "#{roles_url}/2").with(query: hash_including({})).to_return(json_response({ id: 2, name: 'Agent' }))
+
+        expect(client.resource(Role).find(2).name).to eq('Agent')
+      end
+
+      it 'saves a change to one, sending only what changed' do
+        stub_request(:get, "#{roles_url}/2").with(query: hash_including({})).to_return(json_response({ id: 2, name: 'Agent', note: nil }))
+        update = stub_request(:put, "#{roles_url}/2").with(query: hash_including({}), body: { note: 'Reviewed' })
+          .to_return(json_response({ id: 2, name: 'Agent', note: 'Reviewed' }))
+
+        client.resource(Role).find(2).update(note: 'Reviewed')
+        expect(update).to have_been_requested
+      end
+
+      it 'creates one' do
+        create = stub_request(:post, roles_url).with(query: hash_including({}), body: { name: 'Auditor' })
+          .to_return(json_response({ id: 9, name: 'Auditor' }, status: 201))
+
+        expect(client.resource(Role).create(name: 'Auditor').id).to eq(9)
+        expect(create).to have_been_requested
+      end
+
+      it 'sends the scope of the client it was asked of' do
+        stub = stub_request(:get, "#{roles_url}/2")
+          .with(query: hash_including({}), headers: { 'From' => 'agent@example.com' })
+          .to_return(json_response({ id: 2 }))
+
+        client.on_behalf_of('agent@example.com').resource(Role).find(2)
+        expect(stub).to have_been_requested
+      end
+
+      it 'answers a class this gem models with the proxy its reader answers with' do
+        expect(client.resource(ZammadAPI::Resources::Ticket)).to be(client.tickets)
+      end
+
+      it 'takes a subclass of a class this gem models' do
+        stub_const('MyTicket', Class.new(ZammadAPI::Resources::Ticket))
+        stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/tickets/1").with(query: hash_including({})).to_return(json_response({ id: 1 }))
+
+        expect(client.resource(MyTicket).find(1)).to be_a(MyTicket)
+      end
+
+      it 'leaves the client as it was built' do
+        expect { client.resource(Role) }.not_to(change { client.instance_variable_get(:@resources).size })
+      end
+
+      it 'refuses a class that is not a resource' do
+        expect { client.resource(String) }
+          .to raise_error(ArgumentError, /resource takes the name of a resource or a subclass of ZammadAPI::Resources::Base, and String is neither/)
+      end
+
+      # Reported by the call that named the class, not by its first request.
+      it 'refuses a resource class that declares no path' do
+        stub_const('Pathless', Class.new(ZammadAPI::Resources::Base))
+
+        expect { client.resource(Pathless) }.to raise_error(ZammadAPI::Error, /Pathless does not declare an API path/)
+      end
+
+      it 'names the class in the hint a collection gives for a lookup by id' do
+        expect { client.resource(Role).all.find(1) }.to raise_error(ArgumentError, /client\.resource\(Role\)\.find\(1\)/)
+      end
+    end
+
     context 'with a name from 1.x' do
       around do |example|
         enabled = Warning[:deprecated]

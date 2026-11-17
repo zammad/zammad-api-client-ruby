@@ -81,8 +81,19 @@ module ZammadAPI
 
       # The target is named rather than referenced so that resources may point
       # at each other without a load order between their files. The name comes
-      # from a declaration in this gem, never from a caller.
-      def resolve(class_name) = Resources.const_get(class_name, false)
+      # from a declaration in code - this gem's, or a resource class a caller
+      # wrote - and never from data.
+      #
+      # A resource of this gem is named on its own, +'User'+, and wins: an
+      # application is likely to have a +User+ of its own at the top level,
+      # and that is not what a ticket's customer is. Any other name is read
+      # from the top level, so that a resource a caller declares can point at
+      # another of theirs: +belongs_to :role, class_name: 'Acme::Role'+.
+      def resolve(class_name)
+        return Resources.const_get(class_name, false) if Resources.const_defined?(class_name, false)
+
+        Object.const_get(class_name)
+      end
     end
   end
 end

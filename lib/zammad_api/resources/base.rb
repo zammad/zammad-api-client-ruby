@@ -262,7 +262,9 @@ module ZammadAPI
         #
         # @param name [Symbol] name of the reader on {Base#related}
         # @param class_name [String] the target resource, named rather than
-        #   referenced so that two resources may point at each other
+        #   referenced so that two resources may point at each other. A
+        #   resource of this gem by its own name, +'User'+; one a caller
+        #   declared by its full name, +'Acme::Role'+
         # @param foreign_key [Symbol] attribute holding the target's id
         # @return [void]
         def belongs_to(name, class_name:, foreign_key: :"#{name}_id")

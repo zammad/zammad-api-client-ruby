@@ -267,4 +267,42 @@ RSpec.describe ZammadAPI::Associations::Proxy do
         )
     end
   end
+
+  # A resource a caller declares can point at another of theirs, which is in
+  # no namespace of this gem.
+  describe 'an association declared on a resource a caller wrote' do
+    before do
+      stub_const('Acme::Role', Class.new(ZammadAPI::Resources::Base) { path 'api/v1/roles' })
+      stub_const('Acme::Membership', Class.new(ZammadAPI::Resources::Base) do
+        path 'api/v1/memberships'
+        belongs_to :role, class_name: 'Acme::Role'
+        belongs_to :user, class_name: 'User'
+      end)
+    end
+
+    let(:membership) { Acme::Membership.from_response(unit_transport, id: 1, role_id: 2, user_id: 3) }
+
+    it 'resolves a target named by its full name' do
+      stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/roles/2").with(query: hash_including({}))
+        .to_return(json_response({ id: 2, name: 'Agent' }))
+
+      expect(membership.related.role).to be_a(Acme::Role)
+    end
+
+    it 'still resolves a resource of this gem by its own name' do
+      stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/users/3").with(query: hash_including({}))
+        .to_return(json_response({ id: 3, login: 'agent' }))
+
+      expect(membership.related.user).to be_a(ZammadAPI::Resources::User)
+    end
+
+    # An application is likely to have a User of its own at the top level.
+    it 'prefers the resource of this gem over a top-level constant of the same name' do
+      stub_const('User', Class.new)
+      stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/users/3").with(query: hash_including({}))
+        .to_return(json_response({ id: 3, login: 'agent' }))
+
+      expect(membership.related.user).to be_a(ZammadAPI::Resources::User)
+    end
+  end
 end

@@ -56,7 +56,7 @@ module ZammadAPI
 
     def own_request_for_first?: (untyped count) -> bool
     def find_by_id_message: (untyped) -> String
-    def resource_name: () -> String
+    def resource_reader: () -> String
     def sort_columns: (Array[untyped] attributes, Hash[untyped, untyped] directions) -> Hash[String, String]
     def sort_attribute!: (untyped attribute) -> String
     def sort_direction!: (String name, untyped direction) -> String

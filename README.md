@@ -35,7 +35,8 @@ Ruby client for the Zammad API v1.0.
   `order` / `page` / `in_batches` / `find_each` surface.
 - Records support **pattern matching**, and clients are **immutable** and safe to share
   between threads.
-- **Raw requests** reach the endpoints this gem does not model yet, without giving up
+- **Your own resources** — `client.resource(Role)` gives a class you declare everything a
+  modelled one has — and **raw requests** reach the rest of the API, without giving up
   authentication, retries or the error classes.
 - A **test kit** (`zammad_api/test`) stands in for a Zammad, so your own tests need no
   HTTP interception.
@@ -185,13 +186,52 @@ The names are plural because what each one hands back stands for every record of
 singular names from 1.x — `client.ticket` and the rest — still work as deprecated aliases;
 see [Migrating from 1.x](#the-client).
 
-Anything not in that list is reachable with [raw requests](#raw-requests).
+Anything not in that list is reachable by [declaring a resource](#resources-this-gem-does-not-model)
+for it, or with [raw requests](#raw-requests).
+
+### Resources this gem does not model
+
+A resource is a class with a path. Declare one for an endpoint that serves records the way
+the modelled ones do — an index, and a member under its id — and `client.resource` hands
+you the same thing `client.tickets` is:
+
+```ruby
+class Role < ZammadAPI::Resources::Base
+  path 'api/v1/roles'
+end
+
+roles = client.resource(Role)
+
+roles.each { |role| puts role.name }        # paginated, like any other
+roles.find(2).update(note: 'Reviewed')      # change tracking and save
+roles.create(name: 'Auditor')
+roles.find_by(name: 'Agent')
+```
+
+Say what else is true of the endpoint, where it differs from the defaults:
+
+| Declaration        | Default | Says                                                                 |
+| ------------------ | ------- | -------------------------------------------------------------------- |
+| `path '…'`         | *required* | The index endpoint, relative to the instance URL.                 |
+| `searchable true`  | `false` | Zammad routes `<path>/search`, so `search` works and `find_by` uses it. |
+| `max_per_page 100` | `1000`  | The largest page the index endpoint serves.                          |
+| `sortable false`   | `true`  | The index endpoint is always served in the same order, so `order` refuses it. |
+| `belongs_to :role, class_name: 'Role'` | — | A foreign key, read as a record through `record.related.role`. |
+| `has_many :members, class_name: 'User', path: ->(id) { "…/#{id}" }` | — | A list served whole by an endpoint of its own. |
+
+`class_name` is a resource of this gem by its own name, `'User'`, or a class of yours by its
+full name, `'Acme::Role'`. A subclass of a modelled resource works too, and inherits what
+its parent declares: `class MyTicket < ZammadAPI::Resources::Ticket`.
+
+Use raw requests for an endpoint that is not shaped like that — an action, a report, a
+setting.
 
 ## Raw requests
 
 `get`, `post`, `put` and `delete` reach any endpoint of the Zammad API, without giving up
 authentication, timeouts, retries, credential redaction, JSON decoding or the error
-classes. Use them for the endpoints this gem does not model yet.
+classes. Use them for the endpoints that are not a list of records, and for a one-off call
+to one that is.
 
 ```ruby
 client.get('api/v1/roles').body
@@ -1043,7 +1083,7 @@ at the call site. Start with the handful of changes that do not.
 | `client.ticket`, `client.user`, …      | `client.tickets`, `client.users`, …              | A resource is `Enumerable` over every record now, so `client.ticket.each` read as if it acted on one ticket. The singular names still work and warn in Ruby's `deprecated` category; run with `RUBYOPT=-W:deprecated` to find them. They go in 3.0 |
 | `client.on_behalf_of = 'login'`        | `client.on_behalf_of('login')` → new client      | The setter mutated the client and leaked across threads              |
 | `client.perform_on_behalf_of('x') { }` | `client.on_behalf_of('x') { \|scoped\| ... }`    | The old block form left the header set if the block raised           |
-| `ZammadAPI::Resources::Role < Base` reached by `client.role` | `client.get('api/v1/roles')`  | Resources are a fixed list; [raw requests](#raw-requests) reach the rest |
+| `ZammadAPI::Resources::Role < Base` reached by `client.role` | `client.resource(Role)`, for a `Role < ZammadAPI::Resources::Base` of your own | The named readers are a fixed list, and a class is handed over rather than looked up by name. [Raw requests](#raw-requests) reach whatever is not a resource |
 
 ### Collections
 

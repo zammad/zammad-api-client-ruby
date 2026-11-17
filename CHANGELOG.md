@@ -106,11 +106,10 @@ A breaking release that modernises the whole gem. See
   deprecation warnings, with `ruby -W:deprecated` or `Warning[:deprecated] = true` — and
   will be removed in 3.0. `client.resource(:ticket)` is answered the same way, and
   `client.resource_names` lists the plural names.
-- The resources a client exposes are a fixed list. 1.x resolved `client.<name>` to
+- The resource readers a client has are a fixed list. 1.x resolved `client.<name>` to
   `ZammadAPI::Resources::<Name>` through `const_get`, so a subclass of `Base` defined in
   application code could be reached that way. `client.role` now raises
-  `UnknownResourceError`; use the raw request methods for endpoints this gem does not
-  model.
+  `UnknownResourceError`; hand the class over instead, with `client.resource(Role)`.
 - The internal `new_instance` accessor was replaced by `new_record?` and `persisted?`, and
   the instance-level `url` accessor by the class-level `resource_path`. Both old names now
   raise `NoMethodError` as unknown attributes, naming the attributes the record does carry.
@@ -311,6 +310,15 @@ A breaking release that modernises the whole gem. See
   costs one request and asks for a single record rather than a whole page, except on a
   collection limited to one page, where the page size decides which records that page holds.
   A resource proxy forwards all three.
+- `client.resource(SomeClass)` takes a subclass of `ZammadAPI::Resources::Base` and answers
+  with a proxy for it, so an endpoint this gem does not model gets records, pagination,
+  `find_by`, change tracking and `save` from a class that declares its `path`: `class Role <
+  ZammadAPI::Resources::Base; path 'api/v1/roles'; end`, then `client.resource(Role).each {
+  … }`. `Base` already supported being subclassed, and `searchable`, `max_per_page`,
+  `sortable`, `belongs_to` and `has_many` are there to say what else is true of the
+  endpoint; what was missing since `const_get` went was a public way to a proxy for one,
+  which left raw requests as the only way to the rest of the API. An association on such a
+  class can point at another by its full name, `class_name: 'Acme::Role'`.
 
 ### Fixed
 

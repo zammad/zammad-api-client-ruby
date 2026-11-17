@@ -360,18 +360,19 @@ module ZammadAPI
     def find_by_id_message(id)
       "find on a #{self.class.name} is Enumerable#find, which takes a block: #{id.inspect} would be read as its " \
         'ifnone argument and answered with an Enumerator, without a request. ' \
-        "Look a record up by id on the resource itself - client.#{resource_name}.find(#{id.inspect}) - " \
+        "Look a record up by id on the resource itself - #{resource_reader}.find(#{id.inspect}) - " \
         'or pick one out of the records this collection holds with detect { ... }.'
     end
 
-    # The resource as a client names it: ZammadAPI::Resources::TicketArticle
-    # is reached as client.ticket_articles. Derived rather than looked up in
-    # {Client::RESOURCES}, because a resource a caller subclasses themselves is
-    # in no list, and this is a sentence in an error message either way. From
-    # the path rather than the class name, because the path is already the
-    # plural Zammad itself uses: a class name would need "priority" turned
-    # into "priorities" by a rule this gem has no other use for.
-    def resource_name = @resource_class.resource_path.split('/').last.to_s
+    # How a caller reaches this resource from a client:
+    # ZammadAPI::Resources::TicketArticle is client.ticket_articles, and a
+    # resource class the caller declared is client.resource(TheirClass). Looked
+    # up at the moment it is needed, in an error message, so that this file
+    # does not have to load the client that loads it.
+    def resource_reader
+      name = Client::RESOURCES.key(@resource_class)
+      name ? "client.#{name}" : "client.resource(#{@resource_class.name})"
+    end
 
     # The attributes an +order+ call names, each with its direction, in the
     # order they were written.

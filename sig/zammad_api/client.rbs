@@ -34,7 +34,7 @@ module ZammadAPI
     %a{deprecated: use ticket_states} def ticket_state: () -> ResourceProxy
     %a{deprecated: use users} def user: () -> ResourceProxy
 
-    def resource: (Symbol | String name) -> ResourceProxy
+    def resource: (Symbol | String | Class name) -> ResourceProxy
     def resource_names: () -> Array[Symbol]
     def me: () -> Resources::User
     def version: () -> String?
@@ -55,6 +55,7 @@ module ZammadAPI
 
     def raw: (Symbol method, String path, ?query: Hash[untyped, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?) -> Response
     def unknown_resource_message: (Symbol | String) -> String
+    def proxy_for: (untyped resource_class) -> ResourceProxy
     def setup: (Config config, untyped transport) -> self
   end
 end

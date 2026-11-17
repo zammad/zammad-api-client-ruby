@@ -203,15 +203,37 @@ module ZammadAPI
       setup(config, Transport.new(config))
     end
 
-    # The proxy for a resource, by name.
+    # The proxy for a resource, by name or by class.
     #
     # A name from 1.x - +:ticket+ for +:tickets+ - is still answered, with
     # a deprecation warning.
     #
-    # @param name [Symbol, String] a key of {RESOURCES}
+    # A class is the way to the parts of the API this gem does not model.
+    # {Resources::Base} is built to be subclassed - a path, and whatever the
+    # endpoint needs said about it - and a proxy for such a class gives its
+    # records everything the modelled ones have: pagination, +find_by+,
+    # change tracking, +save+. 1.x reached any subclass through +const_get+
+    # on a name a caller supplied, and 2.0 closed that, which left raw
+    # requests as the only way to the rest of the API; this is the same
+    # reach, with the class handed over rather than looked up.
+    #
+    # @example A resource this gem does not model
+    #   class Role < ZammadAPI::Resources::Base
+    #     path 'api/v1/roles'
+    #   end
+    #
+    #   client.resource(Role).each { |role| puts role.name }
+    #   client.resource(Role).find(2).update(note: 'Reviewed')
+    #
+    # @param name [Symbol, String, Class] a key of {RESOURCES}, or a subclass
+    #   of {Resources::Base}
     # @return [ResourceProxy]
-    # @raise [UnknownResourceError] when the resource is not known
+    # @raise [UnknownResourceError] when no resource has that name
+    # @raise [ArgumentError] for a class that is not a resource
+    # @raise [Error] for a resource class that declares no path
     def resource(name)
+      return proxy_for(name) if name.is_a?(Class)
+
       key = name.to_sym
 
       if !RESOURCES.key?(key)
@@ -413,6 +435,22 @@ module ZammadAPI
     end
 
     def unknown_resource_message(name) = "Unknown resource #{name}, available resources are: #{RESOURCES.keys.join(', ')}"
+
+    # One of the proxies built with this client for a class it models, and a
+    # new one for any other resource class. A new one each time, rather than
+    # a memo: the client is frozen in everything but name once it is built -
+    # see {#setup} - and a proxy holds nothing but the transport and the
+    # class.
+    def proxy_for(resource_class)
+      raise ArgumentError, "resource takes the name of a resource or a subclass of #{Resources::Base.name}, and #{resource_class.inspect} is neither" if !(resource_class <= Resources::Base)
+
+      @resources.fetch(resource_class) do
+        # Asked for now, so that a class without a path is reported by the
+        # call that named it rather than by its first request.
+        resource_class.resource_path
+        ResourceProxy.new(@transport, resource_class)
+      end
+    end
 
     # Everything a client is, in the one place all four ways of making one go
     # through: {.new}, {.build}, {#with} and {#on_behalf_of}. Held apart,
