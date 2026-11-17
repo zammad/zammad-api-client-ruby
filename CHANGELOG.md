@@ -135,19 +135,19 @@ A breaking release that modernises the whole gem. See
   number re-read what it had already handled. `find_each(batch_size:)` and
   `in_batches(of:)` are still reduced, because a batch size names how much to fetch per
   request, not which records the call is about.
-- `find_by` searches one string value — the longest — and raises `ArgumentError` when none
-  of the values is a string. Zammad matches words, so `find_by(active: true)` searched for
-  `"true"` and found nothing. Every other value is compared against the record, so
-  `find_by(email: '…', active: true)` searches the email and compares both. The values are
+- `find_by` searches one string value — the longest. Zammad matches words, so
+  `find_by(active: true)` searched for `"true"` and found nothing. Every other value is
+  compared against the record, so `find_by(email: '…', active: true)` searches the email
+  and compares both, and a lookup with no string in it walks the index instead. The values are
   never joined into a single term: an instance searching without Elasticsearch matches the
   term literally, through a SQL `LIKE` over each string column, so
   `find_by(firstname: 'Jane', lastname: 'Doe')` asked for one column containing
   `"Jane Doe"` and reported a user that exists as `nil`.
-- `search` and `find_by` raise `ZammadAPI::Error` on a resource Zammad routes no search
-  endpoint for — `ticket_state`, `ticket_priority` and `ticket_article`. Those endpoints
-  answered 404, which reached `find_by` as a `NotFoundError` from a method documented to
-  return `nil`, so `find_by(…) || create(…)` raised instead of creating. Walk those short
-  lists with `all.detect { … }` instead.
+- `search` raises `ZammadAPI::Error` on a resource Zammad routes no search endpoint for —
+  `ticket_states`, `ticket_priorities` and `ticket_articles`. Those endpoints answered 404,
+  which arrived as a `NotFoundError` about a record from a call that asked for a list, and
+  reached `find_by` the same way, so `find_by(…) || create(…)` raised instead of creating.
+  `find_by` walks those lists instead of searching them.
 - Nothing reads an `x-total-count` response header any more, because Zammad has never sent
   one — from any endpoint, in any version. `Response#reported_total` was built on it, and
   two guards read that: `Collection#each` would have ended a walk one request early on the
@@ -222,9 +222,15 @@ A breaking release that modernises the whole gem. See
   without returning the records.
 - `Collection#pluck(*attributes)`, for reading one or more attributes from every record.
 - `client.<resource>.find_by(**params)` and `#find_by!`, which look a record up by
-  attribute value, and `client.<resource>.exists?(id)`. `find_by` searches and then
-  checks the hits itself, because Zammad's index endpoints cannot filter: it returns a
-  record that genuinely carries the attributes asked for, or nil. What the search can
+  attribute value, and `client.<resource>.exists?(id)`. `find_by` answers on every
+  resource and for any kind of value: the record if there is one this client can read,
+  `nil` if not. It fetches candidates and checks them itself, because Zammad's index
+  endpoints cannot filter — through a search where the resource has a search endpoint and
+  one of the values is a string, and by walking the index everywhere else, which is what
+  `ticket_states`, `ticket_priorities` and `ticket_articles` and a lookup such as
+  `find_by(active: true)` get. A walk costs a request per page until a record matches. It
+  returns a record that genuinely carries the attributes asked for, or nil; a record that
+  does not carry an attribute does not match it, not even for `nil`. What the search can
   surface is Zammad's business, so `find_by(...) || create(...)` can still create a
   duplicate — as writing the search out by hand would. Every page of hits is read until
   one matches, so a miss costs a request per page of hits: Zammad's search sorts by

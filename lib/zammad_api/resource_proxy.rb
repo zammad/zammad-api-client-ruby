@@ -91,25 +91,45 @@ module ZammadAPI
     # @raise [NotFoundError] when no such record exists
     def find(id) = resource_class.fetch_one(@transport, id)
 
-    # Fetches the first record carrying all of these attribute values.
+    # Fetches the first record carrying all of these attribute values: the
+    # record if there is one this client can read, nil if there is not.
     #
-    # This searches and then checks the hits itself, because Zammad's index
-    # endpoints cannot filter: ApplicationController#model_index_render sorts
-    # and pages and drops every other parameter, so the previous
-    # implementation - a query parameter on the index - asked for
+    # That is what the name promises, and it answers it for every resource
+    # and every kind of value. Zammad cannot be asked the question directly -
+    # its index endpoints do not filter: ApplicationController#model_index_render
+    # sorts and pages and drops every other parameter, so a query parameter on
+    # the index, which is how this was first written, asked for
     # +email=someone@example.com+ and got back the whole user index, of which
-    # it returned the first record. A lookup that answers with an unrelated
-    # record is worse than one that answers with nothing.
+    # it returned the first record. So the candidates are fetched and checked
+    # here, and there are two ways to fetch them:
+    #
+    # - A search, where the resource has a search endpoint and one of the
+    #   values is a string to search on. That is the cheap way: Zammad narrows
+    #   the candidates, and only the hits are read.
+    # - A walk of the index, everywhere else: +ticket_states+,
+    #   +ticket_priorities+ and +ticket_articles+, which Zammad routes no
+    #   search endpoint for, and a lookup such as +find_by(active: true)+ or
+    #   +find_by(organization_id: 5)+ that has no string in it. That costs a
+    #   request per page of records until one matches, and the whole index for
+    #   a miss - nothing for a list of ticket states, and worth knowing before
+    #   it is run against every ticket on an instance.
+    #
+    # Both used to be refused instead: a resource without a search endpoint
+    # raised, and so did a lookup without a string value. The caller was left
+    # to write +all.detect { ... }+, which is the walk this now makes, so the
+    # refusals kept nothing from happening and made +find_by+ a method that
+    # worked on four resources out of seven.
     #
     # Values are compared exactly, and against the record as Zammad stores it:
     # +find_by(email: 'Someone@Example.com')+ does not match a login Zammad
-    # downcased.
+    # downcased. A record that does not carry an attribute does not match it,
+    # whatever the value - not even +nil+, which would otherwise match every
+    # record a misspelled name was asked of.
     #
     # The search term is one string value. Zammad searches by word, so a value
-    # of another type went out as the word it prints as: +find_by(active:
+    # of another type would go out as the word it prints as: +find_by(active:
     # true)+ searched for "true" and matched records carrying that word, which
-    # is essentially none of them, and then reported the miss as nil. A call
-    # with nothing to search for says so instead.
+    # is essentially none of them. Such a value is compared here instead.
     #
     # One value, never all of them joined. An instance searching without
     # Elasticsearch matches the term literally, through a SQL LIKE over the
@@ -160,19 +180,19 @@ module ZammadAPI
     #
     # @example
     #   client.users.find_by(email: 'someone@example.com')&.id
+    #   client.ticket_states.find_by(name: 'open')
+    #   client.users.find_by(organization_id: 5, active: true)
     #
     # @param params [Hash] attribute names and the values to match exactly
     # @return [Resources::Base, nil] nil when nothing matched
-    # @raise [ArgumentError] when no attribute was given, or none of the
-    #   values is a string the search can be run on
+    # @raise [ArgumentError] when no attribute was given
     def find_by(**params)
-      searchable!
       raise ArgumentError, 'find_by needs at least one attribute to match' if params.empty?
 
-      term = search_term_for(params)
-      raise ArgumentError, unsearchable_values_message(params) if term.nil?
+      term       = resource_class.searchable? ? search_term_for(params) : nil
+      candidates = term ? search(term) : all
 
-      search(term).detect { |record| params.all? { |key, value| record[key] == value } }
+      candidates.detect { |record| params.all? { |key, value| record.key?(key) && record[key] == value } }
     end
 
     # Fetches the first record carrying all of these attribute values, raising
@@ -407,13 +427,12 @@ module ZammadAPI
     # Zammad routes a search endpoint per model, not for every model: users,
     # organizations, tickets and groups have one, ticket states, ticket
     # priorities and ticket articles do not. Asking one of the latter for
-    # `.../search` is a 404, and a 404 out of `find_by` reads as "no such
-    # record" - so `find_by(...) || create(...)`, the shape
-    # examples/onboard_customer.rb is built on, raised instead of creating.
+    # `.../search` is a 404, which would arrive as a NotFoundError about a
+    # record from a call that asked for a list.
     def searchable!
       return if resource_class.searchable?
 
-      raise Error, "Zammad routes no search endpoint for #{resource_class.name}, so it cannot be searched by term or looked up with find_by: #{path}/search answers 404, which would arrive here as a NotFoundError about a record. Walk the records and pick one instead, with all.detect { ... }."
+      raise Error, "Zammad routes no search endpoint for #{resource_class.name}, so it cannot be searched by term: #{path}/search answers 404, which would arrive here as a NotFoundError about a record. Look one record up by attribute value with find_by, which walks the records where it cannot search, or pick several out with select { ... }."
     end
 
     # The one value {#find_by} searches on: the longest, as the most selective
@@ -423,16 +442,9 @@ module ZammadAPI
     # find nothing on an instance without Elasticsearch, for the same reason.
     # See {#find_by}.
     #
-    # @return [String, nil] nil when no value can be searched on
+    # @return [String, nil] nil when no value can be searched on, in which
+    #   case the index is walked instead
     def search_term_for(params) = params.values.grep(String).reject { it.strip.empty? }.max_by(&:length)
-
-    def unsearchable_values_message(params)
-      given = params.map { |key, value| "#{key}: #{value.inspect}" }.join(', ')
-
-      "find_by has nothing to search for in #{given}. Zammad matches words, so a value of another type goes out as the word it prints as - find_by(active: true) looks for records containing \"true\". " \
-        'Pass at least one string value to search on, and the rest are still matched exactly: find_by(email: \'someone@example.com\', active: true). ' \
-        'For a list short enough to walk, all.detect { ... } needs no search index at all.'
-    end
 
     def path = resource_class.resource_path
 

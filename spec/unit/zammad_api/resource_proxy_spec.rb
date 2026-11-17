@@ -304,48 +304,84 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect { proxy.find_by }.to raise_error(ArgumentError, /at least one attribute/)
     end
 
-    # /api/v1/ticket_states/search is not routed, so the 404 arrived here as a
-    # NotFoundError from a method documented to answer nil.
-    it 'refuses a resource Zammad routes no search endpoint for' do
-      expect { client.ticket_states.find_by(name: 'open') }
-        .to raise_error(ZammadAPI::Error, /routes no search endpoint for ZammadAPI::Resources::TicketState/)
+    # find_by used to raise here, which left it working on four resources out
+    # of seven, and the caller writing all.detect by hand - the walk this makes.
+    context 'with a resource Zammad routes no search endpoint for' do
+      let(:states_url) { "#{ClientHelper::BASE_URL}api/v1/ticket_states" }
+
+      before do
+        stub_request(:get, states_url).with(query: hash_including('page' => '1'))
+          .to_return(json_response([{ id: 1, name: 'new' }, { id: 2, name: 'open' }]))
+        stub_request(:get, states_url).with(query: hash_including('page' => '2')).to_return(json_response([]))
+      end
+
+      it 'walks the records and answers with the one that matches' do
+        expect(client.ticket_states.find_by(name: 'open').id).to eq(2)
+      end
+
+      it 'answers nil when none does' do
+        expect(client.ticket_states.find_by(name: 'closed')).to be_nil
+      end
+
+      it 'never asks the search endpoint, which would answer 404' do
+        client.ticket_states.find_by(name: 'open')
+        expect(a_request(:get, "#{states_url}/search").with(query: hash_including({}))).not_to have_been_made
+      end
+
+      it 'stops at the page the match is on' do
+        client.ticket_states.find_by(name: 'new')
+        expect(a_request(:get, states_url).with(query: hash_including('page' => '2'))).not_to have_been_made
+      end
+
+      it 'matches on a value of any type' do
+        expect(client.ticket_states.find_by(id: 2).name).to eq('open')
+      end
     end
 
-    it 'points a refused lookup at walking the records' do
-      expect { client.ticket_priorities.find_by(name: '2 normal') }
-        .to raise_error(ZammadAPI::Error, /all\.detect/)
+    # A value that is not a string cannot be searched on - Zammad matches
+    # words, so it would go out as the word it prints as - and this used to
+    # raise for want of one.
+    context 'with no string value to search on' do
+      before do
+        stub_request(:get, url).with(query: hash_including('page' => '1'))
+          .to_return(json_response([{ id: 1, name: 'Users', active: false }, { id: 2, name: 'Support', active: true }]))
+        stub_request(:get, url).with(query: hash_including('page' => '2')).to_return(json_response([]))
+      end
+
+      it 'walks the index and answers with the first record that matches' do
+        expect(proxy.find_by(active: true).id).to eq(2)
+      end
+
+      it 'does not search for the word the value prints as' do
+        proxy.find_by(active: true)
+        expect(a_request(:get, search_url).with(query: hash_including({}))).not_to have_been_made
+      end
+
+      it 'answers nil once the whole index has been read' do
+        expect(proxy.find_by(active: nil)).to be_nil
+        expect(a_request(:get, url).with(query: hash_including('page' => '2'))).to have_been_made
+      end
+
+      it 'walks for a string value that is blank, which is nothing to search on either' do
+        expect(proxy.find_by(name: '   ', active: true)).to be_nil
+        expect(a_request(:get, search_url).with(query: hash_including({}))).not_to have_been_made
+      end
     end
 
-    it 'makes no request for a resource that cannot be searched' do
-      expect { client.ticket_states.find_by(name: 'open') }.to raise_error(ZammadAPI::Error)
-      expect(a_request(:get, "#{ClientHelper::BASE_URL}api/v1/ticket_states/search").with(query: hash_including({})))
-        .not_to have_been_made
+    # record[key] is nil for an attribute a record does not carry, so a nil
+    # value matched every record a misspelled name was asked of.
+    it 'does not match nil against an attribute the record does not carry' do
+      stub_request(:get, url).with(query: hash_including({}))
+        .to_return(json_response([{ id: 1, name: 'Users' }]), json_response([]))
+
+      expect(proxy.find_by(nmae: nil)).to be_nil
     end
 
-    it 'rejects a lookup with nothing to search for' do
-      expect { proxy.find_by(name: '') }.to raise_error(ArgumentError, /nothing to search for/)
-    end
+    it 'does match nil against an attribute the record carries as nil' do
+      stub_request(:get, url).with(query: hash_including({}))
+        .to_return(json_response([{ id: 1, name: 'Users', note: nil }]), json_response([]))
 
-    it 'rejects a lookup whose only value is not a string' do
-      expect { proxy.find_by(active: true) }.to raise_error(ArgumentError, /nothing to search for in active: true/)
-    end
-
-    it 'says what a rejected lookup should pass instead' do
-      expect { proxy.find_by(active: true) }.to raise_error(ArgumentError, /at least one string value to search on/)
-    end
-
-    it 'makes no request for a lookup with no string value' do
-      expect { proxy.find_by(organization_id: 5) }.to raise_error(ArgumentError)
-      expect(a_request(:get, search_url).with(query: hash_including({}))).not_to have_been_made
-    end
-
-    it 'rejects a lookup whose only string value is blank' do
-      expect { proxy.find_by(name: '   ', active: true) }.to raise_error(ArgumentError, /nothing to search for/)
-    end
-
-    it 'makes no request for a lookup it rejects' do
-      expect { proxy.find_by(name: nil) }.to raise_error(ArgumentError)
-      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+      expect(proxy.find_by(note: nil).id).to eq(1)
     end
   end
 

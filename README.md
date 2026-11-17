@@ -267,22 +267,31 @@ client.users.find_by!(email: 'nobody@example.com') # raises NotFoundError
 client.groups.exists?(42)                          # => true
 ```
 
-`find_by` searches and then checks the hits itself, because Zammad's index endpoints
-cannot filter — see [Narrowing](#narrowing). A record it returns genuinely carries the
+`find_by` answers with the record if there is one this client can read, and `nil` if there
+is not, on every resource and for any kind of value. Zammad cannot be asked that directly,
+because its index endpoints cannot filter — see [Narrowing](#narrowing) — so `find_by`
+fetches candidates and checks them itself. A record it returns genuinely carries the
 attributes you asked for, compared exactly and against the value as Zammad stores it, so
 `find_by(email: 'Someone@Example.com')` does not match a login Zammad downcased.
 
-The search term is one string value, because Zammad matches words: a value of another type
-would go out as the word it prints as, so `find_by(active: true)` would look for records
-containing `"true"` and find none. Give at least one string value to search on — every
-other value is matched exactly against the record:
+There are two ways it fetches the candidates, and they cost differently:
 
 ```ruby
 client.users.find_by(email: 'someone@example.com', active: true) # searches the email, matches both
 client.users.find_by(firstname: 'Jane', lastname: 'Doe')         # searches "Jane", matches both
-client.users.find_by(active: true)                               # raises ArgumentError
-client.ticket_states.all.detect { it.name == 'open' }            # short list, no search needed
+client.ticket_states.find_by(name: 'open')                       # no search endpoint: walks the list
+client.users.find_by(organization_id: 5)                         # no string to search on: walks the index
 ```
+
+A search is the cheap way, and is used wherever the resource has a search endpoint and one
+of the values is a string. The term is one string value, because Zammad matches words: a
+value of another type would go out as the word it prints as, so `active: true` would look
+for records containing `"true"`. Every other value is matched against the hits.
+
+Everywhere else `find_by` walks the index, a page at a time, until a record matches. That
+is one request for a list of ticket states. Against every user or ticket on an instance it
+is a request per page until the match, and the whole index for a miss — the same walk
+`all.detect { ... }` makes, so give `find_by` a string to search on where there is one.
 
 The values are never joined into one term. An instance searching without Elasticsearch
 matches the term literally, through a SQL `LIKE` over each string column, so `"Jane Doe"`
@@ -588,11 +597,12 @@ null".
 
 Zammad routes a search endpoint per model, not for every model. `users`, `organizations`,
 `tickets` and `groups` have one; `ticket_states`, `ticket_priorities` and `ticket_articles`
-do not, and `search` and `find_by` on those raise `ZammadAPI::Error` rather than reaching a
-404 that would read as a missing record. Those lists are short, so walk them:
+do not, and `search` on those raises `ZammadAPI::Error` rather than reaching a 404 that
+would read as a missing record. `find_by` works on them all the same, by walking the list:
 
 ```ruby
-client.ticket_states.all.detect { it.name == 'open' }
+client.ticket_states.find_by(name: 'open')
+client.ticket_priorities.select { it.active }
 ```
 
 ### Search
@@ -1041,7 +1051,7 @@ at the call site. Start with the handful of changes that do not.
 | `collection[3]`                          | `collection.page(4, per_page: 1).first`                | An index that costs a request, and that ignored `page`, was a trap  |
 | `collection.find(1)`                     | `client.x.find(1)`, or `collection.detect { ... }` | On a collection `find` is `Enumerable#find`, whose argument is an ifnone callable — so an id answered with an Enumerator and made no request. It raises now |
 | `client.x.all(per_page: 50)`             | `client.x.all.page(1, per_page: 50)`, `find_each(batch_size: 50)` | `all` accepted the argument and discarded it; page size belongs to the call that reads |
-| `client.x.all(active: true)`             | `client.x.search(...)`, or `client.x.all.detect { ... }`    | The filter never reached the request in 1.x, and could not have: Zammad's index endpoints do not filter, so 2.0 has no call that pretends to. `find_by` needs a string value to search on, so it replaces `all(email: '...')` rather than `all(active: true)` |
+| `client.x.all(active: true)`             | `client.x.search(...)`, or `client.x.all.detect { ... }`    | The filter never reached the request in 1.x, and could not have: Zammad's index endpoints do not filter, so 2.0 has no call that pretends to. `find_by(active: true)` answers with the first such record, by walking the index where it has no string to search on |
 | `client.x.search(query: 'zammad')`       | `client.x.search('zammad')`                      | The search term is the argument, not a keyword                      |
 | `client.x.search(query: 'z', page: 2, per_page: 50)` | `client.x.search('z').page(2, per_page: 50)` | Search did honour those two; paging is the collection's job now     |
 

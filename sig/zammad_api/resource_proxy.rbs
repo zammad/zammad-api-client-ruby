@@ -47,7 +47,6 @@ module ZammadAPI
     def unknown_search_filter_message: (Array[Symbol] unknown) -> String
     def searchable!: () -> void
     def search_term_for: (Hash[Symbol, untyped]) -> String?
-    def unsearchable_values_message: (Hash[Symbol, untyped]) -> String
     def path: () -> String
     def member_path: (Integer | String id) -> String
   end
