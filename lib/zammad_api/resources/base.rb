@@ -315,6 +315,29 @@ module ZammadAPI
         setup(transport, given)
       end
 
+      # Gives a +dup+ or +clone+ the state of its own that a write changes.
+      #
+      # The attributes need nothing done: they are frozen and replaced on
+      # write, so a copy sharing them never sees the original's next write.
+      # The change set is written in place, and the copy shared it: after
+      # +copy = record.dup; copy.name = 'X'+ the original reported
+      # +changed?+ and a change to +name+ while still reading +name+ as it
+      # was, and its next +save+ sent the copy's value - a change it had
+      # never shown.
+      #
+      # The association proxy goes too. It reads through the record it was
+      # built for, so a copy holding the original's would resolve its
+      # associations from the original's foreign keys.
+      #
+      # @api private
+      # @param source [Base]
+      # @return [void]
+      def initialize_copy(source)
+        super
+        @changes = @changes.dup
+        @related = nil
+      end
+
       # @return [Boolean] whether this record has not been stored yet
       def new_record? = @new_record
 

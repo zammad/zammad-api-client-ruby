@@ -63,6 +63,7 @@ module ZammadAPI
 
       private
 
+      def initialize_copy: (self source) -> void
       def setup: (Transport, Hash[untyped, untyped] attributes) -> void
       def mark_persisted!: () -> void
       def raise_if_destroyed!: (String action) -> void

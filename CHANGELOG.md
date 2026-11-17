@@ -536,6 +536,12 @@ A breaking release that modernises the whole gem. See
   with every other failure to connect, so it surfaced as `ConnectionError: … is unreachable
   (execution expired)` and skipped the `rescue ZammadAPI::TimeoutError` documented to catch
   it.
+- A `dup` or `clone` of a record has a change set of its own. The attributes are frozen and
+  replaced on write, but the change set is written in place and the copy shared it: after
+  `copy = record.dup; copy.name = 'X'` the original reported `changed?` and a change to
+  `name` while still reading `name` as it was, and its next `save` sent the copy's value.
+  The copy also gets association readers of its own, rather than ones that read through the
+  original.
 
 ### Changed
 

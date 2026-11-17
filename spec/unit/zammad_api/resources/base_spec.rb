@@ -689,6 +689,68 @@ RSpec.describe ZammadAPI::Resources::Base do
     end
   end
 
+  # The attributes are frozen and replaced on write, so a copy never saw the
+  # original's next write. The change set is written in place, and was shared.
+  describe 'a copy made with dup or clone' do
+    let(:original) { client.group.find(1) }
+
+    before do
+      stub_request(:get, "#{url}/1").with(query: { expand: 'true' }).to_return(json_response({ id: 1, name: 'A', note: 'n' }))
+    end
+
+    %i[dup clone].each do |copier|
+      context "with #{copier}" do
+        let(:copy) { original.public_send(copier) }
+
+        it 'does not mark the original as changed when the copy is written' do
+          copy.name = 'X'
+          expect(original).not_to be_changed
+        end
+
+        it 'does not stage the write on the original' do
+          copy.name = 'X'
+          expect(original.changes).to eq({})
+        end
+
+        it 'stages the write on the copy' do
+          copy.name = 'X'
+          expect(copy.changes).to eq({ name: %w[A X] })
+        end
+
+        it 'sends nothing when the original is saved after the copy was written' do
+          copy.name = 'X'
+          original.save
+          expect(a_request(:put, "#{url}/1")).not_to have_been_made
+        end
+
+        it 'does not stage a write to the original on the copy' do
+          copy
+          original.name = 'Y'
+          expect(copy.changes).to eq({})
+        end
+
+        it 'carries over what was staged when it was made' do
+          original.name = 'Y'
+          expect(copy.changes).to eq({ name: %w[A Y] })
+        end
+
+        it 'keeps those two change sets apart afterwards' do
+          original.name = 'Y'
+          copy.note = 'other'
+          expect(original.changes.keys).to eq([:name])
+        end
+
+        it 'is still the same Zammad record' do
+          expect(copy).to eq(original)
+        end
+
+        it 'gets association readers of its own, not the ones bound to the original' do
+          expect(copy.related).not_to be(original.related)
+        end
+      end
+    end
+  end
+
   describe 'equality' do
     it 'treats two separately fetched records as the same record' do
       stub_request(:get, "#{url}/1").with(query: hash_including({})).to_return(json_response({ id: 1, name: 'Users' }))
