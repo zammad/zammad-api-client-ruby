@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.4'
+          ruby-version: '4.0'
           bundler-cache: true
       - run: bundle exec rubocop --format github
 
@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.4'
+          ruby-version: '4.0'
           bundler-cache: true
       - run: bundle exec steep check
       # sig/vendor is always on the load path here but never in the gem, so
@@ -57,12 +57,13 @@ jobs:
         # stable line. There is no 3.5: that line was abandoned after
         # 3.5.0-preview1 and became 4.0.
         #
-        # 'head' is absent because it cannot install at all, for two reasons
-        # outside this gem. With Gemfile.lock present, bundler honours
-        # `BUNDLED WITH 2.6.9`, self-downgrades from head's 4.1.0.dev and dies
-        # with NameError on the removed Pathname::SEPARATOR_PAT. Without the
-        # lockfile, a fresh resolution pulls steep -> listen -> rb-inotify ->
-        # ffi, which requires Ruby < 4.1.dev.
+        # 'head' is absent. It could not install while the lockfile said
+        # `BUNDLED WITH 2.6.9`: bundler self-downgraded from head's 4.1.0.dev
+        # and died with NameError on the removed Pathname::SEPARATOR_PAT, and
+        # without the lockfile a fresh resolution pulled steep -> listen ->
+        # rb-inotify -> ffi, whose native gems require Ruby < 4.1.dev. The
+        # lockfile now names Bundler 4.0.20, which does not use that constant,
+        # so the first of those may be gone; head has not been retried since.
         ruby: ['3.4', '4.0']
     env:
       # The unit specs do not need the type-checking toolchain, and skipping it
@@ -92,7 +93,7 @@ jobs:
       image: zammad/zammad-ci:latest
     services:
       postgresql:
-        image: postgres:17
+        image: postgres:18
         env:
           POSTGRES_USER: zammad
           POSTGRES_PASSWORD: zammad
@@ -178,7 +179,7 @@ jobs:
 
       - name: Upload Zammad logs
         if: failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: zammad-logs
           path: zammad/log/
