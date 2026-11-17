@@ -107,6 +107,16 @@ RSpec.describe ZammadAPI::Test do
       expect(zammad.requests).to be_empty
     end
 
+    # The same for a body the wire could not carry: a stand-in that took it
+    # would let a test pass over a save production raises on.
+    it 'refuses a body that cannot be encoded as JSON, the way the real transport does' do
+      zammad.stub(:post, 'api/v1/groups', body: { id: 1 })
+
+      expect { client.group.create(name: 'Support', weight: Float::NAN) }
+        .to raise_error(ZammadAPI::Error, /the request body cannot be encoded as JSON/)
+      expect(zammad.requests).to be_empty
+    end
+
     it 'raises the mapped error class for a non-2xx status' do
       zammad.stub(:get, 'api/v1/groups/1', status: 404, body: { error: 'not found' })
 

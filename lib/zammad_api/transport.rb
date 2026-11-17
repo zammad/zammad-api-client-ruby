@@ -359,6 +359,41 @@ module ZammadAPI
                            "this client's credentials to another host. Pass the path alone, such as 'api/v1/tickets'."
     end
 
+    # The bytes a request body goes out as.
+    #
+    # Encoded here rather than left to Faraday's JSON middleware, because a
+    # body that cannot be encoded raised JSON::GeneratorError from inside the
+    # stack and nothing mapped it: `client.post(path, body: {data:
+    # File.binread('a.png')})` with the bytes not Base64-encoded, or any body
+    # holding a Float::NAN, went past the +rescue ZammadAPI::Error+ every
+    # caller is told to write, and a record whose +save+ carried the same
+    # value took the same way out. It is also encoded before the request is
+    # logged, for the reason the query and the headers are stringified
+    # first: a refused body leaves no line claiming a request that was never
+    # made.
+    #
+    # A String is passed through, as the middleware passes it: it is the
+    # caller saying the body is already encoded.
+    #
+    # Public for the same reason as {.stringify_query}: {Test} refuses what
+    # the wire would refuse.
+    #
+    # @api private
+    # @param body [Object]
+    # @param operation [String] description used in the error message
+    # @param resource_class [Class, nil] used in the error message
+    # @return [String, nil] nil for a request without a body
+    # @raise [Error] when the body cannot be encoded as JSON
+    def self.encode_body(body, operation:, resource_class: nil)
+      return body if body.nil? || body.is_a?(String)
+
+      JSON.generate(body)
+    rescue JSON::JSONError => e
+      raise Error, "Can't #{Error.subject_for(operation, resource_class)}: the request body cannot be encoded as JSON (#{e.message}). " \
+                   'Every value has to be a JSON type, and text has to be valid UTF-8: Base64-encode binary data such as an ' \
+                   'attachment, and leave out a Float that is NaN or infinite.'
+    end
+
     # @param config [Config]
     def initialize(config)
       @config       = config
@@ -425,6 +460,8 @@ module ZammadAPI
     # @raise [TimeoutError] when the request timed out
     # @raise [ConnectionError] when the instance was unreachable
     #
+    # @raise [Error] when the body cannot be encoded as JSON
+    #
     # Every failure leaves here as a {ZammadAPI::Error}. The bare socket
     # errors are caught alongside the Faraday ones because they are already
     # in {RETRIABLE_EXCEPTIONS}, which is this class saying it expects to see
@@ -434,8 +471,9 @@ module ZammadAPI
       # Here as well as in {Client}, because this is the one door every
       # request goes through, whichever caller built the path.
       path     = Transport.relative_path(path)
+      payload  = Transport.encode_body(body, operation: operation, resource_class: resource_class)
       started  = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      response = decode(perform(method, path, query, body, headers))
+      response = decode(perform(method, path, query, body, payload, headers))
       log_response(method, path, response, started)
 
       return response if response.success?
@@ -473,7 +511,9 @@ module ZammadAPI
       [wrapped, error.cause].any? { |inner| TIMEOUT_ERRORS.any? { inner.is_a?(it) } }
     end
 
-    def perform(method, path, query, body, headers)
+    # +body+ is what the caller handed over, which is what the log redacts
+    # and prints; +payload+ is the same thing encoded, which is what is sent.
+    def perform(method, path, query, body, payload, headers)
       # Built before the request is logged, so a rejected query or header does
       # not leave a line claiming a request that was never made.
       params = query && Transport.stringify_query(query)
@@ -486,7 +526,7 @@ module ZammadAPI
         # Faraday's own case-insensitive writer and replaces the header it
         # names rather than sitting beside it under another spelling.
         fields&.each { |name, value| request.headers[name] = value }
-        request.body = body if body
+        request.body = payload if payload
         request.headers['From'] = on_behalf_of if on_behalf_of
       end
     end

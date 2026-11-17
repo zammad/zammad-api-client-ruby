@@ -554,6 +554,13 @@ A breaking release that modernises the whole gem. See
   reading `"Z"` on a record `destroy` promises to leave as it last was in Zammad, and the
   `save` after it was the first thing to object. A named writer, `[]=` and
   `assign_attributes` all refuse now, and stage nothing.
+- A request body that cannot be encoded as JSON raises `ZammadAPI::Error`. Faraday's JSON
+  middleware raised `JSON::GeneratorError` from inside the stack and nothing mapped it, so
+  `client.post(path, body: {data: File.binread('a.png')})` with the bytes not
+  Base64-encoded, or any body holding `Float::NAN`, went past the `rescue ZammadAPI::Error`
+  callers are told to write — and so did a record `save` carrying such a value. The body is
+  encoded before the request is logged now, so a refused one leaves no line claiming a
+  request that was never made, and the test kit refuses it the same way.
 
 ### Changed
 

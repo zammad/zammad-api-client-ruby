@@ -225,6 +225,10 @@ module ZammadAPI
       # wire and would otherwise sail through here.
       params   = ::ZammadAPI::Transport.stringify_query(query || {})
       fields   = ::ZammadAPI::Transport.stringify_headers(headers || {})
+      # For the refusal alone: a body the wire could not carry is refused here
+      # too, before anything is recorded. What is recorded is the body as the
+      # test wrote it, which is what a test asserts against.
+      ::ZammadAPI::Transport.encode_body(body, operation: operation, resource_class: resource_class)
 
       stub = @monitor.synchronize do
         @requests << Request.new(verb: method, path: relative, query: params, body: snapshot(body), headers: fields, on_behalf_of: on_behalf_of)

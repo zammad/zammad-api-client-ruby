@@ -43,6 +43,7 @@ module ZammadAPI
     def self.stringify_header_value: (String, untyped) -> String
     def self.escape_path_segment: (untyped) -> String
     def self.relative_path: (untyped) -> String
+    def self.encode_body: (untyped body, operation: String, ?resource_class: Class?) -> String?
 
     def initialize: (Config) -> void
     def with_on_behalf_of: ((String | Integer)? identifier) -> Transport
@@ -54,7 +55,7 @@ module ZammadAPI
     private
 
     def timed_out?: (untyped error) -> bool
-    def perform: (Symbol, String, Hash[Symbol, untyped]?, untyped, Hash[untyped, untyped]?) -> untyped
+    def perform: (Symbol, String, Hash[Symbol, untyped]?, untyped, String?, Hash[untyped, untyped]?) -> untyped
     def build_connection: () -> untyped
     def refuse_decoding_middleware!: (untyped connection) -> void
     def apply_authentication: (untyped) -> void

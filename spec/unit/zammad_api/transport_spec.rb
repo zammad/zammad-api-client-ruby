@@ -197,6 +197,58 @@ RSpec.describe ZammadAPI::Transport do
       unit_transport.post('api/v1/groups', operation: 'test', body: { name: 'Support' })
       expect(stub).to have_been_requested
     end
+
+    it 'sends a body that is already a string as it is' do
+      stub = stub_request(:post, url)
+        .with(body: '{"name":"Raw"}', headers: { 'Content-Type' => 'application/json' })
+        .to_return(json_response({ id: 1 }, status: 201))
+      unit_transport.post('api/v1/groups', operation: 'test', body: '{"name":"Raw"}')
+      expect(stub).to have_been_requested
+    end
+
+    # Faraday's JSON middleware raised JSON::GeneratorError from inside the
+    # stack and nothing mapped it, so it went past the rescue of
+    # ZammadAPI::Error every caller is told to write.
+    context 'with a body that cannot be encoded as JSON' do
+      let(:binary) { { data: "\xFF\xD8\xFF".b } }
+
+      it 'raises a ZammadAPI::Error for bytes that are not text' do
+        expect { unit_transport.post('api/v1/groups', operation: 'save object', body: binary) }
+          .to raise_error(ZammadAPI::Error, /Can't save object: the request body cannot be encoded as JSON/)
+      end
+
+      it 'raises a ZammadAPI::Error for a Float that JSON has no spelling for' do
+        expect { unit_transport.put('api/v1/groups/1', operation: 'save object', body: { weight: Float::NAN }) }
+          .to raise_error(ZammadAPI::Error, /NaN not allowed in JSON/)
+      end
+
+      it 'says what to do about binary data' do
+        expect { unit_transport.post('api/v1/groups', operation: 'save object', body: binary) }
+          .to raise_error(ZammadAPI::Error, /Base64-encode binary data/)
+      end
+
+      it 'names the resource it was sending' do
+        expect { unit_transport.post('api/v1/groups', operation: 'save object', body: binary, resource_class: ZammadAPI::Resources::Group) }
+          .to raise_error(ZammadAPI::Error, /save object \(ZammadAPI::Resources::Group\)/)
+      end
+
+      it 'makes no request' do
+        expect { unit_transport.post('api/v1/groups', operation: 'save object', body: binary) }.to raise_error(ZammadAPI::Error)
+        expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+      end
+
+      it 'leaves no log line claiming a request that was never made' do
+        log = StringIO.new
+        expect { unit_transport(logger: Logger.new(log)).post('api/v1/groups', operation: 'save object', body: binary) }
+          .to raise_error(ZammadAPI::Error)
+        expect(log.string).to be_empty
+      end
+
+      it 'is raised by a record save carrying such a value' do
+        group = unit_client.group.new(name: 'Support', weight: Float::INFINITY)
+        expect { group.save }.to raise_error(ZammadAPI::Error, /Infinity not allowed in JSON/)
+      end
+    end
   end
 
   describe 'response decoding' do
