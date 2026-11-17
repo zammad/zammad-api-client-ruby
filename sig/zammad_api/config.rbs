@@ -19,8 +19,10 @@ module ZammadAPI
     URL_SUFFIX_PATTERN: Regexp
     USERINFO_PATTERN: Regexp
     USERINFO_REPLACEMENT: String
+    CREDENTIAL_OPTIONS: Hash[Symbol, Array[Symbol]]
 
     def self.new: (**untyped) -> instance
+    def self.merge_options: (Hash[Symbol, untyped] options, Hash[Symbol, untyped] overrides) -> Hash[Symbol, untyped]
 
     attr_reader url: String
     attr_reader user: String?

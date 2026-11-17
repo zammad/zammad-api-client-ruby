@@ -384,6 +384,48 @@ RSpec.describe ZammadAPI::Config do
     end
   end
 
+  describe '#with' do
+    it 'changes an option' do
+      expect(build.with(timeout: 5).timeout).to eq(5)
+    end
+
+    it 'keeps the rest' do
+      expect(build(proxy: 'http://proxy.test:8080').with(timeout: 5).proxy).to eq('http://proxy.test:8080')
+    end
+
+    it 're-validates' do
+      expect { build.with(retries: -1) }.to raise_error(ZammadAPI::ConfigurationError, /non-negative integer/)
+    end
+
+    it 'replaces the authentication scheme rather than adding a second one' do
+      derived = build.with(user: 'u', password: 'p')
+      expect(derived.to_h.slice(:http_token, :user, :password)).to eq({ http_token: nil, user: 'u', password: 'p' })
+    end
+
+    it 'does not read an explicit nil as naming a scheme' do
+      expect(build.with(oauth2_token: nil).authentication_scheme).to eq(:http_token)
+    end
+  end
+
+  describe '.merge_options' do
+    it 'lays the overrides over the options' do
+      expect(described_class.merge_options({ url: 'a', timeout: 1 }, { timeout: 2 })).to eq({ url: 'a', timeout: 2 })
+    end
+
+    it 'drops the credentials an override replaces' do
+      expect(described_class.merge_options({ http_token: 't' }, { oauth2_token: 'o' })).to eq({ oauth2_token: 'o' })
+    end
+
+    it 'keeps the other half of a scheme the override names' do
+      expect(described_class.merge_options({ user: 'u', password: 'old' }, { password: 'new' }))
+        .to eq({ user: 'u', password: 'new' })
+    end
+
+    it 'leaves the credentials alone when the overrides name none' do
+      expect(described_class.merge_options({ http_token: 't' }, { timeout: 2 })).to eq({ http_token: 't', timeout: 2 })
+    end
+  end
+
   describe 'immutability of string members' do
     it 'freezes the url' do
       expect(build.url).to be_frozen

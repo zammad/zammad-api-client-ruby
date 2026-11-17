@@ -76,8 +76,11 @@ module ZammadAPI
     #
     # Reads {ENV_OPTIONS}, so a script needs no configuration of its own.
     # Anything passed in wins over the environment, and every other option
-    # keeps its default. An empty variable counts as unset, and
-    # +ZAMMAD_HTTP_TOKEN+ wins over +ZAMMAD_TOKEN+ if both are set.
+    # keeps its default. That includes the way to authenticate: passing
+    # +user:+ and +password:+, or a token, replaces whichever credentials the
+    # environment holds rather than sitting beside them. An empty variable
+    # counts as unset, and +ZAMMAD_HTTP_TOKEN+ wins over +ZAMMAD_TOKEN+ if
+    # both are set.
     #
     # @example
     #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=secret ruby report.rb
@@ -94,7 +97,7 @@ module ZammadAPI
         value = ENV.fetch(name, nil)
         [option, value] if !value.to_s.empty?
       end
-      options = from_environment.to_h.merge(overrides)
+      options = Config.merge_options(from_environment.to_h, overrides)
 
       raise ConfigurationError, "missing url: set ZAMMAD_URL or pass url: to #{name}.from_env" if options[:url].to_s.empty?
 
@@ -260,6 +263,10 @@ module ZammadAPI
     #
     # The options are re-validated, and any {#on_behalf_of} scope is carried
     # over. The original client keeps its own connection and settings.
+    #
+    # Naming credentials replaces the ones this client has, whichever kind
+    # they were: +with(oauth2_token: 'x')+ on a client built with an access
+    # token authenticates with the OAuth2 token alone.
     #
     # The transport derives from the current one rather than being built from
     # scratch, so a client wired to a stand-in stays wired to it.

@@ -89,7 +89,9 @@ client = ZammadAPI::Client.new(
 
 `from_env` reads `ZAMMAD_URL` and `ZAMMAD_TOKEN` (or `ZAMMAD_USER` and
 `ZAMMAD_PASSWORD`, or `ZAMMAD_OAUTH2_TOKEN`), so a script needs no configuration of its
-own. Anything passed in wins over the environment:
+own. Anything passed in wins over the environment, credentials included — passing
+`user:` and `password:` replaces a token the environment holds rather than sitting beside
+it:
 
 ```ruby
 client = ZammadAPI::Client.from_env
@@ -685,6 +687,10 @@ them and carrying over any `on_behalf_of` scope:
 bulk = client.with(timeout: 300, retries: 5)
 bulk.ticket.all.each { |ticket| archive(ticket) }
 ```
+
+Naming credentials replaces the ones the client has, whichever kind they were, so
+`client.with(oauth2_token: '…')` on a client built with an access token authenticates with
+the OAuth2 token alone.
 
 Because nothing is mutated after construction, one client — and any client derived from it —
 is safe to use from several threads at once.

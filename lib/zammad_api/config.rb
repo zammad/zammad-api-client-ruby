@@ -123,6 +123,38 @@ module ZammadAPI
     # Replacement that keeps the scheme and drops the credential.
     USERINFO_REPLACEMENT = "\\k<scheme>#{REDACTION}".freeze
 
+    # The options each authentication scheme is made of.
+    CREDENTIAL_OPTIONS = {
+      http_token:   %i[http_token],
+      oauth2_token: %i[oauth2_token],
+      basic:        %i[user password]
+    }.freeze
+
+    # Lays +overrides+ over +options+, dropping the credentials they replace.
+    #
+    # A credential is one option out of several that are read in a fixed
+    # order - see {#authentication_scheme} - so a plain merge left the old
+    # scheme in charge: with +ZAMMAD_TOKEN+ set,
+    # +Client.from_env(user: 'u', password: 'p')+ still sent the
+    # environment's token, and +client.with(oauth2_token: 'x')+ on a token
+    # client went on acting as the account the token belonged to. Neither
+    # raised, and both read as if they had switched identity.
+    #
+    # An override that names a scheme therefore takes the place of every
+    # other scheme. The options of its own scheme are kept, so overriding
+    # +password:+ alone still pairs it with the +user+ already there.
+    #
+    # @api private
+    # @param options [Hash{Symbol => Object}] the options being overridden
+    # @param overrides [Hash{Symbol => Object}]
+    # @return [Hash{Symbol => Object}]
+    def self.merge_options(options, overrides)
+      named    = CREDENTIAL_OPTIONS.select { |_, keys| keys.any? { !overrides[it].to_s.empty? } }
+      replaced = named.empty? ? [] : CREDENTIAL_OPTIONS.except(*named.keys).values.flatten
+
+      options.except(*replaced).merge(overrides)
+    end
+
     def initialize(
       url:,
       user: nil,
@@ -200,6 +232,16 @@ module ZammadAPI
 
       :basic
     end
+
+    # Returns a copy with some options changed, re-validated.
+    #
+    # Through {.merge_options} rather than Data's own merge, so that naming
+    # one authentication scheme replaces the one this configuration had.
+    #
+    # @param options [Hash] any option this class accepts
+    # @return [Config]
+    # @raise [ConfigurationError] when the resulting options are invalid
+    def with(**options) = self.class.new(**self.class.merge_options(to_h, options))
 
     # @return [String] configuration description with credentials redacted
     def inspect

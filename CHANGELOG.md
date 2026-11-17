@@ -496,6 +496,13 @@ A breaking release that modernises the whole gem. See
   `http_token: 'new'` every request went out as the old account while `client.inspect`
   reported `auth=http_token` — the token was never sent. Credentials belong in `user:` and
   `password:`, or in one of the token options.
+- `Client.from_env(**overrides)` and `Client#with` replace the credentials they override. A
+  credential is one of several options read in a fixed order, so a plain merge left the old
+  one in charge: with `ZAMMAD_TOKEN` set, `from_env(user: 'u', password: 'p')` still sent
+  the environment's token, and `client.with(oauth2_token: 'x')` on a token client went on
+  acting as the account the token belonged to, with no error. Naming one way to authenticate
+  now drops the others; overriding `password:` alone still keeps the `user` it pairs with.
+  `Config#with` does the same.
 
 ### Changed
 

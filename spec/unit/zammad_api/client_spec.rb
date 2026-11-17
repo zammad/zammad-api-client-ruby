@@ -70,6 +70,43 @@ RSpec.describe ZammadAPI::Client do
       expect(described_class.from_env(http_token: 'passed in').config.http_token).to eq('passed in')
     end
 
+    # A credential is read in a fixed order, so a plain merge left the
+    # environment's token in charge of a client that was handed another way to
+    # authenticate - and nothing said so.
+    context 'when an argument names another way to authenticate' do
+      before do
+        stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_TOKEN' => 'from-env' })
+      end
+
+      it 'uses a user and password passed in, not the token in the environment' do
+        expect(described_class.from_env(user: 'u', password: 'p').config.authentication_scheme).to eq(:basic)
+      end
+
+      it 'drops the token the environment held' do
+        expect(described_class.from_env(user: 'u', password: 'p').config.http_token).to be_nil
+      end
+
+      it 'uses an OAuth2 token passed in, not the token in the environment' do
+        expect(described_class.from_env(oauth2_token: 'x').config.authentication_scheme).to eq(:oauth2_token)
+      end
+
+      it 'sends what was passed in' do
+        stub = stub_request(:get, 'http://zammad.test/api/v1/users/1')
+          .with(query: hash_including({}), basic_auth: %w[u p])
+          .to_return(json_response({ id: 1 }))
+
+        described_class.from_env(user: 'u', password: 'p', retries: 0).user.find(1)
+        expect(stub).to have_been_requested
+      end
+    end
+
+    it 'keeps the user from the environment when only the password is passed in' do
+      stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_USER' => 'u', 'ZAMMAD_PASSWORD' => 'old' })
+
+      config = described_class.from_env(password: 'new').config
+      expect([config.user, config.password]).to eq(%w[u new])
+    end
+
     it 'accepts options that have no environment variable' do
       stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_TOKEN' => 't' })
 
@@ -587,6 +624,52 @@ RSpec.describe ZammadAPI::Client do
     it 're-validates the resulting configuration' do
       expect { unit_client.with(timeout: -1) }
         .to raise_error(ZammadAPI::ConfigurationError, /positive number/)
+    end
+
+    # Merged beside the token it was meant to replace, the new credential was
+    # never sent: the derived client went on acting as the old account.
+    context 'when it names another way to authenticate' do
+      it 'switches to an OAuth2 token' do
+        expect(unit_client.with(oauth2_token: 'x').config.authentication_scheme).to eq(:oauth2_token)
+      end
+
+      it 'switches to a user and password' do
+        expect(unit_client.with(user: 'u', password: 'p').config.authentication_scheme).to eq(:basic)
+      end
+
+      it 'drops the credential it replaced' do
+        expect(unit_client.with(oauth2_token: 'x').config.http_token).to be_nil
+      end
+
+      it 'sends the new credential' do
+        stub = stub_request(:get, url)
+          .with(query: hash_including({}), headers: { 'Authorization' => 'Bearer x' })
+          .to_return(json_response({ id: 1 }))
+
+        unit_client.with(oauth2_token: 'x').user.find(1)
+        expect(stub).to have_been_requested
+      end
+
+      it 'leaves the original client on its own credential' do
+        client = unit_client
+        client.with(oauth2_token: 'x')
+        expect(client.config.authentication_scheme).to eq(:http_token)
+      end
+
+      it 'switches back to an access token from basic authentication' do
+        basic = unit_client(http_token: nil, user: 'u', password: 'p')
+        expect(basic.with(http_token: 't').config.to_h.slice(:user, :password, :http_token))
+          .to eq({ user: nil, password: nil, http_token: 't' })
+      end
+    end
+
+    it 'replaces a token of the same kind' do
+      expect(unit_client.with(http_token: 'other').config.http_token).to eq('other')
+    end
+
+    it 'keeps the user when only the password changes' do
+      basic = unit_client(http_token: nil, user: 'u', password: 'old').with(password: 'new')
+      expect([basic.config.user, basic.config.password]).to eq(%w[u new])
     end
 
     it 'carries an on_behalf_of scope over to the derived client' do
