@@ -286,9 +286,10 @@ What the search can surface is Zammad's business: a value the instance has not i
 cannot index, is a record `find_by` will not find. `find_by(...) || create(...)` can
 therefore still create a duplicate — as writing the search out by hand would.
 
-`find_by` examines only the first page of hits, so it costs one request whether it matches
-or not. Search hits come back by relevance, so a record carrying the value is at the top of
-them or not among them at all; to look further, page through `search` yourself.
+`find_by` reads the hits a page at a time until one matches, so a match usually costs one
+request and a miss costs one per page of hits. It cannot stop at the first page: Zammad's
+search sorts by `updated_at`, newest first, rather than by relevance, so where a few
+hundred records contain the term the one that carries it exactly can be on any page.
 
 Zammad records can carry administrator-defined custom attributes, so readers are resolved
 against the attributes the record arrived with rather than declared ahead of time. A reader

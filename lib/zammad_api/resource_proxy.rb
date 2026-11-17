@@ -144,14 +144,20 @@ module ZammadAPI
     # +find_by(...) || create(...)+ can still create a duplicate - exactly as
     # writing the search out by hand would.
     #
-    # Only the first {SEARCH_MAX_PER_PAGE} hits are examined, so this costs one
-    # request whether it matches or not. Walking every page instead made a miss
-    # cost a request per page of hits - a term appearing in a few thousand
-    # records billed forty requests to answer "no", on exactly the
-    # +find_by(...) || create(...)+ path that runs for every new record. Search
-    # hits come back by relevance, so a record carrying the value searched for
-    # is at the top of them or not among them at all; to look further, page
-    # through {#search} directly.
+    # Every page of hits is read until one matches. Only the first
+    # {SEARCH_MAX_PER_PAGE} used to be, to keep a miss at one request, on the
+    # premise that hits come back by relevance and an exact match is at the
+    # top of them or nowhere. They do not: Zammad's search endpoints sort by
+    # +updated_at+, newest first, unless told otherwise, on the SQL path and
+    # the Elasticsearch one alike. So where more than a page of records
+    # matched the term - +find_by(name: 'Support')+ among a few hundred
+    # organizations with "Support" in their name - the one called exactly
+    # that could sit on any page, +find_by+ answered +nil+ for a record that
+    # exists, and +find_by(...) || create(...)+ created its duplicate.
+    #
+    # So a match costs as many requests as it takes to reach it, and a miss
+    # costs one per page of hits. The longest value is searched to keep
+    # those few.
     #
     # @example
     #   client.user.find_by(email: 'someone@example.com')&.id
@@ -167,9 +173,7 @@ module ZammadAPI
       term = search_term_for(params)
       raise ArgumentError, unsearchable_values_message(params) if term.nil?
 
-      search(term)
-        .page(1, per_page: SEARCH_MAX_PER_PAGE)
-        .detect { |record| params.all? { |key, value| record[key] == value } }
+      search(term).detect { |record| params.all? { |key, value| record[key] == value } }
     end
 
     # Fetches the first record carrying all of these attribute values, raising
@@ -365,8 +369,7 @@ module ZammadAPI
     def index_filter_hint = resource_class.searchable? ? INDEX_FILTER_HINT : UNSEARCHABLE_FILTER_HINT
 
     # The one value {#find_by} searches on: the longest, as the most selective
-    # of them, which matters because only the first {SEARCH_MAX_PER_PAGE} hits
-    # are examined.
+    # of them, which matters because a miss reads every page of hits.
     #
     # One value rather than all of them joined, and unquoted - both spellings
     # find nothing on an instance without Elasticsearch, for the same reason.

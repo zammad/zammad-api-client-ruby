@@ -206,8 +206,10 @@ A breaking release that modernises the whole gem. See
   checks the hits itself, because Zammad's index endpoints cannot filter: it returns a
   record that genuinely carries the attributes asked for, or nil. What the search can
   surface is Zammad's business, so `find_by(...) || create(...)` can still create a
-  duplicate — as writing the search out by hand would. Only the first page of hits is
-  examined, so a lookup costs one request whether it matches or not.
+  duplicate — as writing the search out by hand would. Every page of hits is read until
+  one matches, so a miss costs a request per page of hits: Zammad's search sorts by
+  `updated_at`, newest first, rather than by relevance, so the exact match can be on any
+  page.
 - `ResponseError` accepts a `detail:` describing a failure that has no HTTP response of its
   own, so `find_by!` reads as `no record matched` rather than `no response`. Such an error
   still reports the status its class is the name for, so a `NotFoundError` raised without a

@@ -134,17 +134,46 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect(proxy.find_by(name: 'Users').id).to eq(1)
     end
 
-    # Walking every page billed a request per page of hits to answer "no",
-    # on the find_by(...) || create(...) path that runs for every new record.
-    it 'costs one request when nothing matches, however many hits there are' do
-      hits = Array.new(ZammadAPI::ResourceProxy::SEARCH_MAX_PER_PAGE) { { id: it + 1, name: 'Other' } }
-      stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response(hits))
+    # Zammad's search sorts by updated_at, newest first, not by relevance, so
+    # the exact match can sit on any page of hits. Reading only the first one
+    # answered nil for a record that exists, and find_by(...) || create(...)
+    # then created its duplicate.
+    context 'when more records match the term than one page holds' do
+      let(:page_size) { ZammadAPI::ResourceProxy::SEARCH_MAX_PER_PAGE }
+      let(:others)    { Array.new(page_size) { { id: it + 1, name: 'Users Archive' } } }
 
-      expect(proxy.find_by(name: 'Users')).to be_nil
-      expect(a_request(:get, search_url).with(query: hash_including({}))).to have_been_made.once
+      def stub_page(number, records)
+        stub_request(:get, search_url)
+          .with(query: hash_including('page' => number.to_s))
+          .to_return(json_response(records))
+      end
+
+      it 'finds a match on a later page' do
+        stub_page(1, others)
+        stub_page(2, [{ id: 999, name: 'Users' }])
+
+        expect(proxy.find_by(name: 'Users').id).to eq(999)
+      end
+
+      it 'answers nil only once every page has been read' do
+        stub_page(1, others)
+        stub_page(2, others.map { it.merge(id: it[:id] + page_size) })
+        last = stub_page(3, [])
+
+        expect(proxy.find_by(name: 'Users')).to be_nil
+        expect(last).to have_been_requested
+      end
+
+      it 'reads no further than the page the match is on' do
+        stub_page(1, [*others.first(page_size - 1), { id: 999, name: 'Users' }])
+        second = stub_page(2, [])
+
+        proxy.find_by(name: 'Users')
+        expect(second).not_to have_been_requested
+      end
     end
 
-    it 'asks for a single page of hits at the size the search endpoint serves' do
+    it 'asks for hits at the size the search endpoint serves' do
       stub = stub_request(:get, search_url)
         .with(query: hash_including('page' => '1', 'per_page' => ZammadAPI::ResourceProxy::SEARCH_MAX_PER_PAGE.to_s))
         .to_return(json_response([{ id: 1, name: 'Users' }]))
@@ -169,7 +198,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
 
     it 'returns nil when the search matched nothing this record carries' do
       stub_request(:get, search_url).with(query: hash_including({}))
-        .to_return(json_response([{ id: 1, name: 'Users Archive' }]))
+        .to_return(json_response([{ id: 1, name: 'Users Archive' }]), json_response([]))
 
       expect(proxy.find_by(name: 'Users')).to be_nil
     end
@@ -243,7 +272,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect(stub).to have_been_requested
     end
 
-    it 'searches the longest value, as the most selective within the capped scan' do
+    it 'searches the longest value, as the most selective of them' do
       stub = stub_request(:get, search_url)
         .with(query: hash_including('query' => 'a-very-specific-note'))
         .to_return(json_response([]))
@@ -337,7 +366,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
 
     it 'raises when the search answered with a record that does not match' do
       stub_request(:get, search_url).with(query: hash_including({}))
-        .to_return(json_response([{ id: 1, name: 'Users Archive' }]))
+        .to_return(json_response([{ id: 1, name: 'Users Archive' }]), json_response([]))
 
       expect { proxy.find_by!(name: 'Users') }.to raise_error(ZammadAPI::NotFoundError)
     end
