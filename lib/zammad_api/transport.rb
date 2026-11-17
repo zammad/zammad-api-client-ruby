@@ -395,6 +395,21 @@ module ZammadAPI
     # @return [Transport]
     def with_config(config) = self.class.new(config).with_on_behalf_of(on_behalf_of)
 
+    # Says where this transport points and how it authenticates, and nothing
+    # else.
+    #
+    # Left to Ruby, this printed the instance variables, and one of them is
+    # the Faraday connection: its proxy options carry the proxy password and
+    # its middleware stack carries the arguments it was built with, the
+    # access token among them. Every record holds its transport, so that was
+    # one +inspect+ away from any of them. Defining this covers +pp+ as well,
+    # which uses an +inspect+ a class defines for itself.
+    #
+    # @return [String]
+    def inspect
+      "#<#{self.class.name} url=#{config.redacted_url.inspect} auth=#{config.authentication_scheme}#{" on_behalf_of=#{on_behalf_of.inspect}" if on_behalf_of}>"
+    end
+
     # Performs a request and raises on anything but a 2xx response.
     #
     # @param method [Symbol] +:get+, +:post+, +:put+ or +:delete+

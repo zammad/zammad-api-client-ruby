@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'pp'
+
 RSpec.describe ZammadAPI::Transport do
   let(:url) { "#{ClientHelper::BASE_URL}api/v1/groups" }
 
@@ -623,6 +625,40 @@ RSpec.describe ZammadAPI::Transport do
       transport = unit_transport
       scoped    = transport.with_on_behalf_of('someone')
       expect(scoped.instance_variable_get(:@connection)).to be(transport.instance_variable_get(:@connection))
+    end
+  end
+
+  # Left to Ruby, inspect printed the Faraday connection, whose proxy options
+  # carry the proxy password and whose middleware stack carries the token it
+  # was built with.
+  describe '#inspect' do
+    let(:transport) do
+      unit_transport(http_token: 'tok-s3cret', proxy: 'http://puser:pproxy-s3cret@proxy.test:8080')
+    end
+
+    it 'names the instance and the authentication scheme' do
+      expect(unit_transport.inspect).to eq('#<ZammadAPI::Transport url="http://zammad.test/" auth=http_token>')
+    end
+
+    it 'names an on_behalf_of scope' do
+      expect(unit_transport.with_on_behalf_of('agent@example.com').inspect).to include('on_behalf_of="agent@example.com"')
+    end
+
+    it 'does not print the access token' do
+      expect(transport.inspect).not_to include('tok-s3cret')
+    end
+
+    it 'does not print the proxy password' do
+      expect(transport.inspect).not_to include('pproxy-s3cret')
+    end
+
+    it 'does not print a basic authentication password' do
+      basic = unit_transport(http_token: nil, user: 'u', password: 'pw-s3cret')
+      expect(basic.inspect).not_to include('pw-s3cret')
+    end
+
+    it 'keeps both out of what pp prints too' do
+      expect(transport.pretty_inspect).not_to match(/tok-s3cret|pproxy-s3cret/)
     end
   end
 

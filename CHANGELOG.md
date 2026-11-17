@@ -503,6 +503,13 @@ A breaking release that modernises the whole gem. See
   acting as the account the token belonged to, with no error. Naming one way to authenticate
   now drops the others; overriding `password:` alone still keeps the `user` it pairs with.
   `Config#with` does the same.
+- `pp config` redacts credentials, and a transport no longer prints its connection. `Config`
+  is a `Data`, and `pp` — what IRB and the Rails console print a value with — has a printer
+  of its own for those that renders the members without going through `inspect`, so
+  `client.config` typed at a prompt showed the token, the password and a proxy's credentials
+  in full. `Transport` had no `inspect` at all, so Ruby's default printed the Faraday
+  connection it holds, proxy password and access token included, and every record holds its
+  transport.
 
 ### Changed
 

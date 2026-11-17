@@ -118,8 +118,9 @@ client = ZammadAPI::Client.from_env(timeout: 300)
 | `adapter`        | Faraday's default  | Name of the Faraday adapter to use.                                |
 | `middleware`     | `nil`              | Callable that receives the Faraday connection while it is built.   |
 
-Credentials are never written to the log, and `client.config.inspect` redacts them, so a
-configuration object is safe to include in an error report.
+Credentials are never written to the log, and `client.config` redacts them however it is
+printed — `inspect`, `to_s` or `pp`, which is what a console shows — so a configuration
+object is safe to include in an error report.
 
 Credentials belong in the options above, not in the URL. `https://user:secret@host/` raises
 `ZammadAPI::ConfigurationError`, because the HTTP stack would send those as basic

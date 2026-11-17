@@ -250,6 +250,20 @@ module ZammadAPI
     end
     alias to_s inspect
 
+    # What +pp+ prints, which is what IRB and the Rails console show for a
+    # value typed at the prompt.
+    #
+    # +pp+ does not go through {#inspect} for a Data object: it has a printer
+    # of its own that renders the members directly. So +client.config+ in a
+    # console, or +pp config+ in a script, printed the token, the password
+    # and the credentials of a proxy in full - from the class documented as
+    # safe to log, and through the one route most likely to be looked at.
+    #
+    # @api private
+    # @param printer [PP]
+    # @return [void]
+    def pretty_print(printer) = printer.text(inspect)
+
     private
 
     # @param value [String] a URL that may carry inline credentials

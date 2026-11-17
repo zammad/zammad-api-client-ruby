@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'pp'
+
 RSpec.describe ZammadAPI::Config do
   def build(url: 'https://zammad.example.com', http_token: 'token', **overrides)
     described_class.new(url: url, http_token: http_token, **overrides)
@@ -305,6 +307,43 @@ RSpec.describe ZammadAPI::Config do
 
     it 'leaves a url without credentials alone' do
       expect(build(url: 'https://zammad.example.com/').inspect).to include('url="https://zammad.example.com/"')
+    end
+  end
+
+  # pp has a printer of its own for a Data object, which renders the members
+  # without going through #inspect - and pp is what IRB and the Rails console
+  # print a value with.
+  describe 'pretty printing' do
+    subject(:printed) do
+      build(
+        user: 'u', password: 'pw-s3cret', http_token: 'tok-s3cret', oauth2_token: 'oauth-s3cret',
+        proxy: 'http://puser:pproxy-s3cret@proxy.test:8080'
+      ).pretty_inspect
+    end
+
+    it 'redacts the password' do
+      expect(printed).not_to include('pw-s3cret')
+    end
+
+    it 'redacts the access token' do
+      expect(printed).not_to include('tok-s3cret')
+    end
+
+    it 'redacts the OAuth2 token' do
+      expect(printed).not_to include('oauth-s3cret')
+    end
+
+    it 'redacts the proxy credentials' do
+      expect(printed).not_to include('pproxy-s3cret')
+    end
+
+    it 'prints what inspect prints' do
+      config = build(password: 'hunter2')
+      expect(config.pretty_inspect).to eq("#{config.inspect}\n")
+    end
+
+    it 'stays redacted nested inside another structure' do
+      expect({ config: build(http_token: 'tok-s3cret') }.pretty_inspect).not_to include('tok-s3cret')
     end
   end
 
