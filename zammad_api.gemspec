@@ -8,8 +8,11 @@ Gem::Specification.new do |spec|
   spec.authors  = ['Martin Edenhofer', 'Martin Gruner', 'Mantas Masalskis']
   spec.email    = ['support@zammad.org']
 
-  spec.summary     = 'Zammad API v1.0 client.'
-  spec.description = 'Ruby wrapper for the Zammad API v1.0.'
+  # Two versions meet in these lines, and only one of them is this gem's: 2.0
+  # is the client, and v1.0 is the API that Zammad serves under /api/v1.
+  spec.summary     = 'Version 2.0 of the Ruby client for the Zammad API.'
+  spec.description = 'Version 2.0 of the Ruby client for the Zammad API v1.0, the one a Zammad serves under ' \
+                     '/api/v1. It is a breaking release: the README lists every call that changed since 1.x.'
   spec.homepage    = 'https://github.com/zammad/zammad-api-client-ruby'
   spec.licenses    = ['AGPL-3.0-only', 'MIT']
 
