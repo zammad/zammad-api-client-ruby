@@ -566,9 +566,7 @@ RSpec.describe ZammadAPI::Resources::Base do
       end
 
       it 'refuses a save rather than letting it 404' do
-        group.name = 'Support'
-
-        expect { group.save }.to raise_error(ZammadAPI::Error, /was destroyed/)
+        expect { group.save }.to raise_error(ZammadAPI::Error, /was destroyed, there is nothing to save/)
       end
 
       # `reload` re-read a record that no longer exists and cleared the flag on
@@ -685,6 +683,48 @@ RSpec.describe ZammadAPI::Resources::Base do
         end
 
         expect(group.key?(:name)).to be(false)
+      end
+    end
+
+    # `update` refused a destroyed record, and the writers it is built on did
+    # not: a write left the record changed and reading a value Zammad never
+    # saw, and the save after it was the first thing to object.
+    context 'when an attribute is written after it was destroyed' do
+      subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'A') }
+
+      before do
+        stub_request(:delete, "#{url}/1").to_return(status: 200, body: '')
+        group.destroy
+      end
+
+      it 'refuses a named writer' do
+        expect { group.name = 'Z' }.to raise_error(ZammadAPI::Error, /Group 1 was destroyed, there is nothing to change/)
+      end
+
+      it 'refuses []=' do
+        expect { group[:name] = 'Z' }.to raise_error(ZammadAPI::Error, /was destroyed/)
+      end
+
+      it 'refuses assign_attributes' do
+        expect { group.assign_attributes(name: 'Z') }.to raise_error(ZammadAPI::Error, /was destroyed/)
+      end
+
+      it 'refuses a writer for an attribute the record never carried' do
+        expect { group.note = 'Z' }.to raise_error(ZammadAPI::Error, /was destroyed/)
+      end
+
+      it 'leaves nothing staged behind the refusal' do
+        expect { group.name = 'Z' }.to raise_error(ZammadAPI::Error)
+        expect(group).not_to be_changed
+      end
+
+      it 'leaves the record reading as it last was in Zammad' do
+        expect { group.assign_attributes(note: 'n', name: 'Z') }.to raise_error(ZammadAPI::Error)
+        expect(group.to_h).to eq({ id: 1, name: 'A' })
+      end
+
+      it 'still refuses the id for the reason an id is refused' do
+        expect { group.assign_attributes(id: 9) }.to raise_error(ZammadAPI::Error, /cannot be staged/)
       end
     end
   end

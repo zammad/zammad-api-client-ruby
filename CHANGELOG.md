@@ -548,6 +548,12 @@ A breaking release that modernises the whole gem. See
   `name` while still reading `name` as it was, and its next `save` sent the copy's value.
   The copy also gets association readers of its own, rather than ones that read through the
   original.
+- An attribute write on a destroyed record raises. `update` and `update!` already refused
+  one, so as not to leave a change set that can never be sent, but the writers they are
+  built on did not ask: `group.destroy; group.name = 'Z'` left `changed?` true and `name`
+  reading `"Z"` on a record `destroy` promises to leave as it last was in Zammad, and the
+  `save` after it was the first thing to object. A named writer, `[]=` and
+  `assign_attributes` all refuse now, and stage nothing.
 
 ### Changed
 

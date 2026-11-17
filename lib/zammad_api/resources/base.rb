@@ -402,8 +402,9 @@ module ZammadAPI
       #
       # @param attributes [Hash] attribute names and their new values
       # @return [self]
-      # @raise [Error] when an attribute cannot be staged, such as +id+. Nothing
-      #   is staged in that case, so the record is left as it was.
+      # @raise [Error] when an attribute cannot be staged, such as +id+, or
+      #   when the record was destroyed. Nothing is staged in either case, so
+      #   the record is left as it was.
       def assign_attributes(attributes)
         # rubocop:disable Style/CombinableLoops -- combining them is the bug
         # Two passes on purpose: every key is checked before any of them is
@@ -550,7 +551,8 @@ module ZammadAPI
       # the reason rather than one call later as a 404 from Zammad. The
       # attributes stay readable, but the state that only meant something
       # while the record existed does not: staged changes, the last validation
-      # failure, and the association readers all go.
+      # failure, and the association readers all go, and a write to an
+      # attribute is refused from then on.
       #
       # Readable as the record last was in Zammad, which is not what dropping
       # the staged changes alone left behind: `reset_pending_state!` empties
@@ -693,7 +695,17 @@ module ZammadAPI
       # merged into @attributes below. The write was dropped without a word,
       # no request was ever sent for it, and the record went on reporting a
       # key Zammad had never sent it, so #changes and #attributes disagreed.
+      #
+      # A destroyed record takes no writes. `update` has refused one all
+      # along, so as not to leave a change set that can never be sent, but
+      # the writers themselves did not ask: `group.destroy; group.name = 'Z'`
+      # left `changed?` true and `name` reading "Z" on a record `destroy`
+      # promises to leave as it last was in Zammad, and the `save` after it
+      # was the first thing to object. Asked here, it holds for a named
+      # writer, `[]=` and `assign_attributes` alike, since all three write
+      # through this method.
       def write_attribute(key, value)
+        raise_if_destroyed!('change')
         refuse_unwritable!(key, value)
 
         staged = frozen_attributes(value)

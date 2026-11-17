@@ -54,7 +54,8 @@ module ZammadAPI
     # @param key [Symbol, String]
     # @param value [Object]
     # @return [Object] the staged value
-    # @raise [Error] when the attribute cannot be staged, such as +id+
+    # @raise [Error] when the attribute cannot be staged, such as +id+, or
+    #   when the record was destroyed
     # @raise [NoMethodError] when the record is read-only
     def []=(key, value)
       write_attribute(key.to_sym, value)
