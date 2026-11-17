@@ -174,7 +174,8 @@ end
 check('search') { "#{CLIENT.users.search(LOGIN).to_a.size} hits" }
 
 # These were never driven against a live Zammad, which is why nobody noticed
-# that an attribute passed to `where` never reached the query at all.
+# that an attribute filter passed to an index endpoint never reached the query
+# at all.
 check('find_by returns a record that matches') do
   found = CLIENT.groups.find_by(name: "smoke-#{SUFFIX}")
   raise 'no record found' if found.nil?
@@ -232,15 +233,26 @@ check('empty? on a search with no hits') do
   'true'
 end
 
-check('where refuses a filter the endpoint would drop') do
-  CLIENT.groups.where(name: "smoke-#{SUFFIX}").to_a
+check('order sorts an index endpoint that sorts') do
+  "#{CLIENT.groups.order(name: :desc).page(1, per_page: 2).to_a.size} record(s)"
+end
+
+check('order refuses an index served in a fixed order') do
+  CLIENT.tickets.order(:title).to_a
   raise 'expected ArgumentError'
 rescue ArgumentError => e
   e.message.split('.').first
 end
 
-check('where accepts a parameter the endpoint honours') do
-  "#{CLIENT.groups.all.where(sort_by: 'name').page(1, per_page: 2).to_a.size} record(s)"
+check('order sorts a search') do
+  "#{CLIENT.groups.search("smoke-#{SUFFIX}").order(:name, id: :desc).to_a.size} hit(s)"
+end
+
+check('search refuses a keyword the endpoint would drop') do
+  CLIENT.groups.search('smoke', name: "smoke-#{SUFFIX}").to_a
+  raise 'expected ArgumentError'
+rescue ArgumentError => e
+  e.message.split(':').first
 end
 
 section 'Tickets'

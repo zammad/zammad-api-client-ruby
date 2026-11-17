@@ -42,11 +42,9 @@ A breaking release that modernises the whole gem. See
   tenth of the round trips, each of which is a fresh TLS handshake under Faraday's default
   adapter. `page(n)` without `per_page:` is a page of that size, so pin it with
   `page(n, per_page: 100)` where a persisted page number has to keep meaning what it did.
-- `where` rejects `page`, `per_page`, `expand`, `only_total_count` and `query` with an
-  `ArgumentError`. They used to be accepted and silently overridden.
-- A `nil` query value raises `ArgumentError`. 1.x dropped the parameter, so
-  `where(owner_id: nil)` requested every ticket and the caller iterated all of them
-  believing they were unassigned.
+- A `nil` query value raises `ArgumentError`. 1.x dropped the parameter, so a filter that
+  happened to be `nil` requested every record and the caller iterated all of them
+  believing they had been narrowed.
 - `client.on_behalf_of = 'login'` and `client.perform_on_behalf_of` were replaced by
   `client.on_behalf_of('login')`, which returns a new client and also accepts a block.
 - `ZammadAPI::ResourceNotFoundError` is now `ZammadAPI::UnknownResourceError`, freeing the
@@ -197,13 +195,25 @@ A breaking release that modernises the whole gem. See
   (403), `NotFoundError` (404), `ValidationError` (422) and `RateLimitError` (429, with
   `#retry_after`). Network failures raise `ConnectionError` or `TimeoutError` instead of
   leaking Faraday exceptions.
-- `Collection#where`, `#page`, `#in_batches`, `#find_each`, `#count` and lazy
-  enumeration, plus `client.x.where(...)` as a shorthand for `all.where(...)`. `where`
-  accepts only parameters the endpoint reads — `sort_by` and `order_by` on a generic
-  index, nothing beyond paging on `/api/v1/tickets` and `/api/v1/users`, and the search
-  parameters on a `/search` endpoint — and raises `ArgumentError` for anything else.
-  Zammad drops a parameter it does not know rather than refusing it, so an attribute
-  filter on an index endpoint came back as the whole unfiltered list.
+- `Collection#order`, `#page`, `#in_batches`, `#find_each`, `#count` and lazy
+  enumeration, plus `client.x.order(...)` as a shorthand for `all.order(...)`.
+- `order` sorts on the server: `order(:name)`, `order(name: :desc)`,
+  `order(:active, name: :desc)`, read the way ActiveRecord reads them, and a second
+  `order` sorts within the first. Sorting is the one thing an index endpoint does besides
+  paging. `/api/v1/tickets` and `/api/v1/users` do not even do that — their controllers
+  hardcode id order — so `order` on those raises `ArgumentError` rather than handing back
+  records it would be calling sorted; a search sorts for every resource that can be
+  searched.
+- `search` takes what a search endpoint narrows by besides the term as keywords:
+  `condition:`, `ids:`, `role_ids:`, `group_ids:` and `permissions:`. Any other keyword
+  raises `ArgumentError`, because Zammad drops a parameter it does not know rather than
+  refusing it, and the search would come back unnarrowed with nothing to say so.
+- There is no `where`. During the development of 2.0 there was one, which took `sort_by`
+  and `order_by` on a generic index, nothing at all on tickets and users, and the search
+  parameters on a search, and raised for everything else — an attribute filter above all,
+  since Zammad's index endpoints do not filter. The most familiar verb on a collection
+  refused nearly everything it was given, so the two things it did do have names of their
+  own: `order`, and the keywords of `search`.
 - A resource proxy is `Enumerable` over `all`, so `client.tickets.each`,
   `client.tickets.first(5)`, `client.tickets.map`, `#find_each`, `#in_batches`, `#page`,
   `#pluck` and `#count` all work without naming `all`. `client.x.find(id)` keeps
@@ -320,7 +330,7 @@ A breaking release that modernises the whole gem. See
 - `save` on a persisted record with nothing staged sends no request. The empty `PUT` it
   used to issue was applied by Zammad, bumping `updated_at` and `updated_by`.
 - A nested query parameter is sent as a structure rather than as its Ruby `inspect`.
-  `condition`, which the search endpoints narrow by and which `where` accepts, went out as
+  `condition`, which the search endpoints narrow by and which `search` takes, went out as
   `condition=%7B%22ticket.state_id%22…`; Zammad could not parse it, dropped it, and
   answered with an unnarrowed search. A `nil` is now refused at any depth, and the message
   names the path to it.
@@ -328,10 +338,6 @@ A breaking release that modernises the whole gem. See
   `ConnectionError` but were missing from the retriable list, so a transient failure
   through an adapter that wraps it (net_http) was retried while the same failure through
   an adapter that does not raised on the first attempt.
-- `where` reads a String key as the parameter it names. Both guards compared against
-  Symbols, so `where('sort_by' => 'name')` was refused with a message saying the endpoint
-  both ignores and honours `sort_by`, and `where('page' => 2)` slipped past the
-  reserved-key check entirely.
 - A list body that is not made of objects raises `ParseError` instead of failing later. An
   unexpanded search answering `[1, 2, 3]` stored an Integer as a record's attributes, and
   the first reader died with `TypeError: no implicit conversion of Symbol into Integer`.
@@ -485,9 +491,9 @@ A breaking release that modernises the whole gem. See
   bytes to attachment downloads, so once a middleware has consumed the body there is
   nothing faithful left to hand back.
 - Two spellings of one query parameter raise instead of silently sending whichever Hash
-  order put last — at any depth, and in `where` at the call that wrote it as well as on
+  order put last — at any depth, and in `search` at the call that wrote it as well as on
   the wire. The same goes for two spellings of one response header in `ZammadAPI::Test`. Keys are normalised
-  in both places, so `where('sort_by' => 'name', sort_by: 'id')` and
+  in both places, so `search('x', 'ids' => [1], ids: [2])` and
   `{state_id: 1, 'state_id' => 2}` each collapsed into one parameter and dropped the other
   value without a word — including inside `condition`, the structured parameter the search
   endpoints read.
@@ -581,7 +587,7 @@ A breaking release that modernises the whole gem. See
 - `client.<resource>.destroy(id)` deletes directly instead of fetching the record first.
 - Resource dispatch is explicit rather than `method_missing` plus `const_get`.
 - A resource declares what its endpoint does — `searchable true`, `max_per_page 100`,
-  `index_query_keys :sort_by` — the way it already declared `path`, rather than by setting
+  `sortable false` — the way it already declared `path`, rather than by setting
   `SEARCHABLE`, `MAX_PER_PAGE` and `INDEX_QUERY_KEYS`. A misspelled constant was silently
   ignored and the resource kept Base's default, so `SEARCHEABLE = true` left the resource
   unsearchable and every `find_by` on it raised "Zammad routes no search endpoint" with no

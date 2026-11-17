@@ -41,10 +41,16 @@ puts "detect                 ##{tickets.detect { it.state == 'open' }&.number}, 
 # One specific page, when you are driving the paging yourself.
 puts "page(2, per_page: 10)  #{tickets.page(2, per_page: 10).map(&:id).inspect}"
 
-# Narrowing by a value is `search`, not `where`: Zammad's index endpoints sort
-# and page and drop every other parameter, so `where(state: 'open')` raises
-# rather than handing back every ticket. Searches compose with all of the above.
+# Narrowing by a value is `search`: Zammad's index endpoints sort and page and
+# drop every other parameter, so there is no filter to pass them. Searches
+# compose with all of the above.
 puts "search                 #{client.tickets.search('state.name:open').first(5).size} open tickets"
+
+# `order` sorts on the server. A search sorts for every resource; of the index
+# endpoints, the ticket and user ones are always served in id order.
+newest = client.tickets.search('state.name:open').order(created_at: :desc).first
+puts "search.order           ##{newest&.number}, the most recently created open ticket"
+puts "order                  #{client.groups.order(:name).first(3).map(&:name).inspect}"
 
 # Counting a search is one request, because Zammad can answer `only_total_count`
 # without serving the records. An index endpoint has no answer for it and no

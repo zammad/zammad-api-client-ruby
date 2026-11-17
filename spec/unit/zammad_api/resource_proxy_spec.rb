@@ -448,35 +448,29 @@ RSpec.describe ZammadAPI::ResourceProxy do
     end
   end
 
-  describe '#where' do
-    it 'returns a collection carrying the query parameters' do
+  describe '#order' do
+    it 'returns a sorted collection of every record' do
       stub = stub_request(:get, url)
-        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => default_per_page.to_s, 'sort_by' => 'name' })
+        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => default_per_page.to_s, 'sort_by' => 'name', 'order_by' => 'desc' })
         .to_return(json_response([]))
 
-      proxy.where(sort_by: 'name').to_a
+      proxy.order(name: :desc).to_a
       expect(stub).to have_been_requested
     end
 
-    it 'refuses an attribute filter the index endpoint would ignore' do
-      expect { proxy.where(active: true) }
-        .to raise_error(ArgumentError, %r{api/v1/groups ignores active})
+    it 'is the order of the collection all hands back' do
+      expect(proxy.order(:name).inspect).to eq(proxy.all.order(:name).inspect)
     end
 
-    it 'points at the call that can narrow by a value' do
-      expect { proxy.where(active: true) }.to raise_error(ArgumentError, /use find_by for one record or search for many/)
+    it 'refuses a resource whose index endpoint does not sort' do
+      expect { unit_client.tickets.order(:created_at) }
+        .to raise_error(ArgumentError, %r{api/v1/tickets is always served in the same order})
     end
 
-    it 'makes no request for a filter it rejects' do
-      expect { proxy.where(active: true) }.to raise_error(ArgumentError)
-      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
-    end
-
-    context 'with an endpoint that does not even sort' do
-      it 'says so, naming what it does honour' do
-        expect { unit_client.tickets.where(sort_by: 'created_at') }
-          .to raise_error(ArgumentError, /honours nothing beyond paging/)
-      end
+    # where took a sort and refused nearly everything else, which is why it
+    # went: the name promised a filter an index endpoint does not have.
+    it 'has no where to reach for instead' do
+      expect(proxy).not_to respond_to(:where)
     end
   end
 
@@ -615,24 +609,6 @@ RSpec.describe ZammadAPI::ResourceProxy do
     end
   end
 
-  describe 'narrowing a search' do
-    it 'refuses to replace the search term' do
-      expect { proxy.search('login failure').where(query: 'anything') }
-        .to raise_error(ArgumentError, /cannot be passed to where/)
-    end
-
-    it 'still narrows a search by a parameter it does not own' do
-      stub_request(:get, "#{url}/search")
-        .with(query: hash_including({ 'query' => 'login failure', 'sort_by' => 'created_at', 'page' => '1' }))
-        .to_return(json_response([{ id: 1 }]))
-      stub_request(:get, "#{url}/search")
-        .with(query: hash_including({ 'query' => 'login failure', 'sort_by' => 'created_at', 'page' => '2' }))
-        .to_return(json_response([]))
-
-      expect(proxy.search('login failure').where(sort_by: 'created_at').map(&:id)).to eq([1])
-    end
-  end
-
   describe '#search' do
     it 'refuses a resource Zammad routes no search endpoint for' do
       expect { client.ticket_states.search('open') }
@@ -653,18 +629,107 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect(stub).to have_been_requested
     end
 
-    it 'takes extra query parameters through where' do
-      stub = stub_request(:get, "#{url}/search")
-        .with(query: hash_including('query' => 'support', 'sort_by' => 'name'))
-        .to_return(json_response([]))
+    # The other things a search endpoint narrows by, named on the call that
+    # searches rather than passed to where on what it returned.
+    context 'with keywords the search endpoint reads' do
+      let(:users_search) { "#{ClientHelper::BASE_URL}api/v1/users/search" }
 
-      proxy.search('support').where(sort_by: 'name').to_a
-      expect(stub).to have_been_requested
+      before { stub_request(:get, /search/).with(query: hash_including({})).to_return(json_response([])) }
+
+      it 'sends ids' do
+        client.users.search('x', ids: [1, 2]).to_a
+        expect(a_request(:get, users_search).with(query: hash_including('query' => 'x', 'ids' => %w[1 2]))).to have_been_made
+      end
+
+      it 'sends role_ids, group_ids and permissions' do
+        client.users.search('x', role_ids: [2], group_ids: [3], permissions: ['ticket.agent']).to_a
+
+        expect(a_request(:get, users_search).with(query: hash_including('role_ids' => ['2'], 'group_ids' => ['3'], 'permissions' => ['ticket.agent'])))
+          .to have_been_made
+      end
+
+      it 'sends a condition the way Rails reads a nested parameter back' do
+        client.tickets.search('x', condition: { 'ticket.state_id' => { operator: 'is', value: [1] } }).to_a
+
+        expect(a_request(:get, "#{ClientHelper::BASE_URL}api/v1/tickets/search")
+          .with(query: hash_including('condition' => { 'ticket.state_id' => { 'operator' => 'is', 'value' => ['1'] } })))
+          .to have_been_made
+      end
+
+      it 'accepts a keyword spelled as a string' do
+        expect(client.users.search('x', 'ids' => [1])).to be_a(ZammadAPI::Collection)
+      end
+
+      it 'keeps the term the search was given' do
+        client.users.search('smith', ids: [1]).to_a
+        expect(a_request(:get, users_search).with(query: hash_including('query' => 'smith'))).to have_been_made
+      end
     end
 
-    it 'refuses a parameter the search endpoint would ignore' do
-      expect { proxy.search('support').where(name: 'Users') }
-        .to raise_error(ArgumentError, /Put the value in the search term instead/)
+    # Zammad drops a parameter it does not know, so these would come back
+    # unnarrowed with nothing to say so.
+    context 'with a keyword the search endpoint would drop' do
+      it 'refuses an attribute name' do
+        expect { proxy.search('support', name: 'Users') }
+          .to raise_error(ArgumentError, /search does not take name: a search endpoint narrows by the term, and by condition, ids/)
+      end
+
+      it 'says where an attribute value goes instead' do
+        expect { proxy.search('support', name: 'Users') }
+          .to raise_error(ArgumentError, /Put an attribute value in the term - search\('state\.name:open'\)/)
+      end
+
+      it 'refuses a sort, and names order' do
+        expect { proxy.search('support', sort_by: 'name') }
+          .to raise_error(ArgumentError, /search does not take sort_by.*sort with search\(term\)\.order\(\.\.\.\)/)
+      end
+
+      it 'refuses to replace the search term' do
+        expect { proxy.search('login failure', query: 'anything') }.to raise_error(ArgumentError, /search does not take query/)
+      end
+
+      %i[page per_page expand only_total_count].each do |owned|
+        it "refuses #{owned}, which the collection controls itself" do
+          expect { proxy.search('support', owned => 1) }.to raise_error(ArgumentError, /search does not take #{owned}/)
+        end
+      end
+
+      it 'makes no request' do
+        expect { proxy.search('support', name: 'Users') }.to raise_error(ArgumentError)
+        expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+      end
+    end
+
+    # Every one of these is refused at the call that wrote it, rather than
+    # when the collection is first read some lines away.
+    context 'with a keyword it cannot send' do
+      it 'refuses a nil value, which no query string can spell' do
+        expect { client.users.search('x', ids: nil) }.to raise_error(ArgumentError, /query parameter ids is nil/)
+      end
+
+      it 'refuses two spellings of one keyword rather than dropping a value' do
+        expect { client.users.search('x', 'ids' => [1], :ids => [2]) }
+          .to raise_error(ArgumentError, /ids was given twice, as "ids" and as :ids/)
+      end
+
+      it 'refuses two spellings of one key nested inside a condition' do
+        expect { client.tickets.search('x', condition: { 'state_id' => 1, :state_id => 2 }) }
+          .to raise_error(ArgumentError, /parameter condition\[state_id\] was given twice/)
+      end
+
+      it 'still accepts a condition whose keys only look alike' do
+        expect(client.tickets.search('x', condition: { 'ticket.state_id' => { operator: 'is' }, 'ticket.group_id' => { operator: 'is' } }))
+          .to be_a(ZammadAPI::Collection)
+      end
+    end
+
+    it 'sorts through order on the collection it returns' do
+      stub = stub_request(:get, "#{url}/search")
+        .with(query: hash_including('query' => 'support', 'sort_by' => 'name', 'order_by' => 'asc'))
+        .to_return(json_response([]))
+
+      proxy.search('support').order(:name).to_a
+      expect(stub).to have_been_requested
     end
 
     it 'requires a term' do

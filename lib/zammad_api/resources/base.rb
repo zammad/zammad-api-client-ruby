@@ -31,17 +31,6 @@ module ZammadAPI
       MEMO_LOCK = Mutex.new
       private_constant :MEMO_LOCK
 
-      # Query parameters an index endpoint honours, beyond the paging
-      # {Collection} owns.
-      #
-      # ApplicationController#model_index_render builds its query as
-      # `reorder(order_sql).offset(...).limit(...)` - it sorts and pages and
-      # drops every other parameter. There is no attribute filtering on an
-      # index endpoint at all; that is what /search is for. Resources whose
-      # controller hardcodes the order declare +index_query_keys+ with
-      # nothing in it.
-      DEFAULT_INDEX_QUERY_KEYS = %i[sort_by order_by].freeze
-
       # Staged changes as +attribute => [old_value, new_value]+.
       #
       # A copy, and frozen: writing to the change set a record hands out would
@@ -94,13 +83,23 @@ module ZammadAPI
           @max_per_page = value
         end
 
-        # Declares the query parameters this resource's index endpoint
-        # honours, beyond the paging {Collection} owns.
+        # Declares whether this resource's index endpoint sorts.
         #
-        # @param keys [Array<Symbol>]
+        # ApplicationController#model_index_render builds its query as
+        # `reorder(order_sql).offset(...).limit(...)`: it reads +sort_by+ and
+        # +order_by+, pages, and drops every other parameter. That is the
+        # default, so a resource says nothing. One whose controller hardcodes
+        # the order declares +sortable false+, and {Collection#order} then
+        # refuses it rather than handing back records it would be calling
+        # sorted.
+        #
+        # There is no attribute filtering on an index endpoint at all; that
+        # is what /search is for.
+        #
+        # @param value [Boolean]
         # @return [void]
-        def index_query_keys(*keys)
-          @index_query_keys = keys.flatten.freeze
+        def sortable(value)
+          @sortable = value
         end
 
         # @return [String] the API path of this resource
@@ -114,9 +113,9 @@ module ZammadAPI
         # @return [Integer] the largest page size this endpoint serves
         def page_limit = declaration(:max_per_page) { DEFAULT_MAX_PER_PAGE }
 
-        # @return [Array<Symbol>] the query parameters {Collection#where} may
-        #   pass to this endpoint
-        def filterable_keys = declaration(:index_query_keys) { DEFAULT_INDEX_QUERY_KEYS }
+        # @return [Boolean] whether this resource's index endpoint reads
+        #   +sort_by+ and +order_by+
+        def sortable? = declaration(:sortable) { true }
 
         # The API path of one record of this kind.
         #

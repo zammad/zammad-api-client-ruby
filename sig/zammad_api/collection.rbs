@@ -2,7 +2,9 @@ module ZammadAPI
   class Collection
     include Enumerable[untyped]
 
-    RESERVED_QUERY_KEYS: Array[Symbol]
+    # Both are private_constant in the source; RBS has no way to say so.
+    SORT_DIRECTIONS: Array[String]
+    SORT_ATTRIBUTE: Regexp
 
     @transport: Transport
     @resource_class: untyped
@@ -10,8 +12,8 @@ module ZammadAPI
     @operation: String
     @query: Hash[Symbol, untyped]
     @max_per_page: Integer
-    @filterable: Array[Symbol]
-    @filter_hint: String
+    @sortable: bool
+    @unsortable_hint: String
     @per_page: Integer
     @page: Integer?
     @countable: bool
@@ -22,8 +24,8 @@ module ZammadAPI
       path: String,
       operation: String,
       max_per_page: Integer,
-      filterable: Array[Symbol],
-      filter_hint: String,
+      sortable: bool,
+      unsortable_hint: String,
       ?query: Hash[Symbol, untyped],
       ?per_page: Integer?,
       ?page: Integer?,
@@ -42,7 +44,7 @@ module ZammadAPI
     def take: (Integer count) -> Array[untyped]
     def find: (?untyped ifnone) { (untyped) -> boolish } -> untyped
             | (*untyped) -> untyped
-    def where: (**untyped) -> Collection
+    def order: (*(Symbol | String) attributes, **(Symbol | String) directions) -> Collection
     def pluck: (*(Symbol | String) keys) -> Array[untyped]
     def count: (*untyped) ?{ (untyped) -> boolish } -> Integer
     def size: (*untyped) ?{ (untyped) -> boolish } -> Integer
@@ -55,13 +57,14 @@ module ZammadAPI
     def own_request_for_first?: (untyped count) -> bool
     def find_by_id_message: (untyped) -> String
     def resource_name: () -> String
-    def ignored_message: (Array[Symbol]) -> String
+    def sort_columns: (Array[untyped] attributes, Hash[untyped, untyped] directions) -> Hash[String, String]
+    def sort_attribute!: (untyped attribute) -> String
+    def sort_direction!: (String name, untyped direction) -> String
+    def sorted_by: () -> Hash[String, String]
     def positive_integer!: (untyped, String) -> Integer
     def page_size!: (untyped, String) -> Integer
     def walk: () { (Array[untyped]) -> void } -> void
     def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped]) -> Collection
-    def normalized_filters: (Hash[untyped, untyped] params, ?String? prefix) -> Hash[Symbol, untyped]
-    def nested_filters: (Symbol name, untyped value, String? prefix) -> untyped
     def fetch: (Integer, Integer) -> [ Array[untyped], Integer ]
     def total_count: () -> Integer?
     def clamp_per_page: (untyped) -> Integer

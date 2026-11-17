@@ -5,9 +5,6 @@ RSpec.describe ZammadAPI::Collection do
 
   let(:client) { unit_client }
   let(:url) { "#{ClientHelper::BASE_URL}api/v1/groups" }
-  # `condition` is only honoured by a search endpoint, so the nested-filter
-  # examples need one.
-  let(:search_collection) { client.tickets.search('x') }
 
   # What a collection over this endpoint fetches per request when nothing asks
   # for another size: as many as the endpoint serves. Read off the resource
@@ -159,29 +156,6 @@ RSpec.describe ZammadAPI::Collection do
 
       expect { collection.each { seen += 1 } }.to raise_error(ZammadAPI::PaginationError)
       expect(seen).to eq(default_per_page)
-    end
-
-    it 'refuses two spellings of one filter rather than dropping a value' do
-      expect { collection.where('sort_by' => 'name', :sort_by => 'id') }
-        .to raise_error(ArgumentError, /sort_by was given twice, as "sort_by" and as :sort_by/)
-    end
-
-    # `condition` is a Hash the search endpoints read. Transport refuses the
-    # pair too, but not until the collection is enumerated, and every other
-    # refusal `where` makes happens at the call that wrote it.
-    it 'refuses a collision nested inside a structured filter' do
-      expect { search_collection.where(condition: { 'state_id' => 1, :state_id => 2 }) }
-        .to raise_error(ArgumentError, /parameter condition\[state_id\] was given twice/)
-    end
-
-    it 'still accepts a structured filter whose keys only look alike' do
-      expect(search_collection.where(condition: { 'ticket.state_id' => { operator: 'is' } }))
-        .to be_a(described_class)
-    end
-
-    it 'still accepts a filter given once by either spelling' do
-      expect(collection.where('sort_by' => 'name')).to be_a(described_class)
-      expect(collection.where(sort_by: 'name')).to be_a(described_class)
     end
 
     # The guard compares the decoded payload, not the bytes it arrived as.
@@ -399,76 +373,152 @@ RSpec.describe ZammadAPI::Collection do
       .to raise_error(ZammadAPI::ParseError, /expected a JSON array of objects, got an array holding Integer/)
   end
 
-  describe '#where' do
-    it 'adds query parameters' do
-      stub_request(:get, url)
-        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => default_per_page.to_s, 'sort_by' => 'name' })
-        .to_return(json_response([{ id: 1 }]))
-      stub_request(:get, url)
-        .with(query: { 'expand' => 'true', 'page' => '2', 'per_page' => default_per_page.to_s, 'sort_by' => 'name' })
-        .to_return(json_response([]))
+  # An index endpoint sorts and pages and does nothing else, so sorting has a
+  # name of its own. It was reached through `where`, which refused nearly
+  # everything else it was given.
+  describe '#order' do
+    def sorted_request(sort_by, order_by)
+      a_request(:get, url).with(query: hash_including('sort_by' => sort_by, 'order_by' => order_by))
+    end
 
-      expect(collection.where(sort_by: 'name').map(&:id)).to eq([1])
+    before { stub_request(:get, url).with(query: hash_including({})).to_return(json_response([])) }
+
+    it 'sorts ascending by an attribute named on its own' do
+      collection.order(:name).to_a
+      expect(sorted_request('name', 'asc')).to have_been_made
+    end
+
+    it 'sorts the way a keyword says' do
+      collection.order(name: :desc).to_a
+      expect(sorted_request('name', 'desc')).to have_been_made
+    end
+
+    # Zammad pairs the two lists by position and skips an attribute that has
+    # no direction, so each attribute is sent with one.
+    it 'sorts by several attributes, each with a direction' do
+      collection.order(:active, name: :desc).to_a
+      expect(sorted_request('active,name', 'asc,desc')).to have_been_made
+    end
+
+    it 'takes an attribute and a direction as strings' do
+      collection.order('active', 'name' => 'DESC').to_a
+      expect(sorted_request('active,name', 'asc,desc')).to have_been_made
+    end
+
+    it 'sorts within an earlier order when chained' do
+      collection.order(:active).order(name: :desc).to_a
+      expect(sorted_request('active,name', 'asc,desc')).to have_been_made
+    end
+
+    it 'keeps the sort on every page it walks' do
+      stub_request(:get, url).with(query: hash_including('page' => '1')).to_return(json_response(full_page))
+
+      collection.order(:name).to_a
+      expect(sorted_request('name', 'asc').with(query: hash_including('page' => '2'))).to have_been_made
+    end
+
+    it 'keeps the sort on an explicit page' do
+      collection.order(:name).page(2, per_page: 10).to_a
+      expect(sorted_request('name', 'asc').with(query: hash_including('page' => '2', 'per_page' => '10'))).to have_been_made
     end
 
     it 'returns a new collection' do
-      expect(collection.where(sort_by: 'name')).not_to be(collection)
+      expect(collection.order(:name)).not_to be(collection)
     end
 
-    it 'rejects an attribute filter the endpoint would drop' do
-      expect { collection.where(name: 'Users') }
-        .to raise_error(ArgumentError, /ignores name, so where would hand back unfiltered records/)
+    it 'leaves the collection it was called on unsorted' do
+      collection.order(:name)
+      collection.to_a
+
+      expect(a_request(:get, url).with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => default_per_page.to_s }))
+        .to have_been_made
     end
 
-    it 'names what the endpoint does honour' do
-      expect { collection.where(name: 'Users') }.to raise_error(ArgumentError, /honours sort_by, order_by/)
+    it 'makes no request until the collection is read' do
+      collection.order(:name)
+      expect(a_request(:get, url).with(query: hash_including({}))).not_to have_been_made
     end
 
-    it 'points at find_by and search for a resource Zammad searches' do
-      expect { collection.where(name: 'Users') }
-        .to raise_error(ArgumentError, /use find_by for one record or search for many/)
+    it 'raises without an attribute to sort by' do
+      expect { collection.order }.to raise_error(ArgumentError, /order needs at least one attribute to sort by/)
     end
 
-    # Pointing at find_by would send the caller in a circle: find_by needs the
-    # search endpoint this resource has none of.
-    it 'points at detect for a resource Zammad does not search' do
-      expect { client.ticket_states.all.where(name: 'open') }
-        .to raise_error(ArgumentError, /routes none for this resource, so walk the records and pick with detect/)
+    it 'raises for an attribute named twice in one call' do
+      expect { collection.order(:name, name: :desc) }.to raise_error(ArgumentError, /order was given name twice/)
     end
 
-    # Both guards compare against Symbol lists, while `**params` collects a
-    # String key just as happily.
-    it 'accepts a string key for a parameter the endpoint honours' do
-      stub_request(:get, url)
-        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => default_per_page.to_s, 'sort_by' => 'name' })
-        .to_return(json_response([]))
-
-      collection.where('sort_by' => 'name').to_a
-      expect(a_request(:get, url).with(query: hash_including('sort_by' => 'name'))).to have_been_made
+    it 'raises for an attribute the collection is already sorted by' do
+      expect { collection.order(:name).order(name: :desc) }
+        .to raise_error(ArgumentError, /order was given name, which this collection is already sorted by/)
     end
 
-    it 'rejects a string key the endpoint would drop' do
-      expect { collection.where('name' => 'Users') }
-        .to raise_error(ArgumentError, /ignores name, so where would hand back unfiltered records/)
+    it 'raises for a direction that is neither asc nor desc' do
+      expect { collection.order(name: :down) }
+        .to raise_error(ArgumentError, /order sorts name either :asc or :desc, got :down/)
     end
 
-    it 'does not name a string key as both ignored and honoured' do
-      expect { collection.where('sort_by' => 'name') }.not_to raise_error
+    # The spelling several other clients use. Read literally it sorts by an
+    # attribute called desc, which Zammad answers with a server error.
+    it 'raises for a direction written where an attribute belongs, and says how to write it' do
+      expect { collection.order(:name, :desc) }
+        .to raise_error(ArgumentError, /order reads :desc as an attribute to sort by.*order\(name: :desc\)/)
     end
 
-    it 'rejects a string key for a parameter the collection owns' do
-      expect { collection.where('page' => 2) }
-        .to raise_error(ArgumentError, /page cannot be passed to where/)
+    # Several attributes go out as one comma-separated parameter.
+    it 'raises for a name that would be read as more than one attribute' do
+      expect { collection.order('name,id') }
+        .to raise_error(ArgumentError, /order needs the name of an attribute to sort by, got "name,id"/)
     end
 
-    %i[page per_page expand only_total_count].each do |reserved|
-      it "rejects #{reserved}, which the collection controls itself" do
-        expect { collection.where(reserved => 1) }.to raise_error(ArgumentError, /cannot be passed to where/)
+    it 'raises for something that is not a name at all' do
+      expect { collection.order(1) }.to raise_error(ArgumentError, /order needs the name of an attribute/)
+    end
+
+    # TicketsController#index and UsersController#index hardcode the order and
+    # drop sort_by with everything else they do not read.
+    context 'with an index endpoint that is always served in id order' do
+      it 'refuses, rather than handing back records it would be calling sorted' do
+        expect { client.tickets.all.order(:title) }
+          .to raise_error(ArgumentError, %r{api/v1/tickets is always served in the same order and ignores sort_by})
+      end
+
+      it 'refuses for users too' do
+        expect { client.users.all.order(:login) }.to raise_error(ArgumentError, %r{api/v1/users is always served})
+      end
+
+      it 'points at a search, which does sort' do
+        expect { client.tickets.all.order(:title) }.to raise_error(ArgumentError, /search\(term\)\.order\(\.\.\.\)/)
+      end
+
+      it 'makes no request' do
+        expect { client.tickets.all.order(:title) }.to raise_error(ArgumentError)
+        expect(a_request(:any, /zammad\.test/)).not_to have_been_made
       end
     end
 
-    it 'rejects a search term rather than replacing the one search set' do
-      expect { collection.where(query: 'anything') }.to raise_error(ArgumentError, /cannot be passed to where/)
+    context 'with a search' do
+      let(:search_url) { "#{ClientHelper::BASE_URL}api/v1/tickets/search" }
+
+      before { stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response([])) }
+
+      it 'sorts, though the index of the same resource does not' do
+        client.tickets.search('printer').order(created_at: :desc).to_a
+
+        expect(a_request(:get, search_url).with(query: hash_including('query' => 'printer', 'sort_by' => 'created_at', 'order_by' => 'desc')))
+          .to have_been_made
+      end
+    end
+
+    # Pointing at a search would send the caller in a circle where the
+    # resource has none.
+    it 'points at sort_by alone for an unsortable resource Zammad does not search' do
+      unsortable = Class.new(ZammadAPI::Resources::Base) do
+        path 'api/v1/things'
+        sortable false
+      end
+
+      expect { ZammadAPI::ResourceProxy.new(unit_transport, unsortable).order(:name) }
+        .to raise_error(ArgumentError, /ignores sort_by, so order would hand back the records as they were\. Sort what this collection yields instead/)
     end
   end
 

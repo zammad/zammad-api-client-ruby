@@ -1,12 +1,11 @@
 # frozen_string_literal: true
 
-require_relative 'duplicate_keys'
 require_relative 'errors'
 
 module ZammadAPI
   # A lazily fetched, automatically paginated list of records.
   #
-  # Nothing is requested until the collection is iterated. {#where} and
+  # Nothing is requested until the collection is iterated. {#order} and
   # {#page} return new collections, so a collection can be built up in
   # steps and shared without being disturbed.
   #
@@ -22,6 +21,9 @@ module ZammadAPI
   # @example Narrow to matches, then stop after the first five
   #   client.tickets.search('state.name:open').first(5)
   #
+  # @example Sorted by the server
+  #   client.groups.order(:name).each { |group| puts group.name }
+  #
   # @example Work in batches, e.g. for an import
   #   client.tickets.all.in_batches(of: 50) { |tickets| import(tickets) }
   #
@@ -30,30 +32,33 @@ module ZammadAPI
   class Collection
     include Enumerable
 
-    # Query parameters this collection owns. Passing them to {#where} would be
-    # silently overridden, so they are rejected instead.
-    #
-    # +query+ is in the list because it is the search term {ResourceProxy#search}
-    # set: merging another one replaced it, so
-    # +search('login failure').where(query: 'anything')+ searched for
-    # "anything" and said nothing about it.
-    RESERVED_QUERY_KEYS = %i[page per_page expand only_total_count query].freeze
-    private_constant :RESERVED_QUERY_KEYS
+    # The two directions a sort can run in, as Zammad spells them.
+    SORT_DIRECTIONS = %w[asc desc].freeze
+    private_constant :SORT_DIRECTIONS
+
+    # What an attribute to sort by is named. Zammad takes several of them as
+    # one comma-separated parameter, so a name carrying a comma or a space
+    # would be read as something other than the one attribute it was.
+    SORT_ATTRIBUTE = /\A\w+\z/
+    private_constant :SORT_ATTRIBUTE
 
     # @api private
     # @param per_page [Integer, nil] records fetched per request, or nil for
     #   as many as the endpoint serves
     # @param countable [Boolean] whether this endpoint answers
     #   +only_total_count+, which only a search endpoint does
-    def initialize(transport:, resource_class:, path:, operation:, max_per_page:, filterable:, filter_hint:, query: {}, per_page: nil, page: nil, countable: false)
-      @transport      = transport
-      @resource_class = resource_class
-      @path           = path
-      @operation      = operation
-      @query          = query
-      @max_per_page   = max_per_page
-      @filterable     = filterable
-      @filter_hint    = filter_hint
+    # @param sortable [Boolean] whether this endpoint reads +sort_by+ and
+    #   +order_by+
+    # @param unsortable_hint [String] what to do instead where it does not
+    def initialize(transport:, resource_class:, path:, operation:, max_per_page:, sortable:, unsortable_hint:, query: {}, per_page: nil, page: nil, countable: false)
+      @transport       = transport
+      @resource_class  = resource_class
+      @path            = path
+      @operation       = operation
+      @query           = query
+      @max_per_page    = max_per_page
+      @sortable        = sortable
+      @unsortable_hint = unsortable_hint
       # As many as the endpoint serves, unless a call asks for another size.
       #
       # A fixed default of 100 was the earlier answer, and it cost a request
@@ -68,9 +73,9 @@ module ZammadAPI
       # users rather than a hundred. {#first} is what made that affordable:
       # the cheap-looking call that only wants a record or two now sizes its
       # own page instead of taking them off the front of this one.
-      @per_page       = clamp_per_page(per_page || max_per_page)
-      @page           = page
-      @countable      = countable
+      @per_page        = clamp_per_page(per_page || max_per_page)
+      @page            = page
+      @countable       = countable
     end
 
     # Yields every record, fetching further pages as needed.
@@ -141,36 +146,52 @@ module ZammadAPI
       with(page: number, per_page: size)
     end
 
-    # Returns a new collection with additional query parameters applied.
+    # Returns a new collection sorted by the server.
     #
-    # Only parameters the endpoint actually reads are accepted. Zammad drops
-    # the ones it does not know rather than refusing them, so
-    # +client.users.where(email: 'someone@example.com')+ used to come back as
-    # the whole user index and nothing said otherwise - the caller iterated
-    # every user believing they had matched one. An endpoint that cannot
-    # answer the question has to say so.
+    # Attributes named on their own sort ascending, and a keyword says which
+    # way one runs, the way ActiveRecord reads the same call. A second
+    # +order+ sorts within the first, so +order(:active).order(name: :desc)+
+    # is +order(:active, name: :desc)+.
     #
-    # @param params [Hash] query parameters the endpoint honours
+    # This is the one thing an index endpoint does besides paging, which is
+    # why it has a name of its own. It used to be reached as
+    # +where(sort_by: 'name', order_by: 'desc')+, on a method that refused
+    # nearly everything else it was given: an index endpoint does not filter
+    # by attribute value, so +where(state: 'open')+ could only raise, and on
+    # tickets and users +where+ accepted nothing at all. Narrowing by a value
+    # is what {ResourceProxy#search} and {ResourceProxy#find_by} are for.
+    #
+    # Not every endpoint sorts. +/api/v1/tickets+ and +/api/v1/users+ are
+    # always served in id order, and drop +sort_by+ along with everything
+    # else they do not read, so this refuses them rather than handing back
+    # records it would be calling sorted. A search does sort, for every
+    # resource that can be searched.
+    #
+    # @example
+    #   client.groups.order(:name).first(5)
+    #   client.organizations.order(name: :desc)
+    #   client.tickets.search('state.name:open').order(:priority_id, created_at: :desc)
+    #
+    # @param attributes [Array<Symbol, String>] attributes to sort by,
+    #   ascending
+    # @param directions [Hash{Symbol => Symbol, String}] attributes to sort by,
+    #   each with +:asc+ or +:desc+
     # @return [Collection]
-    # @raise [ArgumentError] for a parameter this collection controls itself,
-    #   or one the endpoint would ignore
-    # @see ResourceProxy#find_by for looking a record up by attribute value
-    def where(**params)
-      # Both lists below hold Symbols, while `**params` collects a String key
-      # just as happily. Unnormalised, `where('sort_by' => 'name')` failed the
-      # second check and reported that the endpoint "ignores sort_by ... That
-      # endpoint honours sort_by" in one breath, and `where('page' => 2)`
-      # missed the reserved-key check entirely and was refused with a message
-      # that never mentioned paging.
-      filters = normalized_filters(params)
+    # @raise [ArgumentError] for an endpoint that does not sort, no
+    #   attribute at all, an attribute named twice, or a direction that is
+    #   neither +:asc+ nor +:desc+
+    def order(*attributes, **directions)
+      raise ArgumentError, "#{@path} is always served in the same order and ignores sort_by, so order would hand back the records as they were. #{@unsortable_hint}" if !@sortable
 
-      reserved = filters.keys & RESERVED_QUERY_KEYS
-      raise ArgumentError, "#{reserved.join(', ')} cannot be passed to where: use page, in_batches or find_each for paging, pass a search term to search, and leave expand and only_total_count to the collection" if !reserved.empty?
+      requested = sort_columns(attributes, directions)
+      raise ArgumentError, 'order needs at least one attribute to sort by: order(:name), or order(name: :desc)' if requested.empty?
 
-      ignored = filters.keys - @filterable
-      raise ArgumentError, ignored_message(ignored) if !ignored.empty?
+      sorted   = sorted_by
+      repeated = requested.keys & sorted.keys
+      raise ArgumentError, "order was given #{repeated.join(', ')}, which this collection is already sorted by" if !repeated.empty?
 
-      with(query: @query.merge(filters))
+      columns = sorted.merge(requested)
+      with(query: @query.merge(sort_by: columns.keys.join(','), order_by: columns.values.join(',')))
     end
 
     # Reads one or more attributes from every record.
@@ -255,9 +276,9 @@ module ZammadAPI
     # no-op, on the one spelling a caller is most likely to reach for.
     #
     # A collection cannot do the lookup either, even where it would be
-    # unambiguous - {#where} and {#search} have already narrowed what it
-    # holds, so an id found through one of them would mean something different
-    # from an id found through another.
+    # unambiguous - a search has already narrowed what it holds, so an id
+    # found through one collection would mean something different from an id
+    # found through another.
     #
     # @yieldparam record [Resources::Base]
     # @return [Resources::Base, nil]
@@ -352,11 +373,47 @@ module ZammadAPI
     # into "priorities" by a rule this gem has no other use for.
     def resource_name = @resource_class.resource_path.split('/').last.to_s
 
-    def ignored_message(ignored)
-      honoured = @filterable.empty? ? 'nothing beyond paging' : @filterable.join(', ')
+    # The attributes an +order+ call names, each with its direction, in the
+    # order they were written.
+    #
+    # @return [Hash{String => String}]
+    def sort_columns(attributes, directions)
+      # `order(:name, :desc)` is the spelling several other clients use, and
+      # read literally it sorts by an attribute called desc - which Zammad
+      # answers with a server error about an invalid column.
+      misplaced = attributes.find { SORT_DIRECTIONS.include?(it.to_s.downcase) }
+      raise ArgumentError, "order reads #{misplaced.inspect} as an attribute to sort by. A direction goes with its attribute: order(name: #{misplaced.to_s.downcase.to_sym.inspect})" if misplaced
 
-      "#{@path} ignores #{ignored.join(', ')}, so where would hand back unfiltered records. " \
-        "That endpoint honours #{honoured}. #{@filter_hint}"
+      columns = {} #: Hash[String, String]
+      (attributes.map { [it, 'asc'] } + directions.to_a).each do |attribute, direction|
+        name = sort_attribute!(attribute)
+        raise ArgumentError, "order was given #{name} twice" if columns.key?(name)
+
+        columns[name] = sort_direction!(name, direction)
+      end
+      columns
+    end
+
+    def sort_attribute!(attribute)
+      name = attribute.to_s
+      raise ArgumentError, "order needs the name of an attribute to sort by, got #{attribute.inspect}" if (!attribute.is_a?(Symbol) && !attribute.is_a?(String)) || !SORT_ATTRIBUTE.match?(name)
+
+      name
+    end
+
+    def sort_direction!(name, direction)
+      normalized = direction.to_s.downcase
+      raise ArgumentError, "order sorts #{name} either :asc or :desc, got #{direction.inspect}" if !SORT_DIRECTIONS.include?(normalized)
+
+      normalized
+    end
+
+    # What this collection is already sorted by, read back out of the query
+    # it will send.
+    #
+    # @return [Hash{String => String}]
+    def sorted_by
+      @query.fetch(:sort_by, '').to_s.split(',').zip(@query.fetch(:order_by, '').to_s.split(',')).to_h
     end
 
     def positive_integer!(value, name)
@@ -370,7 +427,7 @@ module ZammadAPI
     # 150, and re-sizing to 10 behind the caller's back served records 21 to
     # 30 instead - a different answer to the same question, with nothing said
     # about it. The two ways of naming a page cannot both be honoured, so this
-    # says so rather than picking one, the way {#where} does.
+    # says so rather than picking one.
     def page_size!(value, name)
       size = positive_integer!(value, name)
       raise ArgumentError, "#{name} cannot be combined with page: page(#{@page}, per_page: #{@per_page}) already named which records this collection holds. Size that page with page(#{@page}, per_page: #{size}), or slice the records with each_slice(#{size})." if @page
@@ -443,47 +500,18 @@ module ZammadAPI
 
     def with(page: @page, per_page: @per_page, query: @query)
       self.class.new(
-        transport:      @transport,
-        resource_class: @resource_class,
-        path:           @path,
-        operation:      @operation,
-        max_per_page:   @max_per_page,
-        filterable:     @filterable,
-        filter_hint:    @filter_hint,
-        query:          query,
-        per_page:       per_page,
-        page:           page,
-        countable:      @countable
+        transport:       @transport,
+        resource_class:  @resource_class,
+        path:            @path,
+        operation:       @operation,
+        max_per_page:    @max_per_page,
+        sortable:        @sortable,
+        unsortable_hint: @unsortable_hint,
+        query:           query,
+        per_page:        per_page,
+        page:            page,
+        countable:       @countable
       )
-    end
-
-    # Normalises the keys, refusing two spellings of one parameter rather than
-    # letting the normalisation merge them.
-    #
-    # Normalising is exactly what hid the collision: `sort_by` and `'sort_by'`
-    # became one key here, last one winning, and the request went out carrying
-    # a value the caller never saw dropped. The reserved-key and ignored-key
-    # checks in `where` read the collapsed hash too, so nothing else was going
-    # to notice either.
-    #
-    # Nested too, because `condition` - the structured parameter the search
-    # endpoints read, and one {ResourceProxy::SEARCH_QUERY_KEYS} lists so that
-    # `where` accepts it - is a Hash. {Transport.stringify_query} would refuse
-    # the pair eventually, but not until the collection is enumerated, and
-    # every other refusal `where` makes happens at the call that wrote it.
-    #
-    # @raise [ArgumentError] for two keys that name the same parameter
-    def normalized_filters(params, prefix = nil)
-      DuplicateKeys
-        .normalize(params, prefix: prefix) { it.to_s.to_sym }
-        .to_h { |name, value| [name, nested_filters(name, value, prefix)] }
-    end
-
-    # A Hash filter is normalised the same way, one level down.
-    def nested_filters(name, value, prefix)
-      return value if !value.is_a?(Hash)
-
-      normalized_filters(value, prefix ? "#{prefix}[#{name}]" : name.to_s)
     end
 
     # Fetches one page and the digest the repeated-page guard compares.

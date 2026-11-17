@@ -864,8 +864,8 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(subclass.page_limit).to eq(100)
     end
 
-    it 'inherits the filterable keys' do
-      expect(subclass.filterable_keys).to eq([])
+    it 'inherits whether the index endpoint sorts' do
+      expect(subclass.sortable?).to be(false)
     end
 
     it 'inherits the associations, as it always did' do
@@ -906,20 +906,20 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(Class.new(described_class).page_limit).to eq(described_class::DEFAULT_MAX_PER_PAGE)
     end
 
-    it 'defaults to the generic index query keys' do
-      expect(Class.new(described_class).filterable_keys).to eq(described_class::DEFAULT_INDEX_QUERY_KEYS)
+    it 'defaults to an index endpoint that sorts, as the generic ones do' do
+      expect(Class.new(described_class).sortable?).to be(true)
     end
 
     it 'records a declared page limit' do
       expect(Class.new(described_class) { max_per_page 25 }.page_limit).to eq(25)
     end
 
-    it 'records declared query keys' do
-      expect(Class.new(described_class) { index_query_keys :sort_by }.filterable_keys).to eq([:sort_by])
+    it 'records a declaration that the index endpoint does not sort' do
+      expect(Class.new(described_class) { sortable false }.sortable?).to be(false)
     end
 
-    it 'reads a declaration of no query keys' do
-      expect(Class.new(described_class) { index_query_keys }.filterable_keys).to eq([])
+    it 'declares tickets and users unsortable, whose controllers hardcode the order' do
+      expect([ZammadAPI::Resources::Ticket, ZammadAPI::Resources::User].map(&:sortable?)).to eq([false, false])
     end
   end
 

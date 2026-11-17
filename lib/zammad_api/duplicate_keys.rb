@@ -4,8 +4,8 @@ module ZammadAPI
   # One rule for two keys that name the same parameter.
   #
   # Both places that normalise caller-supplied parameter names had to refuse a
-  # collision, because normalising is what creates one: {Collection#where} maps
-  # every key to a Symbol and {Transport.stringify_query} maps every key to a
+  # collision, because normalising is what creates one: {ResourceProxy#search}
+  # maps every keyword to a Symbol and {Transport.stringify_query} maps every key to a
   # String, so `sort_by` and `'sort_by'` become one key and the value that
   # arrived first is dropped without a word. Written twice, the two refusals
   # had already drifted into two different sentences for the same mistake.

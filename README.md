@@ -32,7 +32,7 @@ Ruby client for the Zammad API v1.0.
 - Ships **RBS signatures** in `sig/`, so typed projects get completion and checking out of the box.
 - Requests carry **timeouts** and **retry with backoff** for transient failures by default.
 - Collections are **lazily paginated** `Enumerable`s, with a familiar
-  `where` / `page` / `in_batches` / `find_each` surface.
+  `order` / `page` / `in_batches` / `find_each` surface.
 - Records support **pattern matching**, and clients are **immutable** and safe to share
   between threads.
 - **Raw requests** reach the endpoints this gem does not model yet, without giving up
@@ -268,7 +268,7 @@ client.groups.exists?(42)                          # => true
 ```
 
 `find_by` searches and then checks the hits itself, because Zammad's index endpoints
-cannot filter — see [Filters](#filters). A record it returns genuinely carries the
+cannot filter — see [Narrowing](#narrowing). A record it returns genuinely carries the
 attributes you asked for, compared exactly and against the value as Zammad stores it, so
 `find_by(email: 'Someone@Example.com')` does not match a login Zammad downcased.
 
@@ -491,7 +491,7 @@ client.groups.destroy(42) # delete by id, without fetching first
 
 ## Collections
 
-`all`, `where` and `search` return a lazily paginated `ZammadAPI::Collection`. No request
+`all`, `order` and `search` return a lazily paginated `ZammadAPI::Collection`. No request
 is made until you iterate, and pages are fetched as needed.
 
 A resource proxy is itself `Enumerable` over `all`, so `.all` is optional:
@@ -529,23 +529,40 @@ client.tickets.all.find_each(batch_size: 50) do |ticket|
 end
 ```
 
-### Filters
+### Sorting
 
-**Zammad's index endpoints do not filter.** `ApplicationController#model_index_render`
-sorts and pages and drops every other parameter, and `/api/v1/tickets` and
-`/api/v1/users` hardcode their order, so they honour nothing beyond paging. Filtering by
-an attribute value exists only on the `/search` endpoints.
-
-So `where` accepts only what the endpoint actually reads, and says so about anything else
-rather than handing back an unfiltered list:
+`order` sorts on the server:
 
 ```ruby
-client.groups.all.where(sort_by: 'name', order_by: 'DESC')  # honoured
-client.tickets.where(state: 'open')
-# ArgumentError: api/v1/tickets ignores state, so where would hand back unfiltered
-# records. That endpoint honours nothing beyond paging. Zammad filters by attribute
-# value only through a search endpoint, so use find_by for one record or search for many.
+client.groups.order(:name)                 # ascending
+client.organizations.order(name: :desc)
+client.groups.order(:active, name: :desc)  # by active, then by name descending
+client.tickets.search('state.name:open').order(created_at: :desc)
 ```
+
+An attribute on its own sorts ascending and a keyword says which way one runs, as in
+ActiveRecord. A second `order` sorts within the first, so
+`order(:active).order(name: :desc)` is the third line above.
+
+Not every endpoint sorts. `/api/v1/tickets` and `/api/v1/users` are always served in id
+order — their controllers hardcode it and drop `sort_by` along with everything else they
+do not read — so `order` on those raises `ArgumentError` rather than handing back records
+it would be calling sorted. A search sorts for every resource that can be searched:
+
+```ruby
+client.tickets.order(:title)
+# ArgumentError: api/v1/tickets is always served in the same order and ignores sort_by,
+# so order would hand back the records as they were. A search does sort: ...
+
+client.tickets.search('state.name:open').order(:title)
+```
+
+### Narrowing
+
+**Zammad's index endpoints do not filter.** `ApplicationController#model_index_render`
+sorts and pages and drops every other parameter. Filtering by an attribute value exists
+only on the `/search` endpoints, which is why a collection has no `where`: there is nothing
+an index endpoint would do with what it was given.
 
 Narrow by a value with [`find_by`](#fetch) for one record, or `search` for many:
 
@@ -553,6 +570,21 @@ Narrow by a value with [`find_by`](#fetch) for one record, or `search` for many:
 client.users.find_by(email: 'someone@example.com')
 client.tickets.search('state.name:open').first(10)
 ```
+
+`search` also takes the other things a search endpoint narrows by, as keywords —
+`condition:`, `ids:`, `role_ids:`, `group_ids:` and `permissions:`:
+
+```ruby
+client.users.search('smith', role_ids: [2])
+client.users.search('smith', group_ids: [1], permissions: ['ticket.agent'])
+client.tickets.search('printer', condition: {'ticket.state_id' => {operator: 'is', value: [1, 2]}})
+```
+
+Any other keyword raises `ArgumentError`. Zammad drops a parameter it does not know, so
+`search('smith', active: true)` would come back unnarrowed with nothing to say so; an
+attribute value goes in the term, a sort in `order`, and paging in `page`, `in_batches` or
+`find_each`. A `nil` value raises too: there is no query string that means "this field is
+null".
 
 Zammad routes a search endpoint per model, not for every model. `users`, `organizations`,
 `tickets` and `groups` have one; `ticket_states`, `ticket_priorities` and `ticket_articles`
@@ -562,13 +594,6 @@ do not, and `search` and `find_by` on those raise `ZammadAPI::Error` rather than
 ```ruby
 client.ticket_states.all.detect { it.name == 'open' }
 ```
-
-Paging is not a filter either: that is what `page`, `in_batches` and `find_each` are for,
-and passing `page:` or `per_page:` to `where` raises `ArgumentError` rather than being
-silently ignored. So does `query:`, which is the term `search` set.
-
-A `nil` value raises too. There is no query string that means "this field is null", so
-`where(owner_id: nil)` could not ask for unassigned tickets — it would ask for all of them.
 
 ### Search
 
@@ -587,7 +612,7 @@ tickets.page(2)           # page 2 at the size the endpoint serves
 tickets.page(2, per_page: 10)   # records 11 to 20
 ```
 
-Collections are immutable: `where` and `page` return a new collection and leave the
+Collections are immutable: `order` and `page` return a new collection and leave the
 original untouched.
 
 ### Page size
@@ -1016,7 +1041,7 @@ at the call site. Start with the handful of changes that do not.
 | `collection[3]`                          | `collection.page(4, per_page: 1).first`                | An index that costs a request, and that ignored `page`, was a trap  |
 | `collection.find(1)`                     | `client.x.find(1)`, or `collection.detect { ... }` | On a collection `find` is `Enumerable#find`, whose argument is an ifnone callable — so an id answered with an Enumerator and made no request. It raises now |
 | `client.x.all(per_page: 50)`             | `client.x.all.page(1, per_page: 50)`, `find_each(batch_size: 50)` | `all` accepted the argument and discarded it; page size belongs to the call that reads |
-| `client.x.all(active: true)`             | `client.x.search(...)`, or `client.x.all.detect { ... }`    | The filter never reached the request in 1.x, and could not have: Zammad's index endpoints do not filter. `where` now raises instead of quietly returning everything. `find_by` needs a string value to search on, so it replaces `all(email: '...')` rather than `all(active: true)` |
+| `client.x.all(active: true)`             | `client.x.search(...)`, or `client.x.all.detect { ... }`    | The filter never reached the request in 1.x, and could not have: Zammad's index endpoints do not filter, so 2.0 has no call that pretends to. `find_by` needs a string value to search on, so it replaces `all(email: '...')` rather than `all(active: true)` |
 | `client.x.search(query: 'zammad')`       | `client.x.search('zammad')`                      | The search term is the argument, not a keyword                      |
 | `client.x.search(query: 'z', page: 2, per_page: 50)` | `client.x.search('z').page(2, per_page: 50)` | Search did honour those two; paging is the collection's job now     |
 

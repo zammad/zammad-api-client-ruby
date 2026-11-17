@@ -3,7 +3,9 @@
 require 'forwardable'
 
 require_relative 'collection'
+require_relative 'duplicate_keys'
 require_relative 'errors'
+require_relative 'transport'
 
 module ZammadAPI
   # Entry point for working with one kind of Zammad record.
@@ -15,7 +17,7 @@ module ZammadAPI
   #   client.groups.find(1)
   #   client.groups.create(name: 'Support')
   #   client.groups.all.each { |group| puts group.name }
-  #   client.groups.all.where(sort_by: 'name').first(5)
+  #   client.groups.order(:name).first(5)
   #   client.groups.search('support').first
   #
   # A proxy is +Enumerable+ over {#all}, so the collection surface is reachable
@@ -37,21 +39,18 @@ module ZammadAPI
     # ApplicationController#model_search_render.
     SEARCH_MAX_PER_PAGE = 200
 
-    # Query parameters Zammad's search endpoints honour, from the call
+    # What Zammad's search endpoints narrow by besides the term, from the call
     # ApplicationController#model_search_render makes into Model.search. Unlike
     # an index endpoint a search does narrow, but through these parameters and
     # the term - never through an attribute name of its own.
-    SEARCH_QUERY_KEYS = %i[condition ids role_ids group_ids permissions sort_by order_by].freeze
+    SEARCH_FILTER_KEYS = %i[condition ids role_ids group_ids permissions].freeze
 
-    # Said at the end of the error for a parameter an index endpoint ignores.
-    INDEX_FILTER_HINT = 'Zammad filters by attribute value only through a search endpoint, so use find_by for one record or search for many.'
+    # Said at the end of the error for sorting an index endpoint that is
+    # always served in id order, on a resource that can be searched.
+    SEARCHABLE_UNSORTABLE_HINT = 'A search does sort: search(term).order(...). Or sort what this collection yields, with sort_by { ... }.'
 
-    # The same, for a resource Zammad serves no search endpoint for, where
-    # find_by and search are not an answer either.
-    UNSEARCHABLE_FILTER_HINT = 'Zammad filters by attribute value only through a search endpoint, and routes none for this resource, so walk the records and pick with detect.'
-
-    # The same, for a search endpoint.
-    SEARCH_FILTER_HINT = 'Put the value in the search term instead.'
+    # The same, for a resource Zammad routes no search endpoint for.
+    UNSORTABLE_HINT = 'Sort what this collection yields instead, with sort_by { ... }.'
 
     # @return [Class] the resource class this proxy operates on
     attr_reader :resource_class
@@ -238,16 +237,20 @@ module ZammadAPI
     # sig/zammad_api/resource_proxy.rbs, where each of these is declared with
     # the types {Collection} gives it.
 
-    # @!method where(**params)
-    #   Records narrowed by the query parameters this endpoint honours, as a
-    #   lazily paginated collection. Shorthand for +all.where(...)+.
-    #
-    #   An index endpoint does not filter by attribute value - see
-    #   {Collection#where} - so this is for sorting, and {#find_by} or
-    #   {#search} are how a value narrows anything.
-    #   @param params [Hash] query parameters the endpoint honours
+    # @!method order(*attributes, **directions)
+    #   Every record of this kind, sorted by the server. Shorthand for
+    #   +all.order(...)+.
+    #   @example
+    #     client.groups.order(:name)
+    #     client.organizations.order(name: :desc)
+    #   @param attributes [Array<Symbol, String>] attributes to sort by,
+    #     ascending
+    #   @param directions [Hash{Symbol => Symbol, String}] attributes to sort
+    #     by, each with +:asc+ or +:desc+
     #   @return [Collection]
-    #   @raise [ArgumentError] for a parameter the endpoint would ignore
+    #   @raise [ArgumentError] for a resource whose index endpoint does not
+    #     sort
+    #   @see Collection#order
 
     # @!method each(&block)
     #   Yields every record of this kind, fetching pages as needed.
@@ -312,27 +315,46 @@ module ZammadAPI
     #   @return [Array<Resources::Base>]
     #   @see Collection#take
 
-    def_delegators :all, :where, :each, :find_each, :in_batches, :page, :pluck, :count, :size, :length, :empty?, :first, :take
+    def_delegators :all, :order, :each, :find_each, :in_batches, :page, :pluck, :count, :size, :length, :empty?, :first, :take
 
     # @!endgroup
 
     # Records matching a Zammad search term, as a lazily paginated collection.
     #
+    # The keywords are the other things a search endpoint narrows by. They
+    # are named here, on the call that searches, because they mean nothing
+    # anywhere else: they used to be passed to +where+ on the collection this
+    # returns, the one place that method accepted more than a sort.
+    #
+    # Anything else is refused rather than sent. Zammad drops a parameter it
+    # does not know, so +search('smith', active: true)+ would come back
+    # unnarrowed and nothing would say so. An attribute value belongs in the
+    # term, and a sort in {Collection#order}.
+    #
+    # @example
+    #   client.users.search('smith')
+    #   client.users.search('smith', role_ids: [2])
+    #   client.tickets.search('printer', condition: {'ticket.state_id' => {operator: 'is', value: [1, 2]}})
+    #   client.tickets.search('state.name:open').order(created_at: :desc)
+    #
     # @param term [String] the Zammad search term
+    # @param filters [Hash] any of +condition:+, +ids:+, +role_ids:+,
+    #   +group_ids:+ and +permissions:+
     # @return [Collection]
-    # @raise [ArgumentError] when +term+ is not a non-empty string
+    # @raise [ArgumentError] when +term+ is not a non-empty string, or for a
+    #   keyword the search endpoint does not read, a nil value, or two
+    #   spellings of one key
     # @raise [Error] when Zammad routes no search endpoint for this resource
-    def search(term)
+    def search(term, **filters)
       searchable!
       raise ArgumentError, 'search needs a non-empty query string' if !term.is_a?(String) || term.strip.empty?
 
       collection(
         "#{path}/search",
         'get .search of object',
-        query:        { query: term },
+        query:        { query: term }.merge(search_filters(filters)),
         max_per_page: SEARCH_MAX_PER_PAGE,
-        filterable:   SEARCH_QUERY_KEYS,
-        filter_hint:  SEARCH_FILTER_HINT,
+        sortable:     true,
         countable:    true
       )
     end
@@ -341,18 +363,45 @@ module ZammadAPI
 
     private
 
-    def collection(path, operation, query: {}, max_per_page: resource_class.page_limit, filterable: resource_class.filterable_keys, filter_hint: index_filter_hint, countable: false)
+    def collection(path, operation, query: {}, max_per_page: resource_class.page_limit, sortable: resource_class.sortable?, countable: false)
       Collection.new(
-        transport:      @transport,
-        resource_class: resource_class,
-        path:           path,
-        operation:      operation,
-        max_per_page:   max_per_page,
-        filterable:     filterable,
-        filter_hint:    filter_hint,
-        countable:      countable,
-        query:          { expand: true }.merge(query)
+        transport:       @transport,
+        resource_class:  resource_class,
+        path:            path,
+        operation:       operation,
+        max_per_page:    max_per_page,
+        sortable:        sortable,
+        unsortable_hint: resource_class.searchable? ? SEARCHABLE_UNSORTABLE_HINT : UNSORTABLE_HINT,
+        countable:       countable,
+        query:           { expand: true }.merge(query)
       )
+    end
+
+    # The keywords of a search, checked at the call that wrote them.
+    #
+    # Through {Transport.stringify_query} for the two refusals it makes at
+    # any depth - a nil value, and two spellings of one key inside a
+    # +condition+ - because left to the request they would be reported when
+    # the collection is first enumerated, some lines away from the search
+    # that wrote them. What it returns is discarded: the collection sends the
+    # values as they were given, and the transport stringifies them then.
+    #
+    # @return [Hash{Symbol => Object}]
+    # @raise [ArgumentError]
+    def search_filters(filters)
+      normalized = DuplicateKeys.normalize(filters) { it.to_s.to_sym }
+      unknown    = normalized.keys - SEARCH_FILTER_KEYS
+      raise ArgumentError, unknown_search_filter_message(unknown) if !unknown.empty?
+
+      Transport.stringify_query(normalized)
+      normalized
+    end
+
+    def unknown_search_filter_message(unknown)
+      "search does not take #{unknown.join(', ')}: a search endpoint narrows by the term, and by #{SEARCH_FILTER_KEYS.join(', ')}, and drops " \
+        'anything else, which would hand back an unnarrowed search. ' \
+        "Put an attribute value in the term - search('state.name:open') - sort with search(term).order(...), " \
+        'and page with page, in_batches or find_each.'
     end
 
     # Zammad routes a search endpoint per model, not for every model: users,
@@ -366,8 +415,6 @@ module ZammadAPI
 
       raise Error, "Zammad routes no search endpoint for #{resource_class.name}, so it cannot be searched by term or looked up with find_by: #{path}/search answers 404, which would arrive here as a NotFoundError about a record. Walk the records and pick one instead, with all.detect { ... }."
     end
-
-    def index_filter_hint = resource_class.searchable? ? INDEX_FILTER_HINT : UNSEARCHABLE_FILTER_HINT
 
     # The one value {#find_by} searches on: the longest, as the most selective
     # of them, which matters because a miss reads every page of hits.

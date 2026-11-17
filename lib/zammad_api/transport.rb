@@ -164,11 +164,11 @@ module ZammadAPI
     # Zammad expects scalar values; booleans and integers are stringified so
     # that Faraday does not encode them as unexpected types.
     #
-    # A nil used to be dropped here, which turned `where(owner_id: nil)` - an
-    # entirely reasonable way to write "unassigned" - into an unfiltered index
-    # answering with every ticket. Wrong results, no error, nothing to see from
-    # the outside. There is no query string that means "this field is null", so
-    # saying so is the only answer that can be acted on.
+    # A nil used to be dropped here, which turned `query: {owner_id: nil}` -
+    # an entirely reasonable way to write "unassigned" - into an unfiltered
+    # index answering with every ticket. Wrong results, no error, nothing to
+    # see from the outside. There is no query string that means "this field is
+    # null", so saying so is the only answer that can be acted on.
     #
     # Public because {Test} records what a test's client sent, and a stand-in
     # whose recorded values disagree with the wire makes green tests mean less
@@ -178,8 +178,8 @@ module ZammadAPI
     # stringified here, so `{state_id: 1, 'state_id' => 2}` used to collapse
     # into one parameter and send whichever Hash insertion order put last,
     # dropping the other value without a word - the same silent-wrong-result
-    # shape as the dropped nil above, and the reason {Collection#where}
-    # normalises its keys before they ever reach here.
+    # shape as the dropped nil above, and the reason {ResourceProxy#search}
+    # normalises its keywords before they ever reach here.
     #
     # @api private
     # @param query [Hash]
@@ -192,8 +192,8 @@ module ZammadAPI
     #
     # The duplicate check lives here rather than at the top level alone,
     # because `condition` - which the search endpoints read, and which
-    # {ResourceProxy::SEARCH_QUERY_KEYS} lists so that {Collection#where}
-    # accepts it - is a Hash, and two spellings inside it collapsed exactly
+    # {ResourceProxy#search} takes as a keyword - is a Hash, and two
+    # spellings inside it collapsed exactly
     # the way two spellings at the top level did. The nil check below has been
     # at every depth all along; this is the same kind of rule.
     #
@@ -215,9 +215,8 @@ module ZammadAPI
     # Stringifies the scalars and leaves the structure to Faraday.
     #
     # A nested value used to be rendered with to_s, so the `condition` that
-    # Zammad's search endpoints read - and that {ResourceProxy::SEARCH_QUERY_KEYS}
-    # lists, so {Collection#where} accepts it - went on the wire as a Ruby
-    # inspect string. Zammad could not parse that, dropped the parameter, and
+    # Zammad's search endpoints read - and that {ResourceProxy#search} takes
+    # as a keyword - went on the wire as a Ruby inspect string. Zammad could not parse that, dropped the parameter, and
     # answered with an unnarrowed search that nothing marked as unnarrowed.
     # Faraday's default encoder renders a Hash as
     # `condition[ticket.state_id][operator]=is`, which is the shape Rails reads

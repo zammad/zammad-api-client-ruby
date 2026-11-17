@@ -314,7 +314,7 @@ RSpec.describe ZammadAPI::Test do
       it 'matches a stub that names a subset of the parameters' do
         zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name' })
 
-        expect(client.groups.where(sort_by: 'name').first.id).to eq(1)
+        expect(client.groups.order(:name).first.id).to eq(1)
       end
 
       it 'does not answer a request without those parameters' do
@@ -326,7 +326,7 @@ RSpec.describe ZammadAPI::Test do
       it 'ignores the parameters the client adds itself' do
         zammad.stub(:get, 'api/v1/groups', body: [], query: { sort_by: 'name' })
 
-        expect { client.groups.where(sort_by: 'name').to_a }.not_to raise_error
+        expect { client.groups.order(:name).to_a }.not_to raise_error
       end
 
       it 'keeps answering when a catch-all for the same endpoint follows it' do
@@ -350,7 +350,7 @@ RSpec.describe ZammadAPI::Test do
         zammad.stub(:get, 'api/v1/users/search', body: [{ id: 1 }], query: { ids: [1, 2], page: 1 })
         zammad.stub(:get, 'api/v1/users/search', body: [], query: { ids: [1, 2], page: 2 })
 
-        expect(client.users.search('x').where(ids: [1, 2]).map(&:id)).to eq([1])
+        expect(client.users.search('x', ids: [1, 2]).map(&:id)).to eq([1])
       end
 
       it 'reports a nil query value against the stub that wrote it' do
@@ -361,7 +361,7 @@ RSpec.describe ZammadAPI::Test do
       it 'does not match an array whose values differ' do
         zammad.stub(:get, 'api/v1/users/search', body: [{ id: 1 }], query: { ids: [1, 2] })
 
-        expect { client.users.search('x').where(ids: [3]).to_a }
+        expect { client.users.search('x', ids: [3]).to_a }
           .to raise_error(described_class::UnstubbedRequestError)
       end
 
@@ -376,9 +376,9 @@ RSpec.describe ZammadAPI::Test do
         zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name' })
         zammad.stub(:get, 'api/v1/groups', body: [{ id: 2 }], query: { sort_by: 'name' })
 
-        expect(client.groups.all.where(sort_by: 'name').page(1, per_page: 1).map(&:id)).to eq([1])
-        expect(client.groups.all.where(sort_by: 'name').page(1, per_page: 1).map(&:id)).to eq([2])
-        expect(client.groups.all.where(sort_by: 'name').page(1, per_page: 1).map(&:id)).to eq([2])
+        expect(client.groups.all.order(:name).page(1, per_page: 1).map(&:id)).to eq([1])
+        expect(client.groups.all.order(:name).page(1, per_page: 1).map(&:id)).to eq([2])
+        expect(client.groups.all.order(:name).page(1, per_page: 1).map(&:id)).to eq([2])
       end
     end
   end
@@ -476,7 +476,7 @@ RSpec.describe ZammadAPI::Test do
     end
 
     it 'rejects a nil query value the way the transport does' do
-      expect { client.groups.where(sort_by: nil).to_a }
+      expect { client.get('api/v1/groups', query: { sort_by: nil }) }
         .to raise_error(ArgumentError, /query parameter sort_by is nil/)
     end
 
