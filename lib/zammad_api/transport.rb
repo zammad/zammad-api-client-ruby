@@ -554,10 +554,23 @@ module ZammadAPI
       end
     end
 
+    # +max_interval+ is what bounds a wait. The retry middleware sleeps for
+    # whatever a +Retry-After+ header says, and its own ceiling defaults to
+    # no ceiling at all: a maintenance page answering 503 with
+    # +Retry-After: 3600+ held the calling thread for an hour per retry,
+    # whatever +timeout+ and +retry_interval+ said, before raising the error
+    # it could have raised at once.
+    #
+    # +timeout+ is the bound, because it is already how long this client
+    # was told it may wait for an answer. A +Retry-After+ within it is
+    # honoured; a longer one is not waited out, and the response it came
+    # with is reported as the error it is, with the figure still readable
+    # from {RateLimitError#retry_after}.
     def retry_options
       {
         max:                 config.retries,
         interval:            config.retry_interval,
+        max_interval:        config.timeout,
         interval_randomness: 0.5,
         backoff_factor:      2,
         retry_statuses:      RETRIABLE_STATUSES,

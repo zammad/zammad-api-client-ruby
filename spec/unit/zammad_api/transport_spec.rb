@@ -344,6 +344,49 @@ RSpec.describe ZammadAPI::Transport do
       expect(response.status).to eq(200)
     end
 
+    # The retry middleware sleeps for whatever Retry-After says, and its own
+    # ceiling defaults to none: this held the calling thread for an hour per
+    # retry before raising the error it could have raised at once.
+    context 'when the server asks for a longer wait than the timeout' do
+      let(:transport) { unit_transport(retries: 2, retry_interval: 0.01, timeout: 2) }
+
+      before do
+        stub_request(:get, url).to_return({ status: 429, headers: { 'Retry-After' => '3600' } }, json_response([]))
+      end
+
+      it 'reports the response instead of waiting it out' do
+        expect { transport.get('api/v1/groups', operation: 'test') }.to raise_error(ZammadAPI::RateLimitError)
+      end
+
+      it 'does not retry' do
+        expect { transport.get('api/v1/groups', operation: 'test') }.to raise_error(ZammadAPI::RateLimitError)
+        expect(a_request(:get, url)).to have_been_made.once
+      end
+
+      it 'leaves the wait the server asked for readable from the error' do
+        expect { transport.get('api/v1/groups', operation: 'test') }
+          .to raise_error(ZammadAPI::RateLimitError) { |error| expect(error.retry_after).to eq(3600) }
+      end
+    end
+
+    it 'does not wait out a long Retry-After on a 503 either' do
+      stub_request(:get, url).to_return({ status: 503, headers: { 'Retry-After' => '3600' } }, json_response([]))
+
+      expect { unit_transport(retries: 2, retry_interval: 0.01, timeout: 2).get('api/v1/groups', operation: 'test') }
+        .to raise_error(ZammadAPI::ServerError)
+      expect(a_request(:get, url)).to have_been_made.once
+    end
+
+    it 'still waits as long as the server asks, where that is within the timeout' do
+      stub_request(:get, url).to_return({ status: 429, headers: { 'Retry-After' => '0.2' } }, json_response([]))
+
+      started  = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      response = unit_transport(retries: 1, retry_interval: 0.01).get('api/v1/groups', operation: 'test')
+
+      expect(response.status).to eq(200)
+      expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be >= 0.2
+    end
+
     it 'gives up after the configured number of attempts' do
       stub_request(:get, url).to_return(status: 500)
       expect { unit_transport(retries: 1, retry_interval: 0.01).get('api/v1/groups', operation: 'test') }

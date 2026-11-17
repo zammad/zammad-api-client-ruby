@@ -519,6 +519,13 @@ A breaking release that modernises the whole gem. See
   price is a URL with a port and an `@` further on, such as `https://host:8443/a@b`, which
   renders with its host blanked: a colon cannot tell a port from a password, and that is the
   mistake that leaks nothing.
+- A wait before a retry is never longer than `timeout`. The retry middleware sleeps for
+  whatever a `Retry-After` header says and has no ceiling of its own by default, so a
+  maintenance page answering 503 or a rate limiter answering 429 with `Retry-After: 3600`
+  held the calling thread for an hour per retry — two by default — before raising the error,
+  whatever `timeout` and `retry_interval` said. A `Retry-After` within `timeout` is still
+  honoured; a longer one is not waited out, and the request fails at once with the error for
+  its status, `RateLimitError#retry_after` still carrying the figure.
 
 ### Changed
 

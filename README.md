@@ -110,7 +110,7 @@ client = ZammadAPI::Client.from_env(timeout: 300)
 | `timeout`        | `60`               | Seconds to wait for a response.                                    |
 | `open_timeout`   | `10`               | Seconds to wait for the connection.                                |
 | `retries`        | `2`                | Retry attempts for a `GET` that failed transiently. `0` disables retrying. |
-| `retry_interval` | `0.5`              | Seconds before the first retry; doubles on each attempt.           |
+| `retry_interval` | `0.5`              | Seconds before the first retry; doubles on each attempt. No wait is longer than `timeout`. |
 | `ssl_verify`     | `true`             | Set to `false` only against a server with a self-signed certificate. |
 | `proxy`          | `nil`              | Proxy URL.                                                         |
 | `user_agent`     | `zammad_api-ruby/<version>` | Value of the `User-Agent` header.                         |
@@ -747,8 +747,8 @@ begin
 rescue ZammadAPI::NotFoundError
   nil
 rescue ZammadAPI::RateLimitError => e
-  sleep(e.retry_after || 5)
-  retry
+  # The client already waited and retried, so this limit outlasted that.
+  reschedule(in: e.retry_after || 60)
 rescue ZammadAPI::ResponseError => e
   warn "#{e.status}: #{e.server_message}"
   warn e.body.inspect
@@ -763,6 +763,12 @@ end
 
 A `GET` is retried on connection failures, timeouts and the transient statuses 429, 500,
 502, 503 and 504, with exponential backoff.
+
+A `Retry-After` header on one of those responses is honoured: the client waits as long as
+the server asked before the next attempt, up to `timeout` seconds. A longer one is not
+waited out. The request fails at once with the error for its status, and
+`RateLimitError#retry_after` carries the figure, so a job can reschedule itself rather
+than hold a thread for however long a maintenance page suggests.
 
 A write is never retried. `POST` would create a second record, and `PUT` and `DELETE` are
 not safe to repeat against Zammad either, whatever HTTP says about them: a ticket update
