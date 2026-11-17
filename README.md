@@ -189,6 +189,48 @@ see [Migrating from 1.x](#the-client).
 Anything not in that list is reachable by [declaring a resource](#resources-this-gem-does-not-model)
 for it, or with [raw requests](#raw-requests).
 
+### Coverage
+
+What each major version of this gem models, set against what Zammad's API serves. A check
+is a class or a method of the gem's own; an empty box is something 2.0 does not model yet.
+
+|                                                  | 1.x | 2.0 |
+| ------------------------------------------------ | :-: | :-: |
+| **Records**                                      |     |     |
+| Tickets                                          | ✅  | ✅  |
+| Ticket articles                                  | ✅  | ✅  |
+| Article attachments                              | ✅  | ✅  |
+| Ticket states                                    | ✅  | ✅  |
+| Ticket priorities                                | ✅  | ✅  |
+| Users                                            | ✅  | ✅  |
+| Organizations                                    | ✅  | ✅  |
+| Groups                                           | ✅  | ✅  |
+| Text modules                                     |     | ⬜  |
+| **Ticket features**                              |     |     |
+| Tags                                             |     | ⬜  |
+| Links                                            |     | ⬜  |
+| Mentions                                         |     | ⬜  |
+| Time accounting                                  |     | ⬜  |
+| Checklists                                       |     | ⬜  |
+| Shared drafts                                    |     | ⬜  |
+| Merge                                            |     | ⬜  |
+| History                                          |     | ⬜  |
+| **Knowledge base**                               |     |     |
+| Knowledge bases                                  |     | ⬜  |
+| Categories                                       |     | ⬜  |
+| Answers, and publishing them                     |     | ⬜  |
+| Answer attachments                               |     | ⬜  |
+| Search                                           |     | ⬜  |
+| **Across resources**                             |     |     |
+| Global search                                    |     | ⬜  |
+| CSV imports (users, organizations, text modules) |     | ⬜  |
+
+An empty box in the 2.0 column is not out of reach: [declare a resource](#resources-this-gem-does-not-model)
+for an endpoint that serves records, or use [raw requests](#raw-requests) for one that does
+not. The empty boxes are also where this gem grows next —
+[open an issue](https://github.com/zammad/zammad-api-client-ruby/issues/new) for the one
+you need, so we know what to model first.
+
 ### Resources this gem does not model
 
 A resource is a class with a path. Declare one for an endpoint that serves records the way
