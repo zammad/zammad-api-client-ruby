@@ -100,7 +100,7 @@ client = ZammadAPI::Client.from_env(timeout: 300)
 
 | Option           | Default            | Description                                                        |
 | ---------------- | ------------------ | ------------------------------------------------------------------ |
-| `url`            | *required*         | Base URL. A sub-path such as `https://example.com/zammad/` works.  |
+| `url`            | *required*         | Base URL. A sub-path such as `https://example.com/zammad/` works; credentials in it are refused. |
 | `http_token`     | `nil`              | Zammad access token.                                               |
 | `oauth2_token`   | `nil`              | OAuth2 bearer token.                                               |
 | `user`           | `nil`              | Login for basic authentication.                                    |
@@ -118,6 +118,10 @@ client = ZammadAPI::Client.from_env(timeout: 300)
 
 Credentials are never written to the log, and `client.config.inspect` redacts them, so a
 configuration object is safe to include in an error report.
+
+Credentials belong in the options above, not in the URL. `https://user:secret@host/` raises
+`ZammadAPI::ConfigurationError`, because the HTTP stack would send those as basic
+authentication in place of the token configured beside them.
 
 ### Checking the connection
 

@@ -71,6 +71,8 @@ module ZammadAPI
     def normalize_adapter: (untyped) -> Symbol?
     def render: (Symbol, untyped) -> String
     def normalize_url: (untyped) -> String
+    def inline_credentials?: (String) -> bool
+    def inline_credentials_message: (String) -> String
     def validate_credentials!: () -> void
     def positive_number?: (untyped) -> bool
     def validate_numbers!: () -> void

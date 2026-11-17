@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require 'logger'
+require 'uri'
+
 require_relative 'errors'
 require_relative 'version'
 
@@ -169,9 +171,12 @@ module ZammadAPI
 
     # The instance URL, with any inline credentials blanked.
     #
-    # A URL may carry basic-auth credentials in its userinfo, and 1.x users
-    # who put them there rather than in +user:+ and +password:+ still do. The
-    # host has to stay readable for the URL to be worth printing, so the
+    # A URL that carries credentials is refused when the configuration is
+    # built - see {#normalize_url} - but only where it can be read as a URL
+    # at all. One that cannot, such as a password with an unencoded +#+ in
+    # it, is still held here until building the connection rejects it, and
+    # this is what that error and {#inspect} print in the meantime. The host
+    # has to stay readable for the URL to be worth printing, so the
     # credentials are replaced rather than the whole value.
     #
     # @return [String]
@@ -231,6 +236,7 @@ module ZammadAPI
       raise ConfigurationError, "config url needs to be a string, got #{value.class}" if !value.is_a?(String)
       raise ConfigurationError, 'config url needs to start with http:// or https://' if !SCHEME_PATTERN.match?(value)
       raise ConfigurationError, "config url needs a host after the scheme, got #{value.inspect}" if !URL_PATTERN.match?(value)
+      raise ConfigurationError, inline_credentials_message(value) if inline_credentials?(value)
 
       # A trailing slash keeps Zammad installations served from a sub-path
       # (e.g. https://example.com/zammad/) working, because request paths are
@@ -243,6 +249,30 @@ module ZammadAPI
       # prints in every ConnectionError and TimeoutError message.
       path, separator, rest = value.partition(URL_SUFFIX_PATTERN)
       path.end_with?('/') ? value : "#{path}/#{separator}#{rest}"
+    end
+
+    # Whether the URL carries a +user:password@+ of its own.
+    #
+    # Asked of URI, because that is the parser Faraday reads the URL with:
+    # whatever it finds there, Faraday turns into a Basic +Authorization+
+    # header on the connection, and its authorization middleware then leaves
+    # a header that is already set alone. So a URL with credentials silently
+    # replaced the scheme this class validated - an access token configured
+    # beside it was never sent, while {Client#inspect} went on reporting
+    # +auth=http_token+.
+    #
+    # A URL that URI cannot read is left for the connection to reject, which
+    # it does before any request is made.
+    def inline_credentials?(value)
+      !URI.parse(value).userinfo.nil?
+    rescue URI::InvalidURIError
+      false
+    end
+
+    def inline_credentials_message(value)
+      "config url carries credentials of its own (#{redact_userinfo(value)}), which would be sent as basic authentication " \
+        'in place of the ones this configuration names. Leave them out of the url and pass user: and password:, ' \
+        'or http_token: or oauth2_token:, instead.'
     end
 
     def validate_credentials!

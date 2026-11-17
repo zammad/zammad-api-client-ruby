@@ -650,11 +650,11 @@ RSpec.describe ZammadAPI::Client do
       expect(unit_client(http_token: 'super-secret').inspect).not_to include('super-secret')
     end
 
-    it 'does not leak credentials carried in the url' do
-      client = unit_client(url: 'https://admin:url-s3cret@zammad.example.com/')
-
-      expect(client.inspect).not_to include('url-s3cret')
-      expect(client.inspect).to include('https://[REDACTED]@zammad.example.com/')
+    # They used to be sent in place of the configured token, while this went
+    # on reporting auth=http_token.
+    it 'cannot be built from a url that carries credentials, so it never reports a scheme it does not use' do
+      expect { unit_client(url: 'https://admin:url-s3cret@zammad.example.com/') }
+        .to raise_error(ZammadAPI::ConfigurationError, /config url carries credentials of its own/)
     end
   end
 

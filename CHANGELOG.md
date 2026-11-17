@@ -490,6 +490,12 @@ A breaking release that modernises the whole gem. See
   sent the access token and the `on_behalf_of` scope to that host. The path is documented as
   relative to the instance URL, and record ids were already held inside their segment; this
   is the same escape one level up. The test kit refuses it too.
+- An instance `url` that carries credentials raises `ConfigurationError`. Faraday turns the
+  userinfo of a URL into a Basic `Authorization` header, and its authorization middleware
+  leaves a header that is already set alone, so with `url: 'https://old:pass@host/'` and
+  `http_token: 'new'` every request went out as the old account while `client.inspect`
+  reported `auth=http_token` — the token was never sent. Credentials belong in `user:` and
+  `password:`, or in one of the token options.
 
 ### Changed
 

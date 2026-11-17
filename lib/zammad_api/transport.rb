@@ -503,7 +503,8 @@ module ZammadAPI
     # the message being dropped, because "bad URI (is not URI?)" without the
     # URI says nothing about where to look. Substring replacement, because
     # the message embeds the value verbatim, and the url as well as the proxy
-    # because 1.x callers still put credentials in the instance URL.
+    # because {Config} can only refuse the credentials in a url it can read:
+    # one that is not a URL at all gets this far, and is quoted here.
     def redact_config_values(message)
       [config.proxy, config.url].compact.inject(message.to_s) do |text, value|
         redacted = config.redacted(value)

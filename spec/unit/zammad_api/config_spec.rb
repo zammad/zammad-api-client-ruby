@@ -303,40 +303,65 @@ RSpec.describe ZammadAPI::Config do
       expect(build(proxy: 'proxy.test:8080').inspect).to include('proxy="proxy.test:8080"')
     end
 
-    context 'with credentials in the instance url' do
-      subject(:rendered) { build(url: 'https://admin:url-s3cret@zammad.example.com/').inspect }
-
-      it 'redacts them' do
-        expect(rendered).not_to include('url-s3cret')
-      end
-
-      it 'keeps the host visible' do
-        expect(rendered).to include('zammad.example.com')
-      end
-
-      it 'marks the redacted userinfo' do
-        expect(rendered).to include('url="https://[REDACTED]@zammad.example.com/"')
-      end
-    end
-
     it 'leaves a url without credentials alone' do
       expect(build(url: 'https://zammad.example.com/').inspect).to include('url="https://zammad.example.com/"')
     end
   end
 
-  describe '#redacted_url' do
+  # Faraday turns the userinfo of a URL into a Basic Authorization header, and
+  # its authorization middleware leaves a header that is already set alone -
+  # so the credentials in the URL were sent in place of the configured ones.
+  describe 'credentials in the instance url' do
+    it 'refuses them' do
+      expect { build(url: 'https://admin:url-s3cret@zammad.example.com/') }
+        .to raise_error(ZammadAPI::ConfigurationError, /config url carries credentials of its own/)
+    end
+
+    it 'says where they belong instead' do
+      expect { build(url: 'https://admin:url-s3cret@zammad.example.com/') }
+        .to raise_error(ZammadAPI::ConfigurationError, /pass user: and password:/)
+    end
+
+    it 'keeps the password out of the message' do
+      expect { build(url: 'https://admin:url-s3cret@zammad.example.com/') }
+        .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.message).not_to include('url-s3cret') }
+    end
+
+    it 'still names the instance in the message' do
+      expect { build(url: 'https://admin:url-s3cret@zammad.example.com/') }
+        .to raise_error(ZammadAPI::ConfigurationError, %r{https://\[REDACTED\]@zammad\.example\.com/})
+    end
+
+    it 'refuses them beside basic authentication too, where they would win just the same' do
+      expect { build(url: 'https://old:creds@zammad.example.com/', http_token: nil, user: 'u', password: 'p') }
+        .to raise_error(ZammadAPI::ConfigurationError, /config url carries credentials of its own/)
+    end
+
+    it 'refuses a user name without a password' do
+      expect { build(url: 'https://admin@zammad.example.com/') }
+        .to raise_error(ZammadAPI::ConfigurationError, /config url carries credentials of its own/)
+    end
+
+    it 'accepts a url whose path merely contains an @' do
+      expect(build(url: 'https://zammad.example.com/tenant@acme/').url).to eq('https://zammad.example.com/tenant@acme/')
+    end
+  end
+
+  describe '#redacted' do
     it 'blanks inline credentials' do
-      expect(build(url: 'https://admin:s3cret@zammad.example.com/').redacted_url)
+      expect(build.redacted('https://admin:s3cret@zammad.example.com/'))
         .to eq('https://[REDACTED]@zammad.example.com/')
     end
 
     # Anchoring on the first @ left the tail of the password in the rendered
     # URL, which is interpolated into every ConnectionError message.
     it 'blanks a password carrying an unencoded @' do
-      expect(build(url: 'https://admin:pa@ss-s3cret@zammad.example.com/').redacted_url)
+      expect(build.redacted('https://admin:pa@ss-s3cret@zammad.example.com/'))
         .to eq('https://[REDACTED]@zammad.example.com/')
     end
+  end
 
+  describe '#redacted_url' do
     it 'leaves an @ in the path alone' do
       expect(build(url: 'https://zammad.example.com/tenant@acme/').redacted_url)
         .to eq('https://zammad.example.com/tenant@acme/')
@@ -354,18 +379,8 @@ RSpec.describe ZammadAPI::Config do
         .to eq('https://zammad.example.com/#a@b')
     end
 
-    it 'still blanks credentials on a url that also carries an @ later on' do
-      expect(build(url: 'https://admin:s3cret@zammad.example.com/tenant@acme/').redacted_url)
-        .to eq('https://[REDACTED]@zammad.example.com/tenant@acme/')
-    end
-
     it 'leaves a url without credentials alone' do
       expect(build(url: 'https://zammad.example.com/').redacted_url).to eq('https://zammad.example.com/')
-    end
-
-    it 'does not change what requests are sent to' do
-      config = build(url: 'https://admin:s3cret@zammad.example.com/')
-      expect(config.url).to eq('https://admin:s3cret@zammad.example.com/')
     end
   end
 
