@@ -272,7 +272,8 @@ module ZammadAPI
 
     # @!method page(number, per_page: nil)
     #   @param number [Integer] one-based page number
-    #   @param of [Integer, nil] records on the page
+    #   @param per_page [Integer, nil] records on the page, as many as the
+    #     endpoint serves by default
     #   @return [Collection]
     #   @see Collection#page
 
