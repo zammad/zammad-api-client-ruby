@@ -531,6 +531,11 @@ A breaking release that modernises the whole gem. See
   served it as an empty page: three stubs for `GET api/v1/groups` answered three reads with
   the first, the third and the third, and the second was never seen. A request for a later
   page is now answered by the stub its read began with and does not move the sequence on.
+- An exceeded `open_timeout` raises `TimeoutError`. Net::HTTP reports it as
+  `Net::OpenTimeout`, which Faraday's default adapter wraps into `Faraday::ConnectionFailed`
+  with every other failure to connect, so it surfaced as `ConnectionError: … is unreachable
+  (execution expired)` and skipped the `rescue ZammadAPI::TimeoutError` documented to catch
+  it.
 
 ### Changed
 

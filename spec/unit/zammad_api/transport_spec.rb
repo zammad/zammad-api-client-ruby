@@ -270,6 +270,42 @@ RSpec.describe ZammadAPI::Transport do
         .to raise_error(ZammadAPI::TimeoutError, %r{Can't find object: request to api/v1/groups timed out})
     end
 
+    # Net::HTTP raises Net::OpenTimeout for it, and the default adapter wraps
+    # that into Faraday::ConnectionFailed with every other failure to connect,
+    # so it was reported as an unreachable host and skipped the rescue that is
+    # documented to catch it.
+    context 'when the connection is not established within open_timeout' do
+      before { stub_request(:get, url).to_raise(Net::OpenTimeout.new('execution expired')) }
+
+      it 'raises TimeoutError, not ConnectionError' do
+        expect { unit_transport.get('api/v1/groups', operation: 'find object') }
+          .to raise_error(ZammadAPI::TimeoutError)
+      end
+
+      it 'says it was the connection that timed out' do
+        expect { unit_transport.get('api/v1/groups', operation: 'find object') }
+          .to raise_error(%r{Can't find object: connecting to http://zammad\.test/ timed out \(execution expired\)})
+      end
+
+      it 'is still retried, as a read that never reached the server' do
+        expect { unit_transport(retries: 2, retry_interval: 0.01).get('api/v1/groups', operation: 'find object') }
+          .to raise_error(ZammadAPI::TimeoutError)
+        expect(a_request(:get, url)).to have_been_made.times(3)
+      end
+    end
+
+    it 'reports the timeout WebMock simulates as one' do
+      stub_request(:get, url).to_timeout
+      expect { unit_transport.get('api/v1/groups', operation: 'find object') }
+        .to raise_error(ZammadAPI::TimeoutError)
+    end
+
+    it 'reads a timeout out of a connection failure that only wraps one' do
+      stub_request(:get, url).to_raise(Faraday::ConnectionFailed.new(Errno::ETIMEDOUT.new))
+      expect { unit_transport.get('api/v1/groups', operation: 'find object') }
+        .to raise_error(ZammadAPI::TimeoutError, /connecting to/)
+    end
+
     it 'wraps a refused connection' do
       stub_request(:get, url).to_raise(Errno::ECONNREFUSED)
       expect { unit_transport.get('api/v1/groups', operation: 'find object') }

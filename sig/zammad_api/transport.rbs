@@ -53,6 +53,7 @@ module ZammadAPI
 
     private
 
+    def timed_out?: (untyped error) -> bool
     def perform: (Symbol, String, Hash[Symbol, untyped]?, untyped, Hash[untyped, untyped]?) -> untyped
     def build_connection: () -> untyped
     def refuse_decoding_middleware!: (untyped connection) -> void

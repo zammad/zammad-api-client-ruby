@@ -446,10 +446,32 @@ module ZammadAPI
     rescue Faraday::SSLError, *SSL_ERRORS => e
       raise ConnectionError, "Can't #{operation}: TLS handshake with #{config.redacted_url} failed (#{e.message})"
     rescue Faraday::ConnectionFailed, *CONNECTION_ERRORS => e
+      # Before it is called unreachable, because one kind of connection
+      # failure is a timeout. See #timed_out?.
+      raise TimeoutError, "Can't #{operation}: connecting to #{config.redacted_url} timed out (#{e.message})" if timed_out?(e)
+
       raise ConnectionError, "Can't #{operation}: #{config.redacted_url} is unreachable (#{e.message})"
     end
 
     private
+
+    # Whether a connection failure is a timeout underneath.
+    #
+    # An exceeded +open_timeout+ is raised by Net::HTTP as Net::OpenTimeout,
+    # and the default adapter wraps that into Faraday::ConnectionFailed along
+    # with every other failure to connect. So it was reported as "is
+    # unreachable (execution expired)", a ConnectionError, and skipped the
+    # +rescue ZammadAPI::TimeoutError+ that is documented to catch an
+    # exceeded +open_timeout+.
+    #
+    # Both places an adapter can leave the original are looked at: Faraday's
+    # own +wrapped_exception+, and the +cause+ Ruby records for an error
+    # raised while another was being handled.
+    def timed_out?(error)
+      wrapped = error.respond_to?(:wrapped_exception) ? error.wrapped_exception : nil
+
+      [wrapped, error.cause].any? { |inner| TIMEOUT_ERRORS.any? { inner.is_a?(it) } }
+    end
 
     def perform(method, path, query, body, headers)
       # Built before the request is logged, so a rejected query or header does
