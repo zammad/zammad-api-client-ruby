@@ -484,6 +484,12 @@ A breaking release that modernises the whole gem. See
 - `record.fetch(:missing, default) { ... }` warns the way `Hash#fetch` warns, naming the
   line that made the call. A bare `Kernel#warn` reports no source location, so the warning
   identified neither the call site nor the library it came from.
+- A raw request refuses an absolute URL with `ArgumentError`. Faraday lets one replace the
+  instance URL and still attaches the client's headers, so
+  `client.get('https://other.example/collect')` — a link taken from a response body, say —
+  sent the access token and the `on_behalf_of` scope to that host. The path is documented as
+  relative to the instance URL, and record ids were already held inside their segment; this
+  is the same escape one level up. The test kit refuses it too.
 
 ### Changed
 

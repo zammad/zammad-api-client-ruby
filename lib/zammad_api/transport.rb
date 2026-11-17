@@ -146,6 +146,12 @@ module ZammadAPI
     # untouched.
     DOT_SEGMENTS = ['.', '..'].freeze
 
+    # A request path that carries a scheme and an authority, and so names a
+    # host of its own. Any scheme and either case, which is wider than the
+    # two lowercase prefixes Faraday itself treats as absolute: what is
+    # refused here should not depend on how one Faraday version reads a URL.
+    ABSOLUTE_URL = %r{\A[a-z][a-z0-9+.-]*://}i
+
     # @return [Config]
     attr_reader :config
 
@@ -327,6 +333,14 @@ module ZammadAPI
     # served from one - `https://host/zammad/` + `/api/v1/tickets` resolves to
     # `https://host/api/v1/tickets`.
     #
+    # A path that names a host of its own is refused. Faraday lets an absolute
+    # URL replace the instance URL and still attaches this client's headers,
+    # so `client.get('https://other.example/collect')` - a link lifted from a
+    # response body, say - sent the access token and the on_behalf_of scope
+    # to that host. Record ids are held inside their segment by
+    # {.escape_path_segment}; this is the same escape, one level up. The
+    # message does not quote the path, which may carry a secret of its own.
+    #
     # Public for the same reason as {.stringify_query} and
     # {.escape_path_segment}: {Client} and {Test} both apply this rule, the
     # latter to decide which stub a request matches, and a path rule kept in
@@ -336,7 +350,14 @@ module ZammadAPI
     # @api private
     # @param path [Object]
     # @return [String]
-    def self.relative_path(path) = path.to_s.sub(%r{\A/+}, '')
+    # @raise [ArgumentError] for an absolute URL
+    def self.relative_path(path)
+      relative = path.to_s.sub(%r{\A/+}, '')
+      return relative if !ABSOLUTE_URL.match?(relative)
+
+      raise ArgumentError, 'a request path is relative to the instance URL, and this one is an absolute URL: sending it would hand ' \
+                           "this client's credentials to another host. Pass the path alone, such as 'api/v1/tickets'."
+    end
 
     # @param config [Config]
     def initialize(config)
@@ -395,6 +416,9 @@ module ZammadAPI
     # them: an adapter that does not wrap them used to let them out raw once
     # the retries were spent, past every rescue a caller had written.
     def request(method, path, operation:, query: nil, body: nil, headers: nil, resource_class: nil)
+      # Here as well as in {Client}, because this is the one door every
+      # request goes through, whichever caller built the path.
+      path     = Transport.relative_path(path)
       started  = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       response = decode(perform(method, path, query, body, headers))
       log_response(method, path, response, started)

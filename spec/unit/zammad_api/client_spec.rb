@@ -256,6 +256,53 @@ RSpec.describe ZammadAPI::Client do
         expect(stub).to have_been_requested
       end
 
+      # Faraday lets an absolute URL replace the instance URL and still sends
+      # the client's headers, so this handed the access token to another host.
+      it 'refuses an absolute URL rather than sending the credentials to another host' do
+        expect { client.get('https://other.example/collect') }
+          .to raise_error(ArgumentError, /a request path is relative to the instance URL/)
+      end
+
+      it 'makes no request for an absolute URL' do
+        stub_request(:any, /other\.example/)
+
+        expect { client.get('https://other.example/collect') }.to raise_error(ArgumentError)
+        expect(a_request(:any, /other\.example/)).not_to have_been_made
+      end
+
+      it 'refuses an absolute URL whatever the case of its scheme' do
+        expect { client.get('HTTP://other.example/collect') }.to raise_error(ArgumentError, /absolute URL/)
+      end
+
+      it 'refuses an absolute URL behind a leading slash' do
+        expect { client.get('/https://other.example/collect') }.to raise_error(ArgumentError, /absolute URL/)
+      end
+
+      it 'refuses an absolute URL for every verb' do
+        %i[post put delete].each do |verb|
+          expect { client.public_send(verb, 'https://other.example/collect') }.to raise_error(ArgumentError, /absolute URL/)
+        end
+      end
+
+      it 'does not quote the path it refuses, which may carry a secret' do
+        expect { client.get('https://other.example/collect?token=s3cret') }
+          .to raise_error(ArgumentError) { |error| expect(error.message).not_to include('s3cret') }
+      end
+
+      it 'keeps a protocol-relative path on the instance' do
+        stub = stub_request(:get, 'http://zammad.test/other.example/collect').to_return(json_response([]))
+
+        client.get('//other.example/collect')
+        expect(stub).to have_been_requested
+      end
+
+      it 'still sends a path that merely contains a colon' do
+        stub = stub_request(:get, 'http://zammad.test/api/v1/tags:search').to_return(json_response([]))
+
+        client.get('api/v1/tags:search')
+        expect(stub).to have_been_requested
+      end
+
       it 'passes query parameters' do
         stub = stub_request(:get, roles_url).with(query: { 'active' => 'true' }).to_return(json_response([]))
 

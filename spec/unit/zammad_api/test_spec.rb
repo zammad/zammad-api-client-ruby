@@ -95,6 +95,18 @@ RSpec.describe ZammadAPI::Test do
       expect(client.group.find(1).id).to eq(1)
     end
 
+    # The real transport refuses this, so a stand-in that answered it would
+    # let a test pass over a request production never sends.
+    it 'refuses an absolute URL the way the real transport does' do
+      expect { client.get('https://other.example/collect') }
+        .to raise_error(ArgumentError, /a request path is relative to the instance URL/)
+    end
+
+    it 'records nothing for a path it refuses' do
+      expect { client.get('https://other.example/collect') }.to raise_error(ArgumentError)
+      expect(zammad.requests).to be_empty
+    end
+
     it 'raises the mapped error class for a non-2xx status' do
       zammad.stub(:get, 'api/v1/groups/1', status: 404, body: { error: 'not found' })
 

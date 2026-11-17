@@ -205,7 +205,9 @@ module ZammadAPI
     #   client.get('api/v1/tickets/1', headers: {'Accept-Language' => 'de-de'})
     #
     # @param path [String] path relative to {Config#url}; a leading slash is
-    #   ignored, so paths can be pasted from the Zammad documentation
+    #   ignored, so paths can be pasted from the Zammad documentation. An
+    #   absolute URL is refused, so the client's credentials only ever go to
+    #   the instance it was configured for.
     # @param query [Hash, nil] query string parameters
     # @param headers [Hash, nil] request headers. Names are case-insensitive,
     #   and +Authorization+ and +From+ are refused: the first is what the
@@ -213,8 +215,8 @@ module ZammadAPI
     # @return [Response]
     # @raise [ResponseError] for any non-2xx response
     # @raise [TransportError] when the request could not be completed
-    # @raise [ArgumentError] for a header this client sets itself, or a value
-    #   that is not text
+    # @raise [ArgumentError] for a header this client sets itself, a value
+    #   that is not text, or a path that is an absolute URL
     def get(path, query: nil, headers: nil) = raw(:get, path, query: query, headers: headers)
 
     # Performs a +POST+ against any endpoint of the Zammad API.

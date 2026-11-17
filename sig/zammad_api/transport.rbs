@@ -28,6 +28,7 @@ module ZammadAPI
     REDACTED: String
     UNRESERVED_IN_PATH: Regexp
     DOT_SEGMENTS: Array[String]
+    ABSOLUTE_URL: Regexp
     RESERVED_HEADERS: Hash[String, String]
 
     attr_reader config: Config
