@@ -874,6 +874,18 @@ zammad.stub(:get, 'api/v1/groups', body: [{id: 1, name: 'Users'}, {id: 2, name: 
 client.group.all.map(&:name) # => ["Users", "Sales"]
 ```
 
+Stub the endpoint again to describe a list that changes between reads. A read is one step
+of the sequence however many pages it asks for, so each read gets the next stub and the
+last one answers every read after it:
+
+```ruby
+zammad.stub(:get, 'api/v1/groups', body: [{id: 1, name: 'Users'}])
+zammad.stub(:get, 'api/v1/groups', body: [{id: 1, name: 'Users'}, {id: 2, name: 'Sales'}])
+
+client.group.all.count # => 1
+client.group.all.count # => 2
+```
+
 Name a `page` to say what each one holds, and the stub is served exactly as written:
 
 ```ruby

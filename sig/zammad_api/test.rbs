@@ -26,6 +26,7 @@ module ZammadAPI
 
     @stubs: Hash[[Symbol, String], Array[Hash[Symbol, untyped]]]
     @requests: Array[Request]
+    @served: Hash[[[Symbol, String], Hash[String, untyped]?], Hash[Symbol, untyped]]
     @monitor: Thread::Mutex
     @transport: Test::Transport
     @client: Client
@@ -55,6 +56,7 @@ module ZammadAPI
     def response_headers: (Hash[untyped, untyped] headers, untyped body) -> Hash[String, String]
     def snapshot: (untyped) -> untyped
     def take: (Symbol method, String path, Hash[String, untyped] params) -> Hash[Symbol, untyped]?
+    def later_page?: (Hash[String, untyped]? scope, Hash[String, untyped] params) -> bool
     def most_specific: (Array[Hash[Symbol, untyped]] queued, Array[Integer] matching, Symbol method, String path) -> Array[Integer]
     def ambiguous_message: (Symbol method, String path, Array[Hash[String, untyped]?] scopes) -> String
     def matches?: (Hash[untyped, untyped]? expected, Hash[String, untyped] params) -> bool

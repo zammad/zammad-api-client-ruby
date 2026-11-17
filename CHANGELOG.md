@@ -526,6 +526,11 @@ A breaking release that modernises the whole gem. See
   whatever `timeout` and `retry_interval` said. A `Retry-After` within `timeout` is still
   honoured; a longer one is not waited out, and the request fails at once with the error for
   its status, `RateLimitError#retry_after` still carrying the figure.
+- The test kit serves a sequence of list stubs one per read. Every full read of a collection
+  asks for the page after its last one, and that request took the next stub in the queue and
+  served it as an empty page: three stubs for `GET api/v1/groups` answered three reads with
+  the first, the third and the third, and the second was never seen. A request for a later
+  page is now answered by the stub its read began with and does not move the sequence on.
 
 ### Changed
 

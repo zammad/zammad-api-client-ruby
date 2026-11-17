@@ -613,6 +613,69 @@ RSpec.describe ZammadAPI::Test do
     end
   end
 
+  # Every full read asks for the page after its last one, and that request
+  # used to take the next stub in the queue and serve it as an empty page:
+  # three stubs answered three reads with the first, the third and the third.
+  describe 'a list endpoint stubbed as a sequence' do
+    subject(:zammad) { described_class.new }
+
+    let(:client) { zammad.client }
+
+    def names = client.group.all.map(&:name)
+
+    before do
+      %w[A B C].each { zammad.stub(:get, 'api/v1/groups', body: [{ id: 1, name: it }]) }
+    end
+
+    it 'answers each read with the next stub' do
+      expect(Array.new(3) { names }).to eq([['A'], ['B'], ['C']])
+    end
+
+    it 'keeps answering with the last one' do
+      3.times { names }
+      expect(names).to eq(['C'])
+    end
+
+    it 'spends one stub on a read, however many pages the read asks for' do
+      names
+      expect(zammad.requests.map { it.query['page'] }).to eq(%w[1 2])
+      expect(names).to eq(['B'])
+    end
+
+    it 'answers the trailing page from the stub the read began with, not the next one' do
+      zammad.reset
+      zammad.stub(:get, 'api/v1/groups', body: [{ id: 1, name: 'A' }])
+      zammad.stub(:get, 'api/v1/groups', status: 500, body: { error: 'down' })
+
+      expect(names).to eq(['A'])
+      expect { names }.to raise_error(ZammadAPI::ServerError)
+    end
+
+    it 'does not spend a stub on a later page asked for first' do
+      expect(client.group.all.page(3).to_a).to eq([])
+      expect(names).to eq(['A'])
+    end
+
+    it 'spends one stub on a read sized for a single record' do
+      expect(Array.new(3) { client.group.first.name }).to eq(%w[A B C])
+    end
+
+    it 'starts over after a reset' do
+      names
+      zammad.reset
+      zammad.stub(:get, 'api/v1/groups', body: [{ id: 2, name: 'D' }])
+
+      expect(Array.new(2) { names }).to eq([['D'], ['D']])
+    end
+
+    it 'sequences a scoped list the same way' do
+      zammad.reset
+      %w[A B].each { zammad.stub(:get, 'api/v1/groups/search', body: [{ id: 1, name: it }], query: { query: 'x' }) }
+
+      expect(Array.new(2) { client.group.search('x').map(&:name) }).to eq([['A'], ['B']])
+    end
+  end
+
   describe 'a list endpoint whose pages are stubbed by hand' do
     subject(:zammad) { described_class.new }
 

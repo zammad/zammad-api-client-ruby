@@ -89,6 +89,9 @@ module ZammadAPI
     def initialize(**options)
       @config    = Config.new(url: 'https://zammad.test/', http_token: 'test-token', **options)
       @stubs     = {}
+      # The stub each scope of each endpoint last answered a first page with,
+      # which is the one a later page of the same read belongs to. See #take.
+      @served    = {}
       @requests  = []
       @monitor   = Mutex.new
       @transport = Transport.new(self)
@@ -113,7 +116,9 @@ module ZammadAPI
     #
     # Stubbing the same method and path again queues a second response: the
     # first request gets the first, and the last stub answers every request
-    # after it. A +query+ matches when every parameter it names is present in
+    # after it. A collection read is one step of such a sequence however many
+    # pages it asks for, so three list stubs answer three reads in turn. A
+    # +query+ matches when every parameter it names is present in
     # the request with that value, so a stub does not have to repeat the
     # +expand+, +page+ and +per_page+ parameters the client adds itself.
     #
@@ -183,6 +188,7 @@ module ZammadAPI
     def reset
       @monitor.synchronize do
         @stubs.clear
+        @served.clear
         @requests.clear
       end
       self
@@ -302,16 +308,38 @@ module ZammadAPI
     # stub written for one request still wins over a catch-all for the
     # endpoint however they were declared. Scopes that tie are genuinely
     # ambiguous and say so.
+    #
+    # A request for a later page does not move the sequence on. Every full
+    # read of a collection asks for the page after its last one, to learn
+    # that there is none, and that request used to take the next stub in the
+    # queue and serve it as the empty page {#paged_body} makes of it: with
+    # three list stubs A, B and C, three reads answered A, C and C, and B was
+    # never seen. The trailing request belongs to the read that made it, so it
+    # is answered by the stub that read's first page came from.
     def take(method, path, params)
-      queued = @stubs[key(method, path)]
+      endpoint = key(method, path)
+      queued   = @stubs[endpoint]
       return nil if queued.nil?
 
       matching = queued.each_index.select { matches?(queued[it][:query], params) }
       return nil if matching.empty?
 
       group = most_specific(queued, matching, method, path)
+      scope = queued[group.first][:query]
+      # The stub at the head of the queue is the fallback, for a later page
+      # that is the first thing asked: `page(3)` on a list nothing has read.
+      return @served[[endpoint, scope]] || queued[group.first] if later_page?(scope, params)
 
-      group.one? ? queued[group.first] : queued.delete_at(group.first)
+      @served[[endpoint, scope]] = group.one? ? queued[group.first] : queued.delete_at(group.first)
+    end
+
+    # Whether a request asks for a page beyond the first of a list whose stub
+    # did not say what its pages hold. Such a stub is one page of records, so
+    # the request is the tail of a read rather than a read of its own.
+    def later_page?(scope, params)
+      return false if scope&.key?('page')
+
+      ![nil, '1'].include?(params['page'])
     end
 
     # The matching stubs that share the most specific scope, in the order they
@@ -366,10 +394,9 @@ module ZammadAPI
     # page after it gets an empty one. A stub that does name a page is left
     # exactly as written - that is how a test says what the second page holds.
     def paged_body(stub, params, body)
-      return body if !body.is_a?(Array) || stub[:query]&.key?('page')
-      return body if [nil, '1'].include?(params['page'])
+      return body if !body.is_a?(Array)
 
-      []
+      later_page?(stub[:query], params) ? [] : body
     end
 
     # Decoded by {Response.decode_body}, the rule {Transport#decode} reads, so
