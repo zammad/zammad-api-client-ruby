@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    # modernise-2.0 is the 2.0 line. It is kept apart from master and never
+    # merged back, so its pull request against master conflicts, and GitHub
+    # starts no pull_request run for a pull request that conflicts.
+    branches: [master, modernise-2.0]
   pull_request:
   schedule:
     # Weekly, to catch breakage from new Ruby or Zammad releases.
