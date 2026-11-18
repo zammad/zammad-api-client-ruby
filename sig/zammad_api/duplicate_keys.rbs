@@ -1,0 +1,9 @@
+module ZammadAPI
+  module DuplicateKeys
+    def self.normalize: (Hash[untyped, untyped] hash, ?prefix: String?, ?noun: String) { (untyped key) -> untyped } -> Hash[untyped, untyped]
+    def self.message: (String noun, untyped path, untyped first, untyped second) -> String
+
+    def normalize: (Hash[untyped, untyped] hash, ?prefix: String?, ?noun: String) { (untyped key) -> untyped } -> Hash[untyped, untyped]
+    def message: (String noun, untyped path, untyped first, untyped second) -> String
+  end
+end
