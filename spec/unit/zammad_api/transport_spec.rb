@@ -222,6 +222,37 @@ RSpec.describe ZammadAPI::Transport do
       end
     end
 
+    # A query string has no way to write a key with an empty name: `[]`
+    # inside a structure, which Rails reads as a list, and nothing but the
+    # value at the top level, which Rails drops.
+    describe 'a key with an empty name' do
+      it 'refuses one in a Hash inside a list, which Rails would read as a list' do
+        expect { described_class.stringify_query(list: [{ '' => '1' }]) }
+          .to raise_error(ArgumentError, /query parameter list\[0\] holds a key with an empty name.*list\[0\]\[\], which Rails reads as a list/)
+      end
+
+      it 'refuses one in a Hash further down' do
+        expect { described_class.stringify_query(condition: { a: { '' => '1' } }) }
+          .to raise_error(ArgumentError, /query parameter condition\[a\] holds a key with an empty name/)
+      end
+
+      it 'refuses one given as an empty Symbol' do
+        expect { described_class.stringify_query(condition: { '': '1' }) }.to raise_error(ArgumentError, /holds a key with an empty name/)
+      end
+
+      it 'refuses one at the top level, which Rails drops' do
+        expect { described_class.stringify_query('' => '1') }.to raise_error(ArgumentError, /a query parameter has an empty name.*which Rails drops/)
+      end
+
+      it 'still takes a Hash in a list with an ordinary key' do
+        expect(described_class.stringify_query(list: [{ 'a' => '1' }])).to eq('list' => [{ 'a' => '1' }])
+      end
+
+      it 'still takes a key that is a space' do
+        expect(described_class.stringify_query(condition: { ' ' => '1' })).to eq('condition' => { ' ' => '1' })
+      end
+    end
+
     # Read off the URL Faraday built, in the order it was written: WebMock
     # sorts a query before it compares one, and the order is the point. See
     # the QueryEncoder specs for why this is the order Rails needs.

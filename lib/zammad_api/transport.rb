@@ -217,10 +217,32 @@ module ZammadAPI
     # @param hash [Hash]
     # @param prefix [String, nil] the parameter path this Hash sits at
     # @return [Hash{String => String, Array, Hash}]
+    #
+    # A key with an empty name is refused, for the reason a list Rails
+    # cannot read back is: a query string has no way to write one. Inside a
+    # structure it is written `[]`, which Rails reads as a list - `{list:
+    # [{'' => '1'}]}` arrives as `[['1']]` - and at the top level as
+    # `=value`, which Rails drops.
     def self.stringify_query_hash(hash, prefix)
       DuplicateKeys
         .normalize(hash, prefix: prefix, &:to_s)
-        .to_h { |name, value| [name, stringify_query_value(prefix ? "#{prefix}[#{name}]" : name, value)] }
+        .to_h do |name, value|
+          raise ArgumentError, empty_query_name_message(prefix) if name.empty?
+
+          [name, stringify_query_value(prefix ? "#{prefix}[#{name}]" : name, value)]
+        end
+    end
+
+    # @api private
+    # @return [String]
+    def self.empty_query_name_message(prefix)
+      found = if prefix
+                "query parameter #{prefix} holds a key with an empty name, and a query string writes that as #{prefix}[], which Rails reads as a list"
+              else
+                'a query parameter has an empty name, and a query string writes that as nothing but its value, which Rails drops'
+              end
+
+      "#{found}. Name the key, or put a structure a query string cannot carry in the JSON body of a raw request, such as client.post."
     end
 
     # Stringifies the scalars and leaves the structure to {QueryEncoder}.

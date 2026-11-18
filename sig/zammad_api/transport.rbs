@@ -44,6 +44,7 @@ module ZammadAPI
     def self.stringify_query_value: (String, untyped) -> untyped
     def self.stringify_query_list: (String, Array[untyped]) -> Array[untyped]
     def self.misread_element_message: (String, Symbol) -> String
+    def self.empty_query_name_message: (String? prefix) -> String
     def self.stringify_headers: (Hash[untyped, untyped]) -> Hash[String, String]
     BLANK: Regexp
     def self.wire_text: (untyped value, String name) -> String
