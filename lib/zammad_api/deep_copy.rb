@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'duplicate_keys'
+
 module ZammadAPI
   # Recursive copies of the plain JSON structures this gem passes around.
   #
@@ -50,13 +52,41 @@ module ZammadAPI
     # @param symbolize_keys [Boolean] whether Hash keys become Symbols, so
     #   that caller-supplied attributes behave the same as decoded responses
     # @return [Object] a frozen copy
+    # @raise [ArgumentError] when symbolizing lands two keys of one Hash on
+    #   one name
     def frozen_copy(value, symbolize_keys: false)
       case value
-      when Hash   then value.to_h { |key, nested| [symbolize_keys ? symbolize(key) : key, frozen_copy(nested, symbolize_keys: symbolize_keys)] }.freeze
+      when Hash   then frozen_hash(value, symbolize_keys)
       when Array  then value.map { frozen_copy(it, symbolize_keys: symbolize_keys) }.freeze
       when String then value.dup.freeze
       else value
       end
+    end
+
+    # The Hash branch of {frozen_copy}.
+    #
+    # Two keys that symbolize to one name are refused rather than merged.
+    # Symbolizing is what creates the collision, the way stringifying does
+    # for a query - see {DuplicateKeys} - and here it went unrefused:
+    # `client.groups.new('name' => 'Support', name: 'Sales')` built a record
+    # holding `name: 'Sales'` alone, and an attribute Hash put together from
+    # form parameters and defaults lost a value to Hash order without a word.
+    # {Resources::Ticket#add_article} had to take both spellings of
+    # `ticket_id` out by hand for it.
+    #
+    # Asked of the sizes, so that a Hash with no collision in it - every one
+    # built from a response - pays one comparison and no call per key. The
+    # walk that names the two spellings is made only once there is a pair to
+    # name.
+    #
+    # @api private
+    # @return [Hash] a frozen copy
+    # @raise [ArgumentError]
+    def frozen_hash(hash, symbolize_keys)
+      copy = hash.to_h { |key, nested| [symbolize_keys ? symbolize(key) : key, frozen_copy(nested, symbolize_keys: symbolize_keys)] }
+      DuplicateKeys.normalize(hash, noun: 'attribute') { symbolize(it) } if symbolize_keys && copy.size != hash.size
+
+      copy.freeze
     end
 
     # A writable deep copy, for handing out something callers may treat as

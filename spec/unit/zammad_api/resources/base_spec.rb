@@ -34,6 +34,23 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(group.note).to eq('from a string key')
     end
 
+    # A record built from a Hash put together across several merges held
+    # whichever spelling Hash order put last, and sent that.
+    it 'refuses one attribute under two spellings rather than keeping the last' do
+      expect { client.groups.new('name' => 'Support', name: 'Sales') }
+        .to raise_error(ArgumentError, /attribute name was given twice, as "name" and as :name/)
+    end
+
+    it 'refuses two spellings on create before anything is sent' do
+      expect { client.groups.create('name' => 'Support', name: 'Sales') }.to raise_error(ArgumentError, /given twice/)
+      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+    end
+
+    it 'refuses two spellings inside a value a writer is given' do
+      expect { group.preferences = { 'locale' => 'de', locale: 'en' } }.to raise_error(ArgumentError, /attribute locale was given twice/)
+      expect(group).not_to be_changed
+    end
+
     it 'starts without changes' do
       expect(group).not_to be_changed
     end
@@ -382,6 +399,26 @@ RSpec.describe ZammadAPI::Resources::Base do
       group.assign_attributes(name: 'Renamed')
       group.assign_attributes(name: 'Support')
       expect(group).not_to be_changed
+    end
+
+    # Each key is written by its Symbol, so the attribute was written twice
+    # and whichever spelling came last in the Hash was the one staged.
+    context 'with one attribute under two spellings' do
+      it 'refuses the pair' do
+        expect { group.assign_attributes('name' => 'A', name: 'B') }
+          .to raise_error(ArgumentError, /attribute name was given twice, as "name" and as :name/)
+      end
+
+      it 'stages nothing' do
+        expect { group.assign_attributes(:note => 'Why', 'name' => 'A', :name => 'B') }.to raise_error(ArgumentError)
+        expect(group).not_to be_changed
+      end
+
+      it 'stages nothing where the pair is inside a later value' do
+        expect { group.assign_attributes(note: 'Why', preferences: { 'locale' => 'de', locale: 'en' }) }
+          .to raise_error(ArgumentError, /attribute locale was given twice/)
+        expect(group).not_to be_changed
+      end
     end
   end
 

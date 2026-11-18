@@ -801,6 +801,13 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   told 404 about it and answered `false` for a ticket that exists, and `destroy(ticket)`
   raised `NotFoundError` for one that was right there. An id is an `Integer`, a `String` or
   a `Symbol`; the message names the class of anything else and does not quote it.
+- One attribute given under two spellings raises `ArgumentError` instead of keeping
+  whichever Hash order put last. A record symbolizes the keys of the attributes it is given,
+  so `client.groups.new('name' => 'Support', name: 'Sales')` built a record holding
+  `name: 'Sales'` alone, and an attribute Hash put together from form parameters and
+  defaults lost a value without a word. `create`, `assign_attributes`, `update` and a
+  writer handed a Hash refuse the pair the same way, at any depth, and nothing is staged
+  when they do. It is the refusal a query parameter and a header already had.
 
 ### Changed
 
