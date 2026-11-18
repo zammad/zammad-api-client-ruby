@@ -78,7 +78,11 @@ module ZammadAPI
       return nil if !previous.is_a?(Hash)
 
       sorted_keys(element).each do |key|
-        next if !previous.key?(key)
+        # Taken in the element before only where something was written for
+        # it there. A Hash with no value in it is not written, so the key is
+        # missing from what Rails read, and a pair naming it is read into
+        # that element rather than beginning the next.
+        next if !previous.key?(key) || !written?(previous[key])
 
         value = element[key]
         next if value.is_a?(Array)

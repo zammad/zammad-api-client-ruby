@@ -124,6 +124,20 @@ RSpec.describe ZammadAPI::QueryEncoder do
     it 'is nil where the two share no key' do
       expect(described_class.lead_path({ 'a' => '1' }, { 'b' => '2' })).to be_nil
     end
+
+    # Nothing is written for an empty Hash, so Rails never saw the key in the
+    # element before, and a pair naming it is read into that element.
+    it 'does not take a key the element before holds an empty Hash under' do
+      expect(described_class.lead_path({ 'a' => '2', 'c' => '3' }, { 'a' => {}, 'b' => '1' })).to be_nil
+    end
+
+    it 'does not take one further down either' do
+      expect(described_class.lead_path({ 'a' => { 'x' => '2' } }, { 'a' => { 'x' => {} } })).to be_nil
+    end
+
+    it 'takes another key the two share instead' do
+      expect(described_class.lead_path({ 'a' => '2', 'b' => '3' }, { 'a' => {}, 'b' => '1' })).to eq(['b'])
+    end
   end
 
   describe '.misread' do
@@ -153,6 +167,10 @@ RSpec.describe ZammadAPI::QueryEncoder do
 
     it 'names a Hash holding nothing but such Hashes' do
       expect(described_class.misread({ 'a' => { 'b' => {} } }, nil)).to eq(:empty)
+    end
+
+    it 'names a Hash whose only shared key holds an empty Hash in the element before' do
+      expect(described_class.misread({ 'a' => '2', 'c' => '3' }, { 'a' => {}, 'b' => '1' })).to eq(:merged)
     end
 
     it 'names a list directly inside a list' do
