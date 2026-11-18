@@ -8,15 +8,25 @@
 #     ruby examples/manual_batches.rb
 
 require 'zammad_api'
+require 'digest'
 require 'fileutils'
 require 'tmpdir'
 
-PER_PAGE    = 50
-CURSOR      = File.join(Dir.tmpdir, 'zammad_batch_cursor')
-NEXT_CURSOR = "#{CURSOR}.next".freeze
+PER_PAGE = 50
 
 client  = ZammadAPI::Client.from_env
 tickets = client.tickets.all
+
+# Where the loop in part 3 keeps its checkpoint. A page number says which
+# tickets come next only together with the instance it was counted on, the
+# list it pages and the size of the pages, so the file is named for all
+# three. Under one name for every run, a job stopped at page 4 of one Zammad
+# had the next run against another start at page 4 there, with the first
+# three pages never read - and remove the first job's checkpoint when it
+# finished.
+JOB         = Digest::SHA256.hexdigest("#{client.config.url} api/v1/tickets #{PER_PAGE}")[0, 16]
+CURSOR      = File.join(Dir.tmpdir, "zammad_batch_cursor_#{JOB}")
+NEXT_CURSOR = "#{CURSOR}.next".freeze
 
 # 1. Pull a page when you are ready for it -----------------------------------
 #
