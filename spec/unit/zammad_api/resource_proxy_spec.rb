@@ -691,16 +691,22 @@ RSpec.describe ZammadAPI::ResourceProxy do
       # Read off the URL Faraday built rather than asked of WebMock, which
       # takes a Hash keyed by numbers for an Array and reports
       # `group_ids[][0]=read` for a request that was never sent that way.
+      #
+      # Every pair naming a group, and not only the three that were written.
+      # Looked for as a substring, they were found in a query that named a
+      # fourth group beside them as well, and a group nobody asked for is a
+      # set of agents the search then keeps.
       it 'sends group_ids as a map of group to access, the way Rails reads a nested parameter back' do
         sent     = nil
         recorder = Class.new(Faraday::Middleware) do
-          define_method(:on_request) { |env| sent = URI.decode_www_form_component(env.url.query) }
+          define_method(:on_request) { |env| sent = URI.decode_www_form(env.url.query) }
         end
 
         unit_client(middleware: ->(builder) { builder.use(recorder) })
           .users.search('x', group_ids: { 3 => %w[read change], 4 => 'full' }).to_a
 
-        expect(sent).to include('group_ids[3][]=read&group_ids[3][]=change&group_ids[4]=full')
+        expect(sent.select { |name, _| name.start_with?('group_ids') })
+          .to contain_exactly(['group_ids[3][]', 'read'], ['group_ids[3][]', 'change'], ['group_ids[4]', 'full'])
       end
 
       it 'sends a condition the way Rails reads a nested parameter back' do
