@@ -73,8 +73,12 @@ end
 # neither does anything else here. `find_each` pages by position too: delete
 # ticket 1 once page 1 has been read, and page 2 starts one ticket further
 # on, with the ticket that moved up into page 1 never handed over. No way of
-# reading an index that is paged by position rules that out. A job that has
-# to be sure walks again, until a walk turns up no ticket it has not handled.
+# reading an index that is paged by position rules that out, and walking
+# again does not either: a second walk that tickets are deleted under can
+# pass over the same ticket and turn up nothing new. What settles it is a
+# walk nothing was deleted during, which the job has to be able to vouch
+# for - by holding deletions off while it runs, say - and which turns up
+# no ticket it has not handled.
 
 puts '3. resumable page loop'
 
