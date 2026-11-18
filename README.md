@@ -1,390 +1,1486 @@
-# Zammad API Client (Ruby) [![Gem Version](https://badge.fury.io/rb/zammad_api.svg)](https://badge.fury.io/rb/zammad_api)
+# Zammad API Client (Ruby)
 
-## API version support
-This client supports Zammad API version 1.0.
+[![Gem Version](https://badge.fury.io/rb/zammad_api.svg)](https://badge.fury.io/rb/zammad_api)
+[![CI](https://github.com/zammad/zammad-api-client-ruby/actions/workflows/ci.yml/badge.svg)](https://github.com/zammad/zammad-api-client-ruby/actions/workflows/ci.yml)
+
+---
+
+> [!IMPORTANT]
+> ## 📣 2.0 is taking shape — tell us what you think
+>
+> **Version 2.0 is a breaking release, and it is not finished yet: this is `2.0.0.alpha1`,
+> its first prerelease.** This is the moment when your feedback can still change it: names,
+> defaults, what is missing, what reads wrong, and anything that makes upgrading from 1.x
+> harder than it should be.
+>
+> **[→ Open an issue and tell us](https://github.com/zammad/zammad-api-client-ruby/issues/new)**
+>
+> Especially useful to hear:
+>
+> - Which 1.x calls in **your** code the [migration table](#migrating-from-1x) does not cover.
+> - Endpoints you reach with [raw requests](#raw-requests) that should be modelled resources.
+> - Anything the [test kit](#testing-code-that-uses-this-client) cannot stand in for.
+> - Naming that made you look twice, and defaults you had to override every time.
+>
+> Rough notes are welcome — a half-formed "this felt off" is worth more to us now than a
+> polished report after the release.
+
+---
+
+Ruby client for the Zammad API v1.0.
+
+- Requires **Ruby 3.4** or later.
+- Ships **RBS signatures** in `sig/`, so typed projects get completion and checking out of the box.
+- Requests carry **timeouts** and **retry with backoff** for transient failures by default.
+- Collections are **lazily paginated** `Enumerable`s, with a familiar
+  `order` / `page` / `in_batches` / `find_each` surface.
+- Records support **pattern matching**, and clients are **immutable** and safe to share
+  between threads.
+- **Your own resources** — `client.resource(Role)` gives a class you declare everything a
+  modelled one has — and **raw requests** reach the rest of the API, without giving up
+  authentication, retries or the error classes.
+- A **test kit** (`zammad_api/test`) stands in for a Zammad, so your own tests need no
+  HTTP interception.
+
+> **Upgrading from 1.x?** See [Migrating from 1.x](#migrating-from-1x), which lists every
+> call that changed.
+>
+> **Staying on 1.x?** See [Staying on 1.x](#staying-on-1x) for where its code lives and how
+> to install it.
 
 ## Installation
 
-Add this line to your application's Gemfile:
+2.0 is a prerelease for now, `2.0.0.alpha1`, and a prerelease has to be asked for:
 
 ```ruby
-gem 'zammad_api'
+gem 'zammad_api', '~> 2.0.0.alpha'
 ```
 
-And then execute:
+Or:
 
-    $ bundle
+```sh
+gem install zammad_api --pre
+```
 
-Or install it yourself as:
+`'~> 2.0'` does not match an alpha, and `gem install zammad_api` without `--pre` installs
+1.x.
 
-    $ gem install zammad_api
+### Staying on 1.x
 
-## Available objects
+1.x stays available for a project that is not ready for 2.0, or that runs on a Ruby older
+than 3.4: 1.x needs Ruby 3.0 or later.
 
-* user
-* organization
-* group
-* ticket
-* ticket_article
-* ticket_state
-* ticket_priority
+Its code lives on the
+[`1-stable`](https://github.com/zammad/zammad-api-client-ruby/tree/1-stable) branch, and
+the [README there](https://github.com/zammad/zammad-api-client-ruby/blob/1-stable/README.md)
+documents the 1.x API. To install it, keep the version below 2:
 
-## Usage
+```ruby
+gem 'zammad_api', '~> 1.4'
+```
 
-### Create instance
+Or:
 
-#### Username/email and password
+```sh
+gem install zammad_api -v '~> 1.4'
+```
+
+1.x is in maintenance mode, and will stay there for the foreseeable future: it still gets
+fixes, while new features go into 2.0 only. Report a 1.x problem in the same
+[issue tracker](https://github.com/zammad/zammad-api-client-ruby/issues), naming the
+version, and open a pull request for it against `1-stable`.
+
+## Creating a client
+
+### Access token
 
 ```ruby
 client = ZammadAPI::Client.new(
-  url:      'http://localhost:3000/',
-  user:     'user',
+  url:        'https://zammad.example.com/',
+  http_token: 'your-access-token'
+)
+```
+
+### OAuth2
+
+```ruby
+client = ZammadAPI::Client.new(
+  url:          'https://zammad.example.com/',
+  oauth2_token: 'your-oauth2-token'
+)
+```
+
+### Username and password
+
+```ruby
+client = ZammadAPI::Client.new(
+  url:      'https://zammad.example.com/',
+  user:     'user@example.com',
   password: 'some_pass'
 )
 ```
 
-#### Access token
+A client authenticates one way. Passing more than one of these — a token beside a user and
+password, say — raises `ZammadAPI::ConfigurationError` rather than quietly sending one of
+them.
+
+### From the environment
+
+`from_env` reads `ZAMMAD_URL` and `ZAMMAD_TOKEN` (or `ZAMMAD_USER` and
+`ZAMMAD_PASSWORD`, or `ZAMMAD_OAUTH2_TOKEN`), so a script needs no configuration of its
+own. Anything passed in wins over the environment, credentials included — passing
+`user:` and `password:` replaces a token the environment holds rather than sitting beside
+it. An environment that itself sets more than one way to authenticate is refused, until an
+argument says which is meant:
+
+```ruby
+client = ZammadAPI::Client.from_env
+client = ZammadAPI::Client.from_env(timeout: 300)
+```
+
+### Options
+
+| Option           | Default            | Description                                                        |
+| ---------------- | ------------------ | ------------------------------------------------------------------ |
+| `url`            | *required*         | Base URL. A sub-path such as `https://example.com/zammad/` works; credentials in it are refused. |
+| `http_token`     | `nil`              | Zammad access token.                                               |
+| `oauth2_token`   | `nil`              | OAuth2 bearer token.                                               |
+| `user`           | `nil`              | Login for basic authentication.                                    |
+| `password`       | `nil`              | Password for basic authentication.                                 |
+| `timeout`        | `60`               | Seconds to wait for a response.                                    |
+| `open_timeout`   | `10`               | Seconds to wait for the connection.                                |
+| `retries`        | `2`                | Retry attempts for a `GET` that failed transiently. `0` disables retrying. |
+| `retry_interval` | `0.5`              | Seconds before the first retry; doubles on each attempt. No wait is longer than `timeout`. |
+| `ssl_verify`     | `true`             | Set to `false` only against a server with a self-signed certificate. |
+| `proxy`          | `nil`              | Proxy URL.                                                         |
+| `user_agent`     | `zammad_api-ruby/<version>` | Value of the `User-Agent` header.                         |
+| `logger`         | discards output    | Any `Logger`; the client logs requests and responses at `debug`.    |
+| `adapter`        | Faraday's default  | Name of the Faraday adapter to use.                                |
+| `middleware`     | `nil`              | Callable that receives the Faraday connection while it is built.   |
+
+Credentials are never written to the log, and `client.config` redacts them however it is
+printed — `inspect`, `to_s` or `pp`, which is what a console shows — so a configuration
+object is safe to include in an error report.
+
+Credentials belong in the options above, not in the URL. `https://user:secret@host/` raises
+`ZammadAPI::ConfigurationError`, because the HTTP stack would send those as basic
+authentication in place of the token configured beside them.
+
+### Checking the connection
+
+```ruby
+client.me.email # => "agent@example.com", the account the credentials belong to
+client.version  # => "6.4.0", the Zammad instance's version, for an administrator
+```
+
+`client.me` answers for any account, so it is the check that the client can reach Zammad
+and authenticate. `client.version` is the version of the Zammad instance, and Zammad serves
+it to administrators only: with an agent's or a customer's credentials it raises
+`ZammadAPI::AuthorizationError`. `ZammadAPI::VERSION` is the version of this gem.
+
+### Adapter and middleware
+
+The HTTP stack is Faraday's, and these two options are the seam into it — for a
+persistent-connection adapter, instrumentation, or a cache:
 
 ```ruby
 client = ZammadAPI::Client.new(
-  url:        'http://localhost:3000/',
-  http_token: '12345678901234567890',
+  url:        'https://zammad.example.com/',
+  http_token: 'token',
+  adapter:    :net_http_persistent,
+  middleware: ->(connection) { connection.use(MyInstrumentation) }
 )
 ```
 
-#### OAuth2
+The callable runs last, after this gem's own middleware and before the adapter, so it sees
+requests as the client finished building them and responses before anything else does.
+Faraday stays an implementation detail either way: an unregistered adapter raises
+`ZammadAPI::ConfigurationError`, not a Faraday error.
+
+Faraday's default adapter, `net_http`, opens and closes a connection around every
+request, so a walk of N pages is N TCP connections and N TLS handshakes. That is the
+default because it needs no extra gem; for anything that pages, downloads attachments in a
+loop, or runs a worker pool, add `faraday-net_http_persistent` to your Gemfile and pass
+`adapter: :net_http_persistent` as above. Nothing else changes — the option is the whole of
+it.
+
+Two things the seam will not take, and it says so with a `ZammadAPI::ConfigurationError`
+when the client is built. One is middleware that decodes the response body,
+`connection.response :json`: this gem parses JSON itself, and hands the undecoded bytes
+back as the file from `attachment.download`, so a stack that has already consumed the body
+leaves nothing faithful to return. The other is `connection.response :raise_error`, which
+raises a Faraday error for a 4xx or 5xx before this gem sees the response: nothing would be
+retried, and a missing record would arrive as `Faraday::ResourceNotFound` rather than the
+`ZammadAPI::NotFoundError` your code rescues. A subclass of either is refused for what it
+inherits.
+
+## Available resources
+
+`groups`, `organizations`, `tickets`, `ticket_articles`, `ticket_priorities`,
+`ticket_states`, `users`
+
+`client.resource_names` returns the current list.
+
+The names are plural because what each one hands back stands for every record of its kind:
+`client.tickets.each` walks them all, and `client.tickets.find(1)` picks one out. The
+singular names from 1.x — `client.ticket` and the rest — still work as deprecated aliases;
+see [Migrating from 1.x](#the-client).
+
+Anything not in that list is reachable by [declaring a resource](#resources-this-gem-does-not-model)
+for it, or with [raw requests](#raw-requests).
+
+### Coverage
+
+What each major version of this gem models, set against what Zammad's API serves. A check
+is a class or a method of the gem's own; an empty box is something 2.0 does not model yet.
+
+|                                                  | 1.x | 2.0 |
+| ------------------------------------------------ | :-: | :-: |
+| **Records**                                      |     |     |
+| Tickets                                          | ✅  | ✅  |
+| Ticket articles                                  | ✅  | ✅  |
+| Article attachments                              | ✅  | ✅  |
+| Ticket states                                    | ✅  | ✅  |
+| Ticket priorities                                | ✅  | ✅  |
+| Users                                            | ✅  | ✅  |
+| Organizations                                    | ✅  | ✅  |
+| Groups                                           | ✅  | ✅  |
+| Text modules                                     |     | ⬜  |
+| **Ticket features**                              |     |     |
+| Tags                                             |     | ⬜  |
+| Links                                            |     | ⬜  |
+| Mentions                                         |     | ⬜  |
+| Time accounting                                  |     | ⬜  |
+| Checklists                                       |     | ⬜  |
+| Shared drafts                                    |     | ⬜  |
+| Merge                                            |     | ⬜  |
+| History                                          |     | ⬜  |
+| **Knowledge base**                               |     |     |
+| Knowledge bases                                  |     | ⬜  |
+| Categories                                       |     | ⬜  |
+| Answers, and publishing them                     |     | ⬜  |
+| Answer attachments                               |     | ⬜  |
+| Search                                           |     | ⬜  |
+| **Across resources**                             |     |     |
+| Global search                                    |     | ⬜  |
+| CSV imports (users, organizations, text modules) |     | ⬜  |
+
+An empty box in the 2.0 column is not out of reach: [declare a resource](#resources-this-gem-does-not-model)
+for an endpoint that serves records, or use [raw requests](#raw-requests) for one that does
+not. The empty boxes are also where this gem grows next —
+[open an issue](https://github.com/zammad/zammad-api-client-ruby/issues/new) for the one
+you need, so we know what to model first.
+
+### Resources this gem does not model
+
+A resource is a class with a path. Declare one for an endpoint that serves records the way
+the modelled ones do — an index, and a member under its id — and `client.resource` hands
+you the same thing `client.tickets` is:
 
 ```ruby
-client = ZammadAPI::Client.new(
-  url:          'http://localhost:3000/',
-  oauth2_token: '12345678901234567890',
-)
+class Role < ZammadAPI::Resources::Base
+  path 'api/v1/roles'
+end
+
+roles = client.resource(Role)
+
+roles.each { |role| puts role.name }        # paginated, like any other
+roles.find(2).update(note: 'Reviewed')      # change tracking and save
+roles.create(name: 'Auditor')
+roles.find_by(name: 'Agent')
 ```
 
-## Resource management
+Say what else is true of the endpoint, where it differs from the defaults:
 
-Individual resources can be created, modified, saved, and destroyed.
+| Declaration        | Default | Says                                                                 |
+| ------------------ | ------- | -------------------------------------------------------------------- |
+| `path '…'`         | *required* | The index endpoint, relative to the instance URL.                 |
+| `searchable true`  | `false` | Zammad routes `<path>/search`, so `search` works and `find_by` uses it. |
+| `search_filters :role_ids` | none | What that search narrows by besides the term, `condition:` and `ids:`. `search` refuses any other keyword. |
+| `max_per_page 100` | `1000`  | The largest page the index endpoint serves.                          |
+| `sortable false`   | `true`  | The index endpoint is always served in the same order, so `order` refuses it. |
+| `belongs_to :role, class_name: 'Role'` | — | A foreign key, read as a record through `record.related.role`. |
+| `has_many :members, class_name: 'User', path: ->(id) { "…/#{id}" }` | — | A list served whole by an endpoint of its own. |
 
-### Create object
+`class_name` is a resource of this gem by its own name, `'User'`, or a class of yours by its
+full name, `'Acme::Role'`. A subclass of a modelled resource works too, and inherits what
+its parent declares: `class MyTicket < ZammadAPI::Resources::Ticket`.
 
-With new and save:
+Use raw requests for an endpoint that is not shaped like that — an action, a report, a
+setting.
+
+## Raw requests
+
+`get`, `post`, `put` and `delete` reach any endpoint of the Zammad API, without giving up
+authentication, timeouts, retries, credential redaction, JSON decoding or the error
+classes. Use them for the endpoints that are not a list of records, and for a one-off call
+to one that is.
+
 ```ruby
-group = client.group.new(
-  name: 'Support',
-  note: 'Some note',
-);
+client.get('api/v1/roles').body
+# => [{id: 1, name: "Admin", ...}, ...]
+
+client.post('api/v1/tags/add', query: {object: 'Ticket', o_id: 1, item: 'urgent'})
+client.put('api/v1/roles/2', body: {note: 'Updated'})
+client.delete('api/v1/tags/remove', query: {object: 'Ticket', o_id: 1, item: 'urgent'})
+```
+
+All four take `headers:`, for an endpoint that needs one:
+
+```ruby
+client.get('api/v1/tickets/1', headers: {'Accept-Language' => 'de-de'})
+```
+
+Names are case-insensitive, and two spellings of one header are refused rather than merged.
+`Authorization` and `From` are refused outright: the first is what the client's credentials
+are for, the second is what `on_behalf_of` sets, and replacing either from a single request
+would leave the client reporting something it no longer does.
+
+Each returns a `ZammadAPI::Response`, so the status and headers stay reachable:
+
+```ruby
+response = client.get('api/v1/tickets')
+response.status              # => 200
+response.headers['content-type']
+response.body                # decoded JSON, or the raw body for anything else
+response.raw_body            # the bytes as they arrived
+response.json?               # => whether the body was decoded
+```
+
+Zammad reports the size of a result in the body rather than in a header, and only
+where you ask for it: `only_total_count=true` or `with_total_count=true` on a `/search`
+endpoint, and `full=true` on the index endpoints that render through
+`model_index_render`. `count` on a search collection uses the first of those.
+
+Paths are relative to the instance URL, and a leading slash is ignored, so they can be
+pasted straight from the Zammad documentation. An absolute URL raises `ArgumentError`: the
+client's credentials only ever go to the instance it was configured for, so a link taken
+from a response body has to be reduced to its path first. A path is written the way a URL
+is, so a space or a character outside ASCII has to be percent-encoded, `t%C3%A4gs` for
+`tägs`; one that cannot be read as a URL raises `ArgumentError` too, before anything is
+sent or logged. A non-2xx response raises the same error class it would raise for a
+modelled resource, and only a `GET` is retried.
+
+## Working with records
+
+### Create
+
+```ruby
+group = client.groups.new(name: 'Support', note: 'Some note')
 group.save
 
-group.id # id of record
-group.name # 'Support'
+group.id   # => 42
+group.name # => "Support"
 ```
 
-With create:
-```ruby
-group = client.group.create(
-  name: 'Support',
-  note: 'Some note',
-);
+Or in one call:
 
-group.id # id of record
-group.name # 'Support'
+```ruby
+group = client.groups.create(name: 'Support', note: 'Some note')
 ```
 
-### Fetch object
+### Fetch
 
 ```ruby
-group = client.group.find(123)
-puts group.inspect
+group = client.groups.find(42)
+group.name         # => "Support"
+group[:name]       # same, and nil rather than an error when it is absent
+group.fetch(:name) # raises KeyError if the attribute is absent
+group.key?(:name)  # => true
+group.to_h         # every attribute, as a Hash you may modify
 ```
-### Update object
+
+Or by attribute value:
 
 ```ruby
-group = client.group.find(123)
+client.users.find_by(email: 'someone@example.com') # => the record, or nil
+client.users.find_by!(email: 'nobody@example.com') # raises NotFoundError
+client.groups.exists?(42)                          # => true
+```
+
+`find_by` answers with the first record that carries those values, and `nil` if it finds
+none, on every resource and for any kind of value. Zammad cannot be asked that directly,
+because its index endpoints cannot filter — see [Narrowing](#narrowing) — so `find_by`
+fetches candidates and checks them itself. A record it returns genuinely carries the
+attributes you asked for, compared exactly and against the value as Zammad stores it, so
+`find_by(email: 'Someone@Example.com')` does not match a login Zammad downcased. What a
+`nil` means depends on how the candidates were fetched: after a walk, that no record this
+client can read carries the values; after a search, that no hit does, and a search reads
+less than the whole record, as described below.
+
+There are two ways it fetches the candidates, and they cost differently:
+
+```ruby
+client.users.find_by(email: 'someone@example.com', active: true) # searches the email, matches both
+client.users.find_by(firstname: 'Jane', lastname: 'Doe')         # searches "Jane", matches both
+client.ticket_states.find_by(name: 'open')                       # no search endpoint: walks the list
+client.users.find_by(organization_id: 5)                         # no string to search on: walks the index
+```
+
+A search is the cheap way, and is used wherever the resource has a search endpoint and one
+of the values is a string. The term is one string value, because Zammad matches words: a
+value of another type would go out as the word it prints as, so `active: true` would look
+for records containing `"true"`. Every other value is matched against the hits.
+
+Everywhere else `find_by` walks the index, a page at a time, until a record matches. That
+is one request for a list of ticket states. Against every user or ticket on an instance it
+is a request per page until the match, and the whole index for a miss — the same walk
+`all.detect { ... }` makes, so give `find_by` a string to search on where there is one.
+
+The values are never joined into one term. An instance searching without Elasticsearch
+matches the term literally, through a SQL `LIKE` over each string column, so `"Jane Doe"`
+would ask for a single column containing the whole of it and match nobody.
+
+`find_by` reads the hits a page at a time until one matches, so a match usually costs one
+request and a miss costs one per page of hits. It cannot stop at the first page: Zammad's
+search sorts by `updated_at`, newest first, rather than by relevance, so where a few
+hundred records contain the term the one that carries it exactly can be on any page.
+
+What the search can surface is Zammad's business: a value the instance has not indexed, or
+cannot index, is a record `find_by` will not find. `find_by(...) || create(...)` can
+therefore still create a duplicate — as writing the search out by hand would.
+
+Which values those are depends on the instance. With Elasticsearch the term is looked for
+in everything a record is indexed with. Without it, Zammad reads a fixed set of columns:
+
+| Resource                            | What a search without Elasticsearch reads                      |
+| ----------------------------------- | -------------------------------------------------------------- |
+| `users`, `organizations`, `groups`  | The string columns of the record's own table.                  |
+| `tickets`                           | The title and number, and the from, to, subject and body of the ticket's articles. |
+
+Neither reads a name `expand` adds for an association, which is not a column, and a ticket
+search reads no other attribute of the ticket. So on such an instance these look for the
+word in fields that do not hold the value. They find the record only where the word
+happens to appear in one of those fields as well, and otherwise answer `nil` for a record
+that exists:
+
+```ruby
+client.tickets.find_by(state: 'open')           # the state is not among what a ticket search reads
+client.tickets.find_by(external_ref: 'SO-1001') # nor is a custom attribute of a ticket
+client.users.find_by(organization: 'Acme')      # a name expand adds, not a column
+```
+
+`find_by` does not walk the index after a search that found nothing. A miss is the ordinary
+case for `find_by(email: ...) || create(...)` on an address that is new, and that walk would
+read every user on the instance to confirm it, a thousand to the request. Nothing in a
+response says which backend answered, so `find_by` cannot tell that miss from one caused by
+a field the search does not read. You can, and the walk is one word away:
+
+```ruby
+client.tickets.detect { it[:state] == 'open' }  # walks the index: every ticket this client may read
+client.tickets.search('printer', condition: {'ticket.state_id' => {operator: 'is', value: [2]}})
+```
+
+The walk compares `it[:state]`, as `find_by` does, and not `it.state`. Every record the
+client may read goes through the block, and a reader raises for an attribute the record in
+hand does not carry, which would end the walk on that record rather than pass it over. A
+user without an organization carries no `organization`, and Zammad serves a reduced record
+where the client may not see the whole of one. What the walk cannot find is a record the
+client may not read, or a value on a record it only sees reduced.
+
+Zammad records can carry administrator-defined custom attributes, so readers are resolved
+against the attributes the record arrived with rather than declared ahead of time. A reader
+for an attribute the record does not carry raises `NoMethodError`, naming what it does
+carry — a typo is not worth a silent `nil` that flows on into whatever you write with it:
+
+```ruby
+group.titel          # NoMethodError: undefined attribute titel for ...
+group[:titel]        # => nil
+group.fetch(:titel, nil) # => nil
+group.key?(:titel)   # => false
+```
+
+That matters beyond typos: Zammad serves a reduced object where the authenticated user may
+not see the whole record, so an attribute that exists in Zammad can be missing here. The
+message says so. Use `[]`, `fetch` with a default, or `key?` wherever an attribute may
+legitimately be absent.
+
+`attributes` and `changes` are deeply frozen, because a record that let you write into
+them would report a change it had never staged and would not send:
+
+```ruby
+group.attributes[:name] = 'Support 2' # FrozenError
+group.name = 'Support 2'              # the way to stage a change
+group.to_h                            # a deep copy, yours to modify
+```
+
+### Pattern matching
+
+Records implement `deconstruct_keys`, so they work with `case/in`:
+
+```ruby
+case client.tickets.find(1)
+in {state: 'closed'}
+  nil
+in {state: String => state, priority: '3 high'}
+  escalate(state)
+in {group: {name: 'Support'}}
+  notify_support
+end
+```
+
+`Config` and `Response` are `Data` objects, so their members match too:
+
+```ruby
+case client.config
+in {http_token: String}
+  :token_auth
+in {user: String, password: String}
+  warn 'prefer an access token over basic auth'
+end
+```
+
+### Update
+
+```ruby
+group = client.groups.find(42)
 group.name = 'Support 2'
-group.save
+
+group.changed? # => true
+group.changes  # => {name: ["Support", "Support 2"]}
+
+group.save     # sends only the changed attributes
 ```
 
-### Destroy object
+A `save` on a persisted record with nothing staged sends no request at all and returns
+`true`. Zammad applies an empty update, bumping `updated_at` and `updated_by`, so a no-op
+save would otherwise rewrite the record's audit trail.
+
+Writing back the value a record was loaded with is not a change, so it stages nothing.
+Writing an attribute the record does not carry always is one, even when the value is `nil`:
+Zammad reduces the object it serializes for a permission-scoped client, so a key being
+absent says nothing about what is stored, and `group.note = nil` is a request to store
+`nil` rather than a write to drop.
+
+Or in one call:
 
 ```ruby
-group = client.group.find(123)
-group.destroy
+group.update(name: 'Support 2', note: 'Renamed')  # assigns, then saves
+group.assign_attributes(name: 'Support 3')        # assigns without saving
 ```
 
-## Collection management
+### Saving and validation failures
 
-A list of individual resources.
-
-### All
+`save` returns whether the record was stored, and leaves a rejection in `error`:
 
 ```ruby
-groups = client.group.all
+group = client.groups.new(name: '')
 
-group1 = groups[0]
-group1.note = 'Some note'
-group1.save
+if group.save
+  puts group.id
+else
+  warn group.error.server_message # => "Name is required"
+end
+```
 
-groups.each {|group|
-  p "group: #{group.name}"
-}
+Only a rejection of the attributes (HTTP 422) is reported that way. An expired token, a
+missing record or an unreachable instance still raises, because those are not something
+the calling code can correct by fixing an attribute.
+
+`save!` and `update!` raise on every failure, including validation, which is what you want
+in a script:
+
+```ruby
+group.save!               # raises ZammadAPI::ValidationError
+group.update!(name: '')   # the same, in one call
+```
+
+`client.groups.create(...)` uses `save!`, so it raises rather than handing back a record
+that looks created but is not. Use `new` plus `save` when you need to branch instead.
+
+### Associations
+
+Zammad expands an association into a name under the plain attribute, so those reads are
+already loaded and free:
+
+```ruby
+ticket = client.tickets.find(1)
+
+ticket.customer    # => "customer@example.com"
+ticket.state       # => "open"
+ticket.group       # => "Users"
+ticket.customer_id # => 7
+```
+
+`related` reaches the whole record behind one of those, which costs a request:
+
+```ruby
+ticket.related.customer.firstname     # => "Nicole"
+ticket.related.group.note
+ticket.related.articles               # => [TicketArticle, ...]
+ticket.related.created_by.email
+
+client.users.find(7).related.organization
+```
+
+A `has_many` reader such as `articles` is the one list here that is read in a single
+request and comes back as an Array rather than a paginating collection, because the
+association endpoints Zammad routes serve the whole list: `ticket_articles/by_ticket`
+renders every article of the ticket and takes no paging parameter.
+
+A ticket's articles are also reachable without `related`, and `add_article` writes one:
+
+```ruby
+ticket.articles                                              # the same list
+ticket.add_article(body: 'Reset link sent.', type: 'note')  # => the created TicketArticle
+```
+
+The readers live under `related` rather than on the record so that `ticket.customer` keeps
+returning the name it always did — an attribute read that silently became an HTTP request
+would be a poor trade. `belongs_to` targets are memoized, and `reload`, a save or a write
+to the foreign key drops the memo; `has_many` lists are fetched each call, so an article
+added in between shows up. A record hands out the same `related` every time, so one kept in
+a variable follows the record too: after `related = ticket.related` and
+`ticket.customer_id = 9`, `related.customer` is user 9.
+`Ticket.associations` lists what a resource declares.
+
+### Comparing and serializing
+
+A record is the Zammad record it came from, not the object that happens to hold it, so two
+records of the same kind carrying the same id, read from the same Zammad, are equal. That
+makes `uniq`, `Set`, `include?` and records-as-Hash-keys behave:
+
+```ruby
+client.tickets.find(1) == client.tickets.find(1)  # => true
+
+[client.tickets.find(1), client.tickets.find(1)].uniq.size # => 1
+Set[client.tickets.find(1), client.tickets.find(1)].size   # => 1
+seen = { client.tickets.find(1) => :handled }
+seen[client.tickets.find(1)]                              # => :handled
+```
+
+A record with no id is equal only to itself, because two unsaved records are two records
+waiting to be created however alike their attributes are. One consequence: a record's first
+save assigns its id and so changes its hash, and a record used as a Hash key before that
+save has to be rehashed after it.
+
+Which Zammad a record came from is the `url` its client was configured with. A script that
+reads two instances, such as a migration or a sync, therefore keeps ticket 1 of each apart,
+while two clients for one URL, or a client and its `on_behalf_of` scope, hold the same
+record.
+
+`to_json` renders the attributes, so a record can be cached, queued or logged as it stands,
+and nests inside a structure being generated:
+
+```ruby
+client.groups.find(1).to_json          # => "{\"id\":1,\"name\":\"Support\"}"
+JSON.generate(group: client.groups.find(1))
+```
+
+`as_json` returns the same attributes as a Hash, for ActiveSupport and any encoder that
+follows its convention.
+
+### Reload and destroy
+
+```ruby
+group.reload  # re-reads from Zammad, discarding unsaved changes
+group.destroy # => true
+
+group.destroyed?  # => true
+group.persisted?  # => false, so this is not the inverse of new_record?
+group.save        # raises: the record is gone, and a PUT would only 404
+group.update(...) # raises too, and stages nothing, so the record stays unchanged
+group.name = 'X'  # raises as well: a destroyed record reads as it last was in Zammad
+
+client.groups.destroy(42) # delete by id, without fetching first
+```
+
+## Collections
+
+`all`, `order` and `search` return a lazily paginated `ZammadAPI::Collection`. No request
+is made until you iterate, and pages are fetched as needed.
+
+A resource proxy is itself `Enumerable` over `all`, so `.all` is optional:
+
+```ruby
+client.tickets.each { |ticket| puts ticket.title }
+client.tickets.first(5)
+client.tickets.pluck(:title)
+client.tickets.find_each(batch_size: 50) { |ticket| archive(ticket) }
+```
+
+`find` keeps its own meaning there — `client.tickets.find(1)` is a lookup by id, not
+`Enumerable#find`. Use `detect` for the block form.
+
+```ruby
+# Walks every page automatically.
+client.tickets.all.each do |ticket|
+  puts ticket.title
+end
+
+# Stops after the first page, because Enumerable stops consuming.
+first_five = client.tickets.all.first(5)
+
+# Lazy chains work as expected.
+client.tickets.all.lazy.select { |t| t.state == 'open' }.first(10)
+
+# One array of records per request, e.g. for a bulk import.
+client.tickets.all.in_batches(of: 50) do |tickets|
+  import(tickets)
+end
+
+# Record by record, with the page size set inline.
+client.tickets.all.find_each(batch_size: 50) do |ticket|
+  archive(ticket)
+end
+```
+
+### Sorting
+
+`order` sorts on the server:
+
+```ruby
+client.groups.order(:name)                 # ascending
+client.organizations.order(name: :desc)
+client.groups.order(:active, name: :desc)  # by active, then by name descending
+client.tickets.search('state.name:open').order(created_at: :desc)
+```
+
+An attribute on its own sorts ascending and a keyword says which way one runs, as in
+ActiveRecord. A second `order` sorts within the first, so
+`order(:active).order(name: :desc)` is the third line above.
+
+Not every endpoint sorts. `/api/v1/tickets` and `/api/v1/users` are always served in id
+order — their controllers hardcode it and drop `sort_by` along with everything else they
+do not read — so `order` on those raises `ArgumentError` rather than handing back records
+it would be calling sorted. A search sorts for every resource that can be searched:
+
+```ruby
+client.tickets.order(:title)
+# ArgumentError: api/v1/tickets is always served in the same order and ignores sort_by,
+# so order would hand back the records as they were. A search does sort: ...
+
+client.tickets.search('state.name:open').order(:title)
+```
+
+### Narrowing
+
+**Zammad's index endpoints do not filter.** `ApplicationController#model_index_render`
+sorts and pages and drops every other parameter. Filtering by an attribute value exists
+only on the `/search` endpoints, which is why a collection has no `where`: there is nothing
+an index endpoint would do with what it was given.
+
+Narrow by a value with [`find_by`](#fetch) for one record, or `search` for many:
+
+```ruby
+client.users.find_by(email: 'someone@example.com')
+client.tickets.search('state.name:open').first(10)
+```
+
+`search` also takes the other things a search endpoint narrows by, as keywords:
+`condition:` and `ids:` on every search, and `role_ids:`, `group_ids:` and `permissions:`
+on users, the one search that reads them:
+
+```ruby
+client.users.search('smith', role_ids: [2])
+client.users.search('smith', group_ids: [1], permissions: ['ticket.agent'])
+client.users.search('smith', group_ids: {1 => ['read']})
+client.tickets.search('printer', condition: {'ticket.state_id' => {operator: 'is', value: [1, 2]}})
+client.tickets.search('printer', condition: {'ticket.group_id' => {operator: 'is', value: [2]}})
+```
+
+A `condition` may nest groups of conditions, the form Zammad calls expert mode:
+
+```ruby
+client.tickets.search('printer', condition: {
+  operator:   'OR',
+  conditions: [
+    {name: 'ticket.state_id', operator: 'is', value: [2]},
+    {operator: 'AND', conditions: [
+      {name: 'ticket.group_id', operator: 'is', value: [1]},
+      {name: 'ticket.priority_id', operator: 'is', value: [3]}
+    ]}
+  ]
+})
+```
+
+A query string does not mark where one element of a list ends, and Rails begins a new one
+only at a key the element before it has too. The elements above all carry `operator`, and
+the client writes that first, so they arrive as written. A list whose elements share no
+such key, a list directly inside a list, an empty Hash inside a list and a key with an empty
+name cannot be carried at all and raise `ArgumentError`; the JSON body of `client.post` takes
+any structure.
+
+`group_ids:` narrows to the agents with access to a group, and its two forms ask for
+different access. A list of ids names no access, and Zammad reads that as `full`:
+`group_ids: [1]` leaves out an agent who may only read group 1. A Hash names the access
+for each group — `read`, `create`, `change`, `overview` or `full`, one or several — and
+an agent with `full` access always counts: `group_ids: {1 => ['read']}` is every agent
+with `read` or `full` access to group 1. Access granted through a role counts like access
+granted to the user, and an agent matching any one of the groups is kept.
+
+`permissions:` is not an access check. Zammad resolves it to the roles that grant one of
+the permissions and adds those to `role_ids:`, so the two together keep a user with any
+of the roles, not one with both. And where the instance searches through Elasticsearch, a
+permission that no active role grants resolves to no role at all, and Zammad then leaves
+the filter out: `permissions: ['ticket.agnet']`, or a permission nobody has been given,
+comes back with every user matching the term. Without Elasticsearch the same search is
+empty, and nothing in the response says which of the two answered. `role_ids:` narrows
+on both.
+
+`role_ids:` is not an access check either. It asks who holds a role, and Zammad does not
+ask whether the role still grants anything: a user matches a role that has been disabled,
+and a user who has been deactivated matches as well, though neither can do what the role
+allowed. So the hits are candidates. Where the result decides what someone may do, check
+each one: the user's `active`, and the `active` and the permissions of the roles in
+their `role_ids`, which `client.resource` reaches at `api/v1/roles`.
+
+Any other keyword raises `ArgumentError`. Zammad drops a parameter it does not know, so
+`search('smith', active: true)` would come back unnarrowed with nothing to say so; an
+attribute value goes in the term, a sort in `order`, and paging in `page`, `in_batches` or
+`find_each`. A user keyword on another resource raises for the same reason: Zammad takes
+`group_ids` on a ticket search and drops it, so tickets are narrowed by group with the
+condition above. A `nil` value raises too: there is no query string that means "this field
+is null". So does a keyword with nothing in it, such as `ids: []`, `condition: {}`, or a
+condition that holds nothing but empty Hashes, which a query string does not write. Zammad
+reads that as the keyword not having been given, so `search('smith', ids: allowed_ids)`
+with no id allowed would come back with every user matching the term rather than none.
+
+Zammad routes a search endpoint per model, not for every model. `users`, `organizations`,
+`tickets` and `groups` have one; `ticket_states`, `ticket_priorities` and `ticket_articles`
+do not, and `search` on those raises `ZammadAPI::Error` rather than reaching a 404 that
+would read as a missing record. `find_by` works on them all the same, by walking the list:
+
+```ruby
+client.ticket_states.find_by(name: 'open')
+client.ticket_priorities.select { it.active }
 ```
 
 ### Search
-```ruby
-groups = client.group.search(query: 'some name')
-
-group1 = groups[0]
-group1.note = 'Some note'
-group1.save
-
-groups.each {|group|
-  p "group: #{group.name}"
-}
-```
-
-### All with pagination (beta)
 
 ```ruby
-groups = client.group.all
-
-groups.page(1,3) {|group|
-  p "group: #{group.name}"
-
-  group.note = 'Some new note, inclued in page 1 with 3 per page'
-  group.save
-}
-
-groups.page(2,3) {|group|
-  p "group: #{group.name}"
-
-  group.note = 'Some new note, inclued in page 2 with 3 per page'
-  group.save
-}
-```
-
-### Search with pagination (beta)
-```ruby
-groups = client.group.search(query: 'some name')
-
-groups.page(1,3) {|group|
-  p "group: #{group.name}"
-
-  group.note = 'Some new note, inclued in page 1 with 3 per page'
-  group.save
-}
-
-groups.page(2,3) {|group|
-  p "group: #{group.name}"
-
-  group.note = 'Some new note, inclued in page 2 with 3 per page'
-  group.save
-}
-```
-
-## Perform actions on behalf of another user
-
-As described in the [Zammad API documentation](https://docs.zammad.org/en/latest/api/intro.html#actions-on-behalf-of-other-users) it is possible to perfom actions on behalf other users. To use this feature you can set the attribute of the client accordingly:
-
-> **Note:** This feature requires Zammad 5.0 or later, since the client sends the standard HTTP `From` header instead of the deprecated `X-On-Behalf-Of` header (see [zammad/zammad#3113](https://github.com/zammad/zammad/issues/3113)).
-
-```ruby
-client.on_behalf_of = 'some_login'
-```
-
-All following actions with the client will be performed on behalf of the user with the `login` "some_login".
-
-To reset this back to regular requests just set `nil`:
-
-```ruby
-client.on_behalf_of = nil
-```
-
-It's possible to perform only a block of actions on behalf of another user via:
-
-```ruby
-client.perform_on_behalf_of('some_login') do
-  # ticket is created on behalf of the user with
-  # the login "some_login"
-  client.ticket.create(
-    ...
-  )
+client.organizations.search('zammad').each do |organization|
+  puts organization.name
 end
-
-# further actions are performed regularly.
 ```
+
+A term with nothing in it, Unicode spaces included, raises `ArgumentError`: Zammad reads it
+as no term at all and answers with every record, which a search for an empty form field
+should not come back with. `search('*')` asks for every record in so many words, and is
+sent; it is how Zammad's own interface lists users, and the keywords above still narrow it.
+
+### Explicit pages
+
+```ruby
+tickets = client.tickets.all
+
+tickets.page(2)           # page 2 at the size the endpoint serves
+tickets.page(2, per_page: 10)   # records 11 to 20
+```
+
+Collections are immutable: `order` and `page` return a new collection and leave the
+original untouched.
+
+### Page size
+
+A request fetches as many records as the endpoint will serve — 100 for `/api/v1/tickets`,
+200 for a search, 1000 for the other index endpoints — so a walk spends as few round trips
+as it can. Three calls take another size, each for its own kind of work:
+
+```ruby
+client.tickets.all.find_each(batch_size: 50) { |ticket| archive(ticket) }  # walking
+client.tickets.all.in_batches(of: 50) { |tickets| import(tickets) }        # batching
+client.tickets.all.page(2, per_page: 100)                                  # one page
+```
+
+`find_each` without a block is an Enumerator, so it is also how you read at a chosen page
+size: `client.tickets.all.find_each(batch_size: 50).first(7)`.
+
+`page` and a batch size are two ways of naming the same thing, so combining them raises:
+`page(3, per_page: 50)` already says which records the collection holds, and re-sizing it would
+quietly hand back different ones. Size the page itself, or slice with `each_slice`.
+
+That cap is also the ceiling. `find_each` and `in_batches` are reduced to it: a
+batch size is how much to fetch at a time, so a smaller one costs more requests and still
+yields every record. `page` raises instead, because a page size also says *which* records
+you get — `page(3, per_page: 500)` reduced to 100 hands back records 201 to 300 rather than 1001
+to 1500. So `in_batches(of: 500)` over tickets yields batches of 100, while
+`page(3, per_page: 500)` over tickets is refused.
+A walk learns the size the endpoint actually serves from the first page rather than trusting
+that cap, so an instance that pages smaller than expected is walked to the end rather than
+truncated at the first short page.
+That keeps a walk complete: a page size the server silently shrank would otherwise end the
+iteration at the first page.
+
+A search is walked until a page comes back empty, whatever the size of the pages before it.
+Zammad has the search name the ids for a page and then loads those records, so a record
+deleted in between, or one Elasticsearch still lists after it was removed, leaves the page
+short with more hits behind it. A short page therefore ends the walk of an index and not of
+a search, which costs a search one more request where its last page of hits is part-filled.
+
+A page can come back with nothing on it for the same reason, and on the page of one that
+`first` and `empty?` ask for, one stale hit is enough — at the top of the result, since a
+search serves the newest first. So a search that is walked asks Zammad for the size of the
+whole result beside each page, with `with_total_count`, and an empty page ends the walk
+only once the pages read have covered that many hits. The total is never what ends a walk
+on a page that still held records.
+
+Three limits remain, and at each an empty page ends the walk whatever is behind it. A
+Zammad before 6.5.1 does not report the total beside expanded records. Elasticsearch stops
+counting at ten thousand hits, so past that many a page of stale hits reads as the end. And
+the pages read are reckoned at the size that was asked for, 200 hits unless a batch size
+says otherwise: an instance that serves a search in smaller pages than that has covered
+fewer hits than the walk takes it to have. Asked for 200 and served 50, an empty first page
+beside a total of 150 reads as the end, with the hits from the 51st on unread. On such an
+instance `first`, `take` and `empty?` can also miss hits behind stale ones, since the
+larger pages they ask for past an empty one (see below) are served from other positions
+than the ones asked for. A hit served twice that way is handed back once. Zammad itself
+serves a search 200 at a time.
+
+`first` and `take` size their own request rather than taking records off the front of one
+sized for walking, so the cheap-looking call is cheap:
+
+```ruby
+client.tickets.all.first        # one request, for one record
+client.tickets.all.first(5)     # one request, for five
+client.tickets.all.take(5)      # the same, and the same cost
+```
+
+They size the request, not the collection, so they still read on where a page comes back
+shorter than it was asked for — `first(5)` answers with five records if five exist, however
+the endpoint chooses to page them. A collection `page` already limited keeps its own size,
+since that size says which records it holds.
+
+On a search, the size is where the read starts and not what it is held to. Past a page with
+nothing on it and hits still behind it, `first`, `take` and `empty?` ask for more at a
+time, each page starting where the last one ended, up to the 200 a search serves and never
+past the total it reported. Held to a page of one they paid a request for every stale hit
+in a row, which is thousands of them where an Elasticsearch index has drifted from the
+database. Held to the total, they stay inside an index whose result window was lowered
+below the hits there are, which refuses a page reaching past it and is answered as no hits
+at all. A batch size you chose, with `in_batches(of:)` or `find_each(batch_size:)`, is
+never changed.
+
+### Reading single attributes
+
+```ruby
+client.users.all.pluck(:email)        # => ["a@example.com", ...]
+client.tickets.all.pluck(:id, :title) # => [[1, "Help"], ...]
+```
+
+Zammad cannot be asked for a subset of the fields, so this shapes the result rather than
+shrinking the request.
+
+### Counting
+
+`count` is one request on a search, which Zammad can answer without serving the records.
+Every other endpoint has to be walked, because an index endpoint offers nothing cheaper:
+`model_index_render` reads `sort_by`, `order_by` and the paging and drops every other
+parameter, so it has no answer for `only_total_count` and no total to report.
+
+```ruby
+client.tickets.search('state.name:open').count   # one request
+client.tickets.all.count                         # one request per page
+```
+
+`size` and `length` are `count`, and cost the same. `empty?` and `first` ask for a single
+record rather than a page:
+
+```ruby
+client.tickets.search('state.name:merged').empty? # one request, for one record
+client.groups.all.size                            # => 12, having walked
+```
+
+A block or an argument is `Enumerable#count` counting matches, and walks either way:
+
+```ruby
+client.tickets.all.count { it.state == 'open' }  # walks every page
+```
+
+Nothing is cached, so every traversal of a collection fetches again.
+
+### `find` is a lookup, not a filter
+
+`find` on a resource takes an id. On a collection it is `Enumerable#find`, which takes a
+block — and its argument is an ifnone callable, not an id, so passing one is refused rather
+than answered with an Enumerator and no request:
+
+```ruby
+client.tickets.find(1)                 # the lookup by id
+client.tickets.all.detect { ... }      # the block form
+client.tickets.all.find { ... }        # the same
+client.tickets.all.find(1)             # ArgumentError, naming both of the above
+```
+
+## Deriving clients
+
+A client is immutable. `with` returns a new one with some options changed, re-validating
+them and carrying over any `on_behalf_of` scope:
+
+```ruby
+bulk = client.with(timeout: 300, retries: 5)
+bulk.tickets.all.each { |ticket| archive(ticket) }
+```
+
+Naming credentials replaces the ones the client has, whichever kind they were, so
+`client.with(oauth2_token: '…')` on a client built with an access token authenticates with
+the OAuth2 token alone.
+
+Because nothing is mutated after construction, one client — and any client derived from it —
+is safe to use from several threads at once.
+
+## Acting on behalf of another user
+
+As described in the [Zammad API documentation](https://docs.zammad.org/en/latest/api/intro.html#actions-on-behalf-of-other-users),
+actions can be performed on behalf of another user. `on_behalf_of` returns a **new**
+client, so the original is unaffected and both are safe to use concurrently.
+
+```ruby
+support = client.on_behalf_of('agent@example.com')
+support.tickets.create(title: 'Help', group: 'Users', customer_id: 1)
+```
+
+Or scoped to a block:
+
+```ruby
+client.on_behalf_of('agent@example.com') do |scoped|
+  scoped.tickets.find(1)
+end
+```
+
+The identifier can be a login, an email address or a user id. This sends the standard
+HTTP `From` header and requires Zammad 5.0 or later.
+
+An identifier that is `nil`, empty or blank raises `ArgumentError`. Zammad reads a `From`
+header with nothing in it as no header at all, so `client.on_behalf_of(user&.login)` with
+no user would otherwise perform every request as the account the client authenticates
+as, and read everything that account can see.
+
+## Error handling
+
+Every error descends from `ZammadAPI::Error`.
+
+```text
+ZammadAPI::Error
+├── ZammadAPI::ConfigurationError    invalid client options
+├── ZammadAPI::UnknownResourceError  no such resource, e.g. client.unicorn
+├── ZammadAPI::ParseError            unexpected response shape
+├── ZammadAPI::PaginationError       endpoint ignored the page parameter
+├── ZammadAPI::TransportError
+│   ├── ZammadAPI::ConnectionError   unreachable host or TLS failure
+│   └── ZammadAPI::TimeoutError      exceeded timeout or open_timeout
+└── ZammadAPI::ResponseError         carries the HTTP response
+    ├── ZammadAPI::ClientError       4xx
+    │   ├── ZammadAPI::AuthenticationError  401
+    │   ├── ZammadAPI::AuthorizationError   403
+    │   ├── ZammadAPI::NotFoundError        404
+    │   ├── ZammadAPI::ValidationError      422
+    │   └── ZammadAPI::RateLimitError       429
+    └── ZammadAPI::ServerError       5xx
+```
+
+```ruby
+begin
+  client.tickets.find(1)
+rescue ZammadAPI::NotFoundError
+  nil
+rescue ZammadAPI::RateLimitError => e
+  # The client already waited and retried, so this limit outlasted that.
+  reschedule(in: e.retry_after || 60)
+rescue ZammadAPI::ResponseError => e
+  warn "#{e.status}: #{e.server_message}"
+  warn e.body.inspect
+end
+```
+
+`ResponseError` exposes `status`, `body`, `headers`, `server_message`, `operation` and
+`resource_class`. A proxy that returns an HTML error page instead of JSON produces a
+`ServerError` describing the status, not a JSON parse failure.
+
+### Timeouts and retries
+
+A `GET` is retried on connection failures, timeouts and the transient statuses 429, 500,
+502, 503 and 504, with exponential backoff.
+
+A `Retry-After` header on one of those responses is honoured: the client waits as long as
+the server asked before the next attempt, up to `timeout` seconds. A longer one is not
+waited out. The request fails at once with the error for its status, and
+`RateLimitError#retry_after` carries the figure, so a job can reschedule itself rather
+than hold a thread for however long a maintenance page suggests.
+
+A write is never retried. `POST` would create a second record, and `PUT` and `DELETE` are
+not safe to repeat against Zammad either, whatever HTTP says about them: a ticket update
+carrying an `article` adds that article — and sends its e-mail — once per delivery, and a
+`DELETE` repeated after a lost answer comes back as a 404 for a record that was just
+deleted. So a write that fails raises, and the code that knows what the request carried
+decides whether to send it again:
+
+```ruby
+begin
+  ticket.update!(state: 'closed')
+rescue ZammadAPI::TransportError, ZammadAPI::ServerError
+  ticket.reload              # did it arrive?
+  retry if ticket.state != 'closed'
+end
+```
+
+```ruby
+client = ZammadAPI::Client.new(
+  url:        'https://zammad.example.com/',
+  http_token: 'token',
+  timeout:    10,
+  retries:    5
+)
+```
+
+## Logging
+
+```ruby
+client = ZammadAPI::Client.new(
+  url:        'https://zammad.example.com/',
+  http_token: 'token',
+  logger:     Logger.new($stdout)
+)
+```
+
+Requests, response statuses and durations are logged at `debug` level. Payload keys, query
+parameters and headers that look like credentials (`password`, `token`, `secret`, `cookie`,
+...) are redacted. That holds for a query string written into the path of a raw request,
+in the log and in the message of an error the request raises, and for a body handed over
+as a String where it is JSON. A String body that is not JSON is not logged, only its size.
+
+## Testing code that uses this client
+
+`zammad_api/test` ships a stand-in Zammad, so your own tests need no HTTP interception:
+
+```ruby
+require 'zammad_api/test'
+
+RSpec.describe TicketCloser do
+  let(:zammad) { ZammadAPI::Test.new }
+
+  it 'closes the ticket' do
+    zammad.stub(:get, 'api/v1/tickets/1', body: {id: 1, title: 'Help', state: 'open'})
+    zammad.stub(:put, 'api/v1/tickets/1', body: {id: 1, state: 'closed'})
+
+    described_class.new(zammad.client).close(1)
+
+    expect(zammad.requests.last.verb).to eq(:put)
+    expect(zammad.requests.last.body).to eq({state: 'closed'})
+  end
+end
+```
+
+`zammad.client` is a real `ZammadAPI::Client`, so responses come back through the same
+decoding, error mapping and record building as real ones — a stub with `status: 404`
+raises `NotFoundError`, and one with `status: 422` makes `save` return `false`.
+
+| Method | What it does |
+| ------ | ------------ |
+| `stub(verb, path, status:, body:, headers:, query:)` | Declares a response. Stubbing the same endpoint twice with the same scope describes a sequence; the last stub answers every later request. `query:` matches a subset, so it need not repeat `expand`, `page` or `per_page`. |
+| `client` | A client wired to this stand-in. |
+| `requests` | Every request made, oldest first, as `verb` / `path` / `query` / `body` / `headers` / `on_behalf_of`. |
+| `reset` | Forgets the stubs and the recorded requests. |
+
+A `Hash` or `Array` body is served as JSON and gets `content-type: application/json`
+unless `headers:` says otherwise — and it is that header, not the Ruby type, that decides
+whether the body comes back decoded, exactly as it does on the wire. So a `Hash` stubbed
+as `text/html` comes back as the raw string and reading a record from it raises
+`ParseError`, which is what Zammad would do. Header names and values are stringified and
+names downcased, the way a real `Response` carries them; a value that is not text, or two
+spellings of one header name, are refused where the stub is written rather than turned
+into something the wire could not send.
+
+`query` and `headers` are recorded through the real transport's own stringification, so
+they hold what a request would have carried rather than the raw Ruby values — and a header
+the wire would refuse is refused here too. `headers` names only what the call asked for;
+the ones the client sets from its configuration are not in it, and an `on_behalf_of` scope
+has a field of its own.
+
+A request that was not stubbed raises `ZammadAPI::Test::UnstubbedRequestError`, listing
+what is stubbed, rather than answering with something empty. It is deliberately not a
+`ZammadAPI::Error`: a forgotten stub means the test is wrong, not that Zammad refused
+something, so a `rescue ZammadAPI::Error` in the code under test lets it through instead of
+reporting it as an API failure.
+
+### Stubbing a list endpoint
+
+One stub is enough for a collection that fits in a page. The records it holds are one page
+of them, so a request for any later page is answered the way an endpoint out of records
+would answer it:
+
+```ruby
+zammad.stub(:get, 'api/v1/groups', body: [{id: 1, name: 'Users'}, {id: 2, name: 'Sales'}])
+
+client.groups.all.map(&:name) # => ["Users", "Sales"]
+```
+
+Stub the endpoint again to describe a list that changes between reads. A read is one step
+of the sequence however many pages it asks for, so each read gets the next stub and the
+last one answers every read after it:
+
+```ruby
+zammad.stub(:get, 'api/v1/groups', body: [{id: 1, name: 'Users'}])
+zammad.stub(:get, 'api/v1/groups', body: [{id: 1, name: 'Users'}, {id: 2, name: 'Sales'}])
+
+client.groups.all.count # => 1
+client.groups.all.count # => 2
+```
+
+Name a `page` to say what each one holds, and the stub is served exactly as written:
+
+```ruby
+zammad.stub(:get, 'api/v1/groups', body: first_hundred, query: {page: 1})
+zammad.stub(:get, 'api/v1/groups', body: [{id: 101}], query: {page: 2})
+```
+
+A search that is walked asks for its total with `with_total_count`, and an Array answers
+it the way a Zammad before 6.5.1 does, with the records alone. To stand in for one that
+reports the total, stub the object it answers with. It is paged like an Array: a later
+page holds no records and the same total.
+
+```ruby
+zammad.stub(:get, 'api/v1/users/search', body: {records: [{id: 1}, {id: 2}], total_count: 2})
+```
+
+### Scopes that overlap
+
+A stub naming `query:` answers ahead of one that does not, so a scoped stub and a catch-all
+are two separate answers rather than a sequence:
+
+```ruby
+zammad.stub(:get, 'api/v1/tickets/search', body: {total_count: 42}, query: {only_total_count: true})
+zammad.stub(:get, 'api/v1/tickets/search', body: [{id: 1}])
+
+client.tickets.search('urgent').count # => 42, however often it is asked
+```
+
+Two stubs whose scopes match a request equally well raise
+`ZammadAPI::Test::AmbiguousStubError` rather than one of them being picked: `count` sends
+the search term and `only_total_count` together, so a records stub scoped to
+`{query: 'urgent'}` matches it just as well as the count stub does. Name what tells the
+requests apart — here, the search term on the count stub too — or leave the more general
+one unscoped as above.
+
+## Type signatures
+
+RBS signatures ship in `sig/` and are checked in CI with [Steep](https://github.com/soutaro/steep).
+Add the gem to your own RBS collection to type-check calls into this client.
+
+Records are typed, not only the client. `client.tickets` is a
+`ResourceProxy[Resources::Ticket]`, so `find`, `first`, `find_by`, the block of `each` and
+a search all hand you a `Ticket`, and each resource declares the attributes every
+supported Zammad serves for it:
+
+```ruby
+ticket = client.tickets.find(1)
+
+ticket.title                   # String
+ticket.organization_id         # Integer?
+ticket.related.customer&.email # String?
+ticket.titel                   # a type error, where it used to be untyped
+```
+
+Three things are deliberately not declared, and each has a way through:
+
+- **Attributes an administrator added.** Read one with `ticket[:escalation_reason]`, or
+  declare it in your own signatures by reopening the class:
+
+  ```rbs
+  class ZammadAPI::Resources::Ticket
+    attr_accessor escalation_reason: String?
+  end
+  ```
+
+- **Columns only newer Zammad versions have**, which an older instance does not serve.
+  `record[:name]` reads those too.
+- **The name `expand` adds for an association that may be empty**, such as `organization`
+  on a ticket or a user. Zammad leaves the key out rather than sending `null`, so a reader
+  would raise rather than answer `nil`; `ticket[:organization]` is `nil` in that case, and
+  `ticket.organization_id` is always there.
+
+A proxy for [a resource of your own](#resources-this-gem-does-not-model) is untyped until
+you say what it holds, because a signature cannot carry a class into its own return type:
+
+```ruby
+roles = client.resource(Role) #: ZammadAPI::ResourceProxy[Role]
+```
+
+The types describe a record Zammad served. One built with `new` carries only what it was
+given until it is saved, and reading anything else from it raises `NoMethodError`, whatever
+the signature says the type would be.
 
 ## Examples
 
-Create a ticket:
-```ruby
-ticket = client.ticket.create(
-  title: 'a new ticket #1',
-  state: 'new',
-  group: 'Users',
-  priority: '2 normal',
-  customer: 'some_customer@example.com',
-  article: {
-    content_type: 'text/plain', # or text/html, if not given test/plain is used
-    body: 'some body',
-    # attachments can be optional, data needs to be base64 encoded
-    attachments: [
-      'filename' => 'some_file.txt',
-      'data' => 'dGVzdCAxMjM=',
-      'mime-type' => 'text/plain',
-    ],
-  },
-)
+Runnable scripts covering pagination, pattern matching, acting on behalf of a user,
+attachments, error handling and threaded use live in [`examples/`](examples/README.md).
 
-ticket.id # id of record
-ticket.number # uniq number of ticket
-ticket.title # 'a new ticket #1'
-ticket.group # 'Support'
-ticket.created_at # '2022-01-01T12:42:01Z'
-# ...
+## Development
+
+```sh
+bin/setup            # or: bundle install
+bundle exec rake     # unit specs, RuboCop and Steep
 ```
 
-List all new or open tickets:
-```ruby
-tickets = client.ticket.search(query: 'state.name:new OR state.name:open')
+| Task                     | What it does                                          |
+| ------------------------ | ----------------------------------------------------- |
+| `rake spec:unit`         | Unit specs; stubbed, no Zammad needed                 |
+| `rake spec:integration`  | Integration specs against a live Zammad               |
+| `rake check_connection`  | Drives a live Zammad end to end and prints a transcript |
+| `rake rubocop`           | Style checks                                          |
+| `rake steep`             | Type-check `lib/` against `sig/`, and `spec/typed/` the way a caller is checked |
 
-ticket[0].id # id of record
-ticket[0].number # uniq number of ticket
-ticket[0].title # 'title of ticket'
-ticket[0].group # 'Support'
-ticket[0].created_at # '2022-01-01T12:42:01Z'
+Set `COVERAGE=true` to produce a coverage report in `coverage/`.
 
-tickets.each {|ticket|
-  p "ticket: #{ticket.number} - #{ticket.title}"
-}
+### Testing against a live Zammad
+
+The integration specs and `check_connection` need a reachable Zammad instance and **will
+create and delete records**, so they run only where `TEST_URL` names one, and there is no
+default: point it at something disposable. Without it, `rspec` runs the unit specs and
+says the integration specs were left out, `rspec spec/integration` fails for having
+nothing to run, and `rake spec:integration`, `rake spec` and `rake check_connection` stop
+before running anything.
+
+```sh
+export TEST_URL=https://zammad.example/   # a disposable Zammad, never one you keep data in
+export TEST_USER=admin@example.com
+export TEST_PASSWORD=test
+
+bundle exec rake check_connection   # one linear pass, readable transcript
+bundle exec rake spec:integration   # the full spec suite
 ```
 
-Get all articles of a ticket:
-```ruby
-ticket = client.ticket.find(123)
-articles = ticket.articles
+`check_connection` walks the documented workflows in order — create, find, update, reload,
+pattern match, paginate, search, ticket with articles, attachment download, acting on
+behalf of a user, and each error class — printing `ok` or `FAIL` per step and cleaning up
+after itself. It stops early if a precondition fails, so a broken instance produces one
+clear line rather than a cascade.
 
-articles[0].id # id of record
-articles[0].from # creator of article
-articles[0].to # recipients of article
-articles[0].subject # article subject
-articles[0].body # text of message
-articles[0].content_type # text/plain or text/html of .body
-articles[0].type # 'note'
-articles[0].sender # 'Customer'
-articles[0].created_at # '2022-01-01T12:42:01Z'
+CI runs both against a Zammad booted from source: the `integration` job clones Zammad,
+starts it, waits for it to answer, runs `check_connection` as a fast preflight, then runs
+the integration specs. Trigger it by hand from the Actions tab (`workflow_dispatch`) to
+test against a specific Zammad ref.
 
-p "ticket: #{ticket.number} - #{ticket.title}"
-articles.each {|article|
-  p "article: #{article.from} - #{article.subject}"
-}
-```
+## Migrating from 1.x
 
-Create an article for a ticket:
-```ruby
-ticket = client.ticket.find(123)
+Version 2.0 fixes long-standing behaviour that could not change without breaking
+compatibility. Most calling code needs no edits, and almost everything that does raises
+at the call site. Start with the handful of changes that do not.
 
-article = ticket.article(
-  type: 'note',
-  subject: 'some subject 2',
-  body: 'some body 2',
-  # attachments can be optional, data needs to be base64 encoded
-  attachments: [
-    'filename' => 'some_file.txt',
-    'data' => 'dGVzdCAxMjM=',
-    'mime-type' => 'text/plain',
-  ],
-)
+If this is not the time to move, [1.x stays available](#staying-on-1x).
 
-article.id # id of record
-article.from # creator of article
-article.to # recipients of article
-article.subject # article subject
-article.body # text of message
-article.content_type # text/plain or text/html of .body
-article.type # 'note'
-article.sender # 'Customer'
-article.created_at # '2022-01-01T12:42:01Z'
-article.attachments.each { |attachment|
-  attachment.filename # 'some_file.txt'
-  attachment.size # 1234
-  attachment.preferences # { :"Mime-Type"=>"image/jpeg" }
-  attachment.download # content of attachment / extra REST call will be executed
-}
+### Changes that do not announce themselves
 
-p "article: #{article.from} - #{article.subject}"
-```
+- **`record.attributes = {...}`** was a writer in 1.x. It is now an ordinary attribute
+  assignment, so it stages a change named `attributes` and `save` sends it to Zammad:
 
-Create an article with html and inline images for a ticket:
-```ruby
-ticket = client.ticket.find(123)
+  ```ruby
+  group.attributes = {name: 'Support'}
+  group.changes # => {attributes: [nil, {name: "Support"}]}
+  ```
 
-article = ticket.article(
-  type: 'note',
-  subject: 'some subject 2',
-  body: 'some <b>body</b> with an image <img src="data:image/jpeg;base64,/9j/4QAYRXhpZgAASUkqAAgAAAAAAAAAAAAAAP/sABFEdWNreQABAAQAAAAJAAD/4QMtaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wLwA8P3hwYWNrZXQgYmVnaW49Iu+7vyIgaWQ9Ilc1TTBNcENlaGlIenJlU3pOVGN6a2M5ZCI/PiA8eDp4bXBtZXRhIHhtbG5zOng9ImFkb2JlOm5zOm1ldGEvIiB4OnhtcHRrPSJBZG9iZSBYTVAgQ29yZSA1LjMtYzAxMSA2Ni4xNDU2NjEsIDIwMTIvMDIvMDYtMTQ6NTY6MjcgICAgICAgICI+IDxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+IDxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiIHhtbG5zOnhtcD0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wLyIgeG1sbnM6eG1wTU09Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9tbS8iIHhtbG5zOnN0UmVmPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvc1R5cGUvUmVzb3VyY2VSZWYjIiB4bXA6Q3JlYXRvclRvb2w9IkFkb2JlIFBob3Rvc2hvcCBDUzYgKE1hY2ludG9zaCkiIHhtcE1NOkluc3RhbmNlSUQ9InhtcC5paWQ6QzJCOTE2NzlGQUEwMTFFNjg0M0NGQjU0OUU4MTFEOEIiIHhtcE1NOkRvY3VtZW50SUQ9InhtcC5kaWQ6QzJCOTE2N0FGQUEwMTFFNjg0M0NGQjU0OUU4MTFEOEIiPiA8eG1wTU06RGVyaXZlZEZyb20gc3RSZWY6aW5zdGFuY2VJRD0ieG1wLmlpZDpDMkI5MTY3N0ZBQTAxMUU2ODQzQ0ZCNTQ5RTgxMUQ4QiIgc3RSZWY6ZG9jdW1lbnRJRD0ieG1wLmRpZDpDMkI5MTY3OEZBQTAxMUU2ODQzQ0ZCNTQ5RTgxMUQ4QiIvPiA8L3JkZjpEZXNjcmlwdGlvbj4gPC9yZGY6UkRGPiA8L3g6eG1wbWV0YT4gPD94cGFja2V0IGVuZD0iciI/Pv/uAA5BZG9iZQBkwAAAAAH/2wCEABQRERoTGioZGSo1KCEoNTEpKCgpMUE4ODg4OEFEREREREREREREREREREREREREREREREREREREREREREREREQBFhoaIh0iKRoaKTkpIik5RDktLTlEREREOERERERERERERERERERERERERERERERERERERERERERERERERERERP/AABEIABAADAMBIgACEQEDEQH/xABbAAEBAAAAAAAAAAAAAAAAAAAEBQEBAQAAAAAAAAAAAAAAAAAABAUQAAEEAgMAAAAAAAAAAAAAAAABAhIDESIxBAURAAICAwAAAAAAAAAAAAAAAAESABNRoQP/2gAMAwEAAhEDEQA/AJDq1rfF3Imeg/1+lFy2oR564DKWWWbweV+Buf/Z" alt="Red dot" />',
-  content_type: 'text/html', # optional, default is text/plain
-)
+  Use `assign_attributes(name: 'Support')`, or `update` to assign and save.
 
-article.id # id of record
-article.from # creator of article
-article.to # recipients of article
-article.subject # article subject
-article.body # text of message
-article.content_type # text/plain or text/html of .body
-article.type # 'note'
-article.sender # 'Customer'
-article.created_at # '2022-01-01T12:42:01Z'
-article.attachments.each { |attachment|
-  attachment.filename # '122.146472496@www.znuny.com'
-  attachment.size # 1167
-  attachment.preferences # { :'Mime-Type'=>'image/jpeg', :'Content-ID'=>'122.146472496@www.znuny.com', :'Content-Disposition'=>'inline'} }
-  attachment.download # content of attachment / extra REST call will be executed
-}
+- **`record.save`** returns `false` when Zammad rejects the attributes, where 1.x raised.
+  Code that relied on the exception carries on after a rejected save:
 
-p "article: #{article.from} - #{article.subject}"
-```
+  ```ruby
+  ticket.state = 'closed'
+  ticket.save # false on a 422 in 2.0; nothing raises, and the ticket is still open
+  ```
 
-## Testing
+  Check what `save` returns and read `record.error`, or call `save!`, which raises
+  `ZammadAPI::ValidationError` as `save` used to. `update` and `update!` are the same pair.
 
-### Setup an (empty Zammad) test env
+- **`collection.each`** walks every page, where 1.x read one and stopped:
+  `client.ticket.all.each { ... }`, as 1.x spelled it, touched the first 100 tickets. It
+  still runs in 2.0, through the deprecated singular reader (`client.tickets` is the new
+  name), and now touches every ticket the client can read, at a request per page. A loop written to handle the first
+  page, or one that writes to each record it is handed, does that to all of them now.
+  Limit it explicitly with `first(n)` or `page(1, per_page: n)`.
 
-```
-git clone git@github.com:zammad/zammad.git
-cd zammad
-export RAILS_ENV="test"
-export APP_RESTART_CMD="bundle exec rake zammad:ci:app:restart"
-script/bootstrap.sh && echo '' > log/test.log
-cp contrib/auto_wizard_test.json auto_wizard.json
-bundle exec rake zammad:ci:test:start
-```
+- **`rescue Faraday::ConnectionFailed`** (and any other Faraday exception) no longer
+  matches. Transport failures are wrapped, so rescue `ZammadAPI::ConnectionError`,
+  `ZammadAPI::TimeoutError`, or `ZammadAPI::TransportError` for both.
 
-### Execute client tests
+### The client
 
-Run tests via `rake spec`. (Remember to export the vars above if you are running this in another shell.)
+| 1.x                                    | 2.0                                              | Why                                                                  |
+| -------------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
+| `Client.new(config_hash)`              | `Client.new(**config_hash)`                      | Options are keyword arguments now, so a Hash has to be splatted      |
+| an unknown option was ignored          | raises `ArgumentError: unknown keyword`          | A typo'd option used to be dropped without a word                    |
+| `logger: true`                         | `logger: Logger.new($stderr)`                    | The flag became an object, so you choose the device and level. Anything that answers `debug` is accepted; `true` raises `ConfigurationError` |
+| `client.ticket`, `client.user`, …      | `client.tickets`, `client.users`, …              | A resource is `Enumerable` over every record now, so `client.ticket.each` read as if it acted on one ticket. The singular names still work and warn in Ruby's `deprecated` category; run with `RUBYOPT=-W:deprecated` to find them. They go in 3.0 |
+| `client.on_behalf_of = 'login'`        | `client.on_behalf_of('login')` → new client      | The setter mutated the client and leaked across threads              |
+| `client.perform_on_behalf_of('x') { }` | `client.on_behalf_of('x') { \|scoped\| ... }`    | The old block form left the header set if the block raised           |
+| `ZammadAPI::Resources::Role < Base` reached by `client.role` | `client.resource(Role)`, for a `Role < ZammadAPI::Resources::Base` of your own | The named readers are a fixed list, and a class is handed over rather than looked up by name. [Raw requests](#raw-requests) reach whatever is not a resource |
 
-## Publishing
+### Collections
 
-1. Update version in [version.rb](lib/zammad_api/version.rb).
-2. Add release to [CHANGELOG.md](CHANGELOG.md)
-3. Commit.
-4. Test build.
-```
-> rake build
-zammad_api 1.0.7 built to pkg/zammad_api-1.0.7.gem.
-```
-5. Release
-```
-> rake release
-zammad_api 1.0.7 built to pkg/zammad_api-1.0.7.gem.
-Tag v1.0.7 has already been created.
-Pushing gem to https://rubygems.org...
-You have enabled multi-factor authentication. Please enter OTP code.
-Code:   ......
-Successfully registered gem: zammad_api (1.0.7)
-Pushed zammad_api 1.0.7 to https://rubygems.org
+| 1.x                                      | 2.0                                              | Why                                                                 |
+| ---------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------- |
+| `collection.each` stopped after one page | `each` walks every page                          | Iterating truncated silently at the page size: 100 for `all`, 10 for `search` |
+| `collection.page(1, 3) { \|r\| ... }`    | `collection.page(1, per_page: 3).each { ... }`         | `page` now returns a collection instead of mutating and yielding    |
+| `collection.page_next` / `page_prev`     | `collection.page(n)` or `in_batches`             | Removed; they mutated shared state                                  |
+| `collection.each_page { ... }`           | `collection.in_batches { ... }`                  | Ruby already has a name for this                                    |
+| `collection[3]`                          | `collection.page(4, per_page: 1).first`                | An index that costs a request, and that ignored `page`, was a trap  |
+| `collection.find(1)`                     | `client.x.find(1)`, or `collection.detect { ... }` | On a collection `find` is `Enumerable#find`, whose argument is an ifnone callable — so an id answered with an Enumerator and made no request. It raises now |
+| `client.x.all(per_page: 50)`             | `client.x.all.page(1, per_page: 50)`, `find_each(batch_size: 50)` | `all` accepted the argument and discarded it; page size belongs to the call that reads |
+| `client.x.all(active: true)`             | `client.x.search(...)`, or `client.x.all.detect { ... }`    | The filter never reached the request in 1.x, and could not have: Zammad's index endpoints do not filter, so 2.0 has no call that pretends to. `find_by(active: true)` answers with the first such record, by walking the index where it has no string to search on |
+| `client.x.search(query: 'zammad')`       | `client.x.search('zammad')`                      | The search term is the argument, not a keyword                      |
+| `client.x.search(query: 'z', page: 2, per_page: 50)` | `client.x.search('z').page(2, per_page: 50)` | Search did honour those two; paging is the collection's job now     |
 
-```
+### Records
 
-## Contributing
+| 1.x                                 | 2.0                                                  | Why                                                                  |
+| ----------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------- |
+| `record.save` raised on a rejection | `save` → `false` with `record.error`; `save!` raises  | Branching on a rejected attribute needed a begin/rescue              |
+| `record.attributes[:x] = 1`         | `record.x = 1`, or `record.to_h` for a copy          | Writing through the reader staged no change, so `save` never sent it  |
+| `record.attributes = {...}`         | `record.assign_attributes(...)` / `record.update(...)` | The writer is gone, and the name now stages an attribute of its own |
+| `record.id = 5`                     | `client.x.find(5)`                                   | The id addresses the record, so a staged one deleted or updated a different record than it reported |
+| `record.new_instance`               | `record.new_record?` / `record.persisted?`           | Internal flag is no longer public; the old name raises `NoMethodError`, naming the attributes the record does carry |
+| `resource.url` (instance)           | `Resource.resource_path` (class)                     | Clashed with an attribute named `url`                                |
+| `record.unknown_attribute` → `nil`  | raises `NoMethodError`; use `record[:x]`, `fetch(:x, nil)` or `key?(:x)` | A typo read as `nil` and flowed on into whatever was written with it. Zammad also serves a reduced object where the user may not see the whole record, and that is worth being told about |
+| `client.x.new(id: 5)`               | `client.x.find(5)`                                   | The constructor was the one door that did not refuse a staged id — and the only one whose value reached Zammad, since a new record is sent in full |
+| `client.users.find(ticket.customer_id)` | `ticket.related.customer`                         | Following a foreign key needed the client threaded through           |
+| `ticket.article(body: '…')`         | `ticket.add_article(body: '…')`                      | A noun that sends a `POST`, one letter away from `ticket.articles`, which only reads. `article` still works and warns in Ruby's `deprecated` category; it goes in 3.0 |
 
-Bug reports and pull requests are welcome on [GitHub](https://github.com/zammad/zammad-api-client-ruby). This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [Contributor Covenant](http://contributor-covenant.org) code of conduct.
+### Errors
+
+| 1.x                                   | 2.0                                                  | Why                                                             |
+| ------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------- |
+| `ZammadAPI::Error < RuntimeError`     | `ZammadAPI::Error < StandardError`                   | `RuntimeError` is for `raise "string"`                          |
+| `ZammadAPI::ResourceNotFoundError`    | `ZammadAPI::UnknownResourceError`                    | Renamed so it is not confused with a 404, now `NotFoundError`   |
+| `ClientError` for every 4xx           | `AuthenticationError`, `NotFoundError`, `ValidationError`, … | All still `ClientError`, so existing rescues keep working |
+| a Faraday exception for a dead host   | `ZammadAPI::ConnectionError` / `TimeoutError`        | Every failure this gem can raise descends from `ZammadAPI::Error` |
+| `error.response` was a Faraday object | `ZammadAPI::Response` with `status`/`body`/`headers` | Faraday is no longer part of the public surface                 |
+| `error.body` was a raw JSON string    | decoded Hash, or the raw body for non-JSON           | Saves every caller from parsing it again                        |
+
+### Removed constants, and the Ruby version
+
+| 1.x                                              | 2.0                        | Why                                                          |
+| ------------------------------------------------ | -------------------------- | ------------------------------------------------------------ |
+| `ZammadAPI::ListBase` / `ListAll` / `ListSearch` | `ZammadAPI::Collection`    | One class instead of three                                   |
+| `ZammadAPI::Dispatcher`                          | `ZammadAPI::ResourceProxy` | Renamed; `client.<resource>` hands you one                   |
+| `ZammadAPI::Log`, `ZammadAPI::JsonHelper`        | removed                    | Pass any `Logger` as `logger:`; decoding moved into the transport |
+| Ruby >= 3.0                                      | Ruby >= 3.4                | 3.0 through 3.3 are end-of-life or nearly so                 |
+
+### Defaults 1.x did not have
+
+A collection fetches as many records per request as the endpoint serves — 1000 on the index
+endpoints, 100 on tickets, 200 on a search — rather than a fixed 100, so a walk spends
+roughly a tenth of the round trips. `page(n)` without `per_page:` is a page of that size, so pin
+it with `page(n, per_page: 100)` if a persisted page number has to keep meaning what it did.
+
+A request now times out after 60 seconds (10 to connect) where 1.x waited as long as the
+server took, so a call that used to hang raises `ZammadAPI::TimeoutError`. A `GET` is
+retried twice with exponential backoff on connection failures, timeouts and the transient
+statuses, which means a genuinely broken endpoint takes a little longer to report itself;
+a `POST`, `PUT` or `DELETE` is never retried. Both are options — see
+[Timeouts and retries](#timeouts-and-retries). The `User-Agent` is now
+`zammad_api-ruby/<version>` rather than `Zammad API Ruby`.
+
+### What did not change
+
+`find`, `all`, `create` and `new` on a resource, `record.destroy`, attribute readers and
+writers, `ticket.articles` and `attachment.download`. The resources themselves are reached
+by their plural names now — `client.tickets` — and adding an article is
+`ticket.add_article`; the old names still answer, with a deprecation warning.
+
+`record.save`, `record.changes` and `record.attributes` still exist and still mean what
+they meant; the tables above only change how they behave at the edges.
+
+## License
+
+Dual licensed under the [AGPL-3.0-only](LICENSE.AGPL.txt) or [MIT](LICENSE.MIT.txt)
+licenses. See [LICENSE.md](LICENSE.md).
