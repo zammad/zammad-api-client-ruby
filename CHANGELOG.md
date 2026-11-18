@@ -176,7 +176,8 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - `ticket.article(…)` is `ticket.add_article(…)`. A noun that sends a `POST` sat one letter
   away from `ticket.articles`, which only reads. `article` still works, as a deprecated
   alias that warns in Ruby's `deprecated` category the way the singular resource readers do,
-  and will be removed in 3.0.
+  and will be removed in 3.0. It requires its attributes, as it did in 1.x, so a bare
+  `ticket.article` raises `ArgumentError` rather than sending an article with no body.
 
 ### Added
 

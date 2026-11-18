@@ -152,7 +152,7 @@ module ZammadAPI
 
       def articles: () -> Array[TicketArticle]
       def add_article: (?Hash[untyped, untyped] attributes) -> TicketArticle
-      %a{deprecated: use add_article} def article: (?Hash[untyped, untyped] attributes) -> TicketArticle
+      %a{deprecated: use add_article} def article: (Hash[untyped, untyped] attributes) -> TicketArticle
     end
 
     class TicketArticle < Base

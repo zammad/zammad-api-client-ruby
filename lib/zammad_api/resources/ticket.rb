@@ -84,10 +84,17 @@ module ZammadAPI
       # on {Client} do: silent unless the application asks for deprecation
       # warnings.
       #
+      # The attributes are required, as they were in 1.x. With a default,
+      # a bare +ticket.article+ - which reads like the attribute a ticket is
+      # created with, `ticket.article = {body: 'reply'}` - sent a POST
+      # naming nothing but the ticket, which Zammad refused for want of a
+      # body. 1.x raised ArgumentError for it without a request, and so does
+      # this.
+      #
       # @deprecated Use {#add_article}.
       # @param attributes [Hash] article attributes
       # @return [TicketArticle] the created article
-      def article(attributes = {})
+      def article(attributes)
         warn("#{Ticket.name}#article is deprecated and will be removed in 3.0: use #add_article instead", uplevel: 1, category: :deprecated)
         add_article(attributes)
       end

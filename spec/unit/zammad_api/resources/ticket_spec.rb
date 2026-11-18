@@ -202,5 +202,15 @@ RSpec.describe ZammadAPI::Resources::Ticket do
     it 'does not warn for add_article' do
       expect { ticket.add_article(body: 'hello') }.not_to output.to_stderr
     end
+
+    # It reads like the attribute a ticket is created with, and with a
+    # default it sent a POST naming nothing but the ticket. 1.x required the
+    # attributes.
+    it 'requires the attributes, as 1.x did, and sends nothing without them' do
+      ticket.article = { body: 'reply' }
+
+      expect { ticket.article }.to raise_error(ArgumentError, /wrong number of arguments/)
+      expect(a_request(:post, article_url).with(query: hash_including({}))).not_to have_been_made
+    end
   end
 end
