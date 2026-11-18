@@ -182,6 +182,46 @@ RSpec.describe ZammadAPI::Collection do
         .to raise_error(ZammadAPI::PaginationError, /ignoring the page parameter/)
     end
 
+    # A job that writes to the records it is handed changes what they
+    # serialize as, so the page an endpoint repeats is never the same payload
+    # twice. Compared by payload the guard never fired: every page was full,
+    # and the job went round the same records for as long as it ran.
+    it 'raises PaginationError when a repeated page comes back with its records changed' do
+      round = 0
+      stub_request(:get, url).with(query: hash_including({})).to_return do
+        round += 1
+        json_response(Array.new(default_per_page) { { id: it + 1, updated_at: "2026-11-18T10:00:#{format('%02d', round)}Z" } })
+      end
+
+      batches = 0
+
+      expect { Timeout.timeout(5) { collection.in_batches { batches += 1 } } }
+        .to raise_error(ZammadAPI::PaginationError, /ignoring the page parameter/)
+      expect(batches).to eq(1)
+    end
+
+    # A search sorts by updated_at, so the write that changes a record's
+    # payload moves it within the page as well.
+    it 'raises PaginationError when a repeated page comes back changed and in another order' do
+      round = 0
+      stub_request(:get, url).with(query: hash_including({})).to_return do
+        round += 1
+        page = Array.new(default_per_page) { { id: it + 1, note: "round #{round}" } }
+        json_response(round.odd? ? page : page.reverse)
+      end
+
+      expect { Timeout.timeout(5) { collection.to_a } }
+        .to raise_error(ZammadAPI::PaginationError, /ignoring the page parameter/)
+    end
+
+    it 'does not take two pages that share some of their records for a repeat' do
+      stub_page(1, full_page)
+      stub_page(2, full_page(2))
+      stub_page(3, [])
+
+      expect(collection.map(&:id)).to eq([*1..default_per_page, *2..(default_per_page + 1)])
+    end
+
     it 'raises PaginationError when records without an id repeat' do
       page = Array.new(default_per_page) { { name: "a#{it}" } }
       stub_request(:get, url).with(query: hash_including({})).to_return(json_response(page))

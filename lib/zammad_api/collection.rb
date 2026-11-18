@@ -450,25 +450,23 @@ module ZammadAPI
         # queued or written by the block, and only then did the guard that
         # exists to prevent that get to look at it.
         #
-        # Whole payloads rather than ids: an endpoint that serves records
-        # without an id would compare two empty lists on every page and so
-        # report a perfectly good paginator as stuck. A digest rather than the
-        # payloads themselves, because holding the previous page across the
-        # next fetch doubled a walk's peak memory for a guard that only ever
-        # asks whether two pages are equal.
+        # A digest rather than the pages themselves, because holding the
+        # previous page across the next fetch doubled a walk's peak memory for
+        # a guard that only ever asks whether two pages are equal. What it is
+        # a digest of is in #page_digest: the ids, where every record has one.
         #
-        # The decoded payload, not the bytes it arrived as. Hashing raw_body
-        # is cheaper and looks equivalent - identical bytes do mean identical
-        # records - but the implication that matters here runs the other way:
-        # an endpoint that ignores `page` and re-serializes the same records
-        # with a different key order produces different bytes every time, so
-        # the guard never fires, and because every page is full the short-page
-        # break does not fire either. A missed repeat is not a missed error,
-        # it is a walk that never ends. `Hash#hash`
-        # ignores key order and whitespace, which is exactly the insensitivity
-        # this needs - and taking it from the decoded payload rather than from
-        # the built records costs nothing extra, because that payload is what
-        # the records were built from one line earlier.
+        # Where it is the payload, it is the decoded one, not the bytes it
+        # arrived as. Hashing raw_body is cheaper and looks equivalent -
+        # identical bytes do mean identical records - but the implication that
+        # matters here runs the other way: an endpoint that ignores `page` and
+        # re-serializes the same records with a different key order produces
+        # different bytes every time, so the guard never fires, and because
+        # every page is full the short-page break does not fire either. A
+        # missed repeat is not a missed error, it is a walk that never ends.
+        # `Hash#hash` ignores key order and whitespace, which is exactly the
+        # insensitivity this needs - and taking it from the decoded payload
+        # rather than from the built records costs nothing extra, because that
+        # payload is what the records were built from one line earlier.
         raise PaginationError.build(operation: @operation, page: page, resource_class: @resource_class) if digest == previous
 
         # Counted before the block has the page, not after. The Array handed
@@ -554,7 +552,32 @@ module ZammadAPI
       # payload, which is the one structure that has everything the guard needs
       # and is already in hand. See the guard in `walk` for why it is this and
       # not the records or the raw body.
-      [decoded.map { @resource_class.from_response(@transport, it) }, decoded.hash]
+      [decoded.map { @resource_class.from_response(@transport, it) }, page_digest(decoded)]
+    end
+
+    # What the repeated-page guard compares two pages by: which records they
+    # hold, where every record says which it is.
+    #
+    # The whole payload was the first answer, and it misses the repeat that
+    # matters most. A job that writes to the records it is handed changes
+    # what they serialize as - `updated_at`, if nothing else - so an endpoint
+    # that ignores `page` served the same records with a different payload
+    # every time. No two pages compared equal, every page was full, and the
+    # job went round the same records, writing to each of them again, for as
+    # long as it was left running.
+    #
+    # The ids as a set rather than as a list, because a write can reorder
+    # them too: a search sorts by `updated_at` unless told otherwise.
+    #
+    # The payload is still what is compared where a record carries no id.
+    # Compared by id, a page of those is a list of nils equal to every other
+    # such page, and a perfectly good paginator was reported as stuck.
+    #
+    # @return [Integer]
+    def page_digest(decoded)
+      ids = decoded.map { it[:id] }
+
+      ids.include?(nil) ? decoded.hash : ids.to_set.hash
     end
 
     # Asked only of a search endpoint, which is the only kind that answers

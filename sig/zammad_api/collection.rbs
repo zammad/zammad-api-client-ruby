@@ -69,6 +69,7 @@ module ZammadAPI
     def walk: () { (Array[R]) -> void } -> void
     def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped]) -> Collection[R]
     def fetch: (Integer, Integer) -> [ Array[R], Integer ]
+    def page_digest: (Array[Hash[Symbol, untyped]] decoded) -> Integer
     def total_count: () -> Integer?
     def clamp_per_page: (untyped) -> Integer
   end

@@ -631,6 +631,13 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   rest of the hits unread, and `find_by` answered `nil` for a record on a later one. Only
   an empty page ends a search walk now, at the cost of one more request where the last page
   of hits is part-filled.
+- A repeated page is recognised by the records on it rather than by their payload. A job
+  that writes to the records it is handed changes what they serialize as, so an endpoint
+  that ignores `page` served the same records with a different payload each time: the
+  guard never fired, and the job went round the same records, writing to them again, for
+  as long as it ran. Two consecutive pages holding the same ids, in any order, raise
+  `PaginationError` before the second is handed over. Records without an id are still
+  compared by payload.
 
 ### Changed
 
