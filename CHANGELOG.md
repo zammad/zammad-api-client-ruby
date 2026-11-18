@@ -678,7 +678,9 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   as before. What is settled is what the request carried: a write that reaches the record
   while the request is out, from a logger or a middleware that touches it or from another
   thread, is dropped, as it is by a response that can be read, rather than settled as if
-  it had been sent.
+  it had been sent. A key Zammad never served the record with is not kept either, which a
+  ticket's `article` is: kept, the same article assigned again compared equal to the first
+  and `save` reported `true` without sending the second reply.
 - `ticket.add_article` adds to that ticket whatever its attributes say. A `ticket_id:`
   among them was replaced by the ticket's own, but only under the Symbol spelling: given
   `'ticket_id'` as well, the String key came later in the Hash and won when the article

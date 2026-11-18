@@ -1252,6 +1252,20 @@ RSpec.describe ZammadAPI::Resources::Base do
 
       expect { group.destroy }.to raise_error(ZammadAPI::Error, /was saved/)
     end
+
+    # An update keeps only what Zammad had served the record with. A record
+    # being created was served nothing, and what it sent is all there is to
+    # read from it.
+    it 'goes on reading everything it sent, written after it was built or not' do
+      group.note = 'Second line'
+      begin
+        group.save
+      rescue ZammadAPI::ParseError
+        nil
+      end
+
+      expect(group.attributes).to eq(name: 'Support', note: 'Second line')
+    end
   end
 
   # The same argument for what was staged. Zammad answered 2xx, so it applied
@@ -1303,9 +1317,40 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(a_request(:put, ticket_url).with(query: hash_including({}))).to have_been_made.once
     end
 
-    it 'goes on reading the values it sent' do
-      expect(ticket[:article]).to eq(article)
-      expect(ticket.title).to eq('Help')
+    it 'goes on reading the values it sent for the attributes Zammad serves' do
+      other = client.tickets.find(1)
+      other.title = 'Sent'
+      stub_request(:put, ticket_url).with(query: hash_including({})).to_return(status: 200, body: '<html>proxy</html>')
+      begin
+        other.save
+      rescue ZammadAPI::ParseError
+        nil
+      end
+
+      expect(other.title).to eq('Sent')
+      expect(other.attributes).to eq(id: 1, title: 'Sent', note: nil)
+    end
+
+    # `article` is not an attribute of a ticket. It is a command in the body
+    # of the PUT, and Zammad never serves it back. Settled into the baseline
+    # with the attributes, it was remembered as the ticket's own state, and
+    # the same article assigned again compared equal to it.
+    it 'does not keep a key Zammad never served the record with' do
+      expect(ticket.key?(:article)).to be(false)
+      expect(ticket.attributes).to eq(id: 1, title: 'Help', note: nil)
+    end
+
+    it 'stages the same article when it is assigned again' do
+      ticket.article = article
+
+      expect(ticket.changes).to eq(article: [nil, article])
+    end
+
+    it 'sends the same article again when it is assigned again, as a second reply' do
+      ticket.article = article
+      ticket.save
+
+      expect(a_request(:put, ticket_url).with(query: hash_including({}), body: { article: article })).to have_been_made.twice
     end
 
     it 'stages a value written back to what it was before the save, which Zammad no longer holds' do

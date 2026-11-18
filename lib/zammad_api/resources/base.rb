@@ -712,9 +712,10 @@ module ZammadAPI
       # +sent+ is what a save was sent with, and is what tells one from a
       # read.
       def replace_attributes!(response, operation:, sent: nil)
+        # First, while #new_record? still says whether this was a create.
+        acknowledge_changes!(sent) if sent
         @new_record = false
         @saved      = !sent.nil?
-        acknowledge_changes!(sent) if sent
         @attributes = frozen_attributes(response.decoded(:object, operation: operation, resource_class: self.class))
         @baseline   = @attributes
         reset_pending_state!
@@ -751,9 +752,25 @@ module ZammadAPI
       # dropped instead, which is what a response that can be read does to
       # it: the attributes it carries replace the record's, whatever was
       # written to them since the request left.
+      #
+      # And of what was sent, only the attributes Zammad has served this
+      # record with. A key written since that it never sent back is not known
+      # to be an attribute at all. A ticket's `article` is the case that
+      # matters: a command that travels in the body of the same PUT and makes
+      # an article, and no part of what a ticket is served as. Settled into
+      # the baseline with the rest, it was remembered as the ticket's own
+      # state, so the same article assigned again - a second reply with the
+      # text of the first - compared equal to it, staged nothing, and `save`
+      # reported true without a request. A response that can be read leaves
+      # no such key behind, and neither does this.
+      #
+      # A record being created has nothing it was served with to measure
+      # against, and keeps all it sent. It has no id to be saved again by,
+      # so there is no second request for a key to be missing from.
       def acknowledge_changes!(sent)
-        @attributes = sent
-        @baseline   = sent
+        settled     = new_record? ? sent : sent.slice(*@baseline.keys).freeze
+        @attributes = settled
+        @baseline   = settled
         @changes    = {}
       end
 
