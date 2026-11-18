@@ -414,11 +414,14 @@ module ZammadAPI
     # @return [Client] when no block is given, otherwise the block's value
     # @raise [ArgumentError] for an identifier that is nil, empty or blank
     def on_behalf_of(identifier)
-      # Nil is what a transport takes for no scope, so it is refused here;
-      # the transport refuses the rest.
+      # Nil is what a transport takes for no scope, so it is refused here.
+      # The rest is refused by the rule every transport is meant to apply,
+      # applied here as well: Client.build takes anything with a transport's
+      # interface, and one that stored what it was given would send an empty
+      # From header for `on_behalf_of('')`.
       raise ArgumentError, Transport.blank_on_behalf_of_message(identifier) if identifier.nil?
 
-      scoped = dup.send(:setup, config, @transport.with_on_behalf_of(identifier))
+      scoped = dup.send(:setup, config, @transport.with_on_behalf_of(Transport.stringify_on_behalf_of(identifier)))
       return scoped if !block_given?
 
       yield scoped

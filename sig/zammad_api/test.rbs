@@ -71,7 +71,7 @@ module ZammadAPI
       attr_reader test: Test
       attr_reader on_behalf_of: String?
 
-      def initialize: (Test test, ?on_behalf_of: String?) -> void
+      def initialize: (Test test, ?on_behalf_of: (String | Integer)?) -> void
       def config: () -> Config
       def with_on_behalf_of: ((String | Integer)? identifier) -> Test::Transport
       def with_config: (Config) -> Test::Transport

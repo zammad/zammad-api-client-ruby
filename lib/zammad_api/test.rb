@@ -478,16 +478,18 @@ module ZammadAPI
 
       attr_reader :test, :on_behalf_of
 
+      # The scope is stringified, copied and checked by the real transport's
+      # own rule, so that a recorded scope is what a request would have
+      # carried. Here rather than in {#with_on_behalf_of} alone, which left
+      # one built directly holding whatever it was given.
       def initialize(test, on_behalf_of: nil)
         @test         = test
-        @on_behalf_of = on_behalf_of
+        @on_behalf_of = ::ZammadAPI::Transport.stringify_on_behalf_of(on_behalf_of)
       end
 
       def config = test.config
 
-      # Stringified and copied by the real transport's own rule, so that a
-      # recorded scope is what a request would have carried.
-      def with_on_behalf_of(identifier) = self.class.new(test, on_behalf_of: ::ZammadAPI::Transport.stringify_on_behalf_of(identifier))
+      def with_on_behalf_of(identifier) = self.class.new(test, on_behalf_of: identifier)
 
       # {Client#with} re-validates the options and hands them here. There is
       # no connection to rebuild, and the derived client reports the derived

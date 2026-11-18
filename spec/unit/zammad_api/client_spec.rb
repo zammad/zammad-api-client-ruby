@@ -850,6 +850,32 @@ RSpec.describe ZammadAPI::Client do
         end
       end
 
+      # Client.build takes anything with a transport's interface. One whose
+      # with_on_behalf_of stores what it is given would otherwise send an
+      # empty From header.
+      it 'refuses one through a transport that does not check it' do
+        storing = Class.new do
+          attr_reader :on_behalf_of
+
+          def initialize(on_behalf_of = nil) = @on_behalf_of = on_behalf_of
+          def with_on_behalf_of(identifier) = self.class.new(identifier)
+        end
+        client = described_class.build(unit_client.config, storing.new)
+
+        expect { client.on_behalf_of("\u00A0") }.to raise_error(ArgumentError, /on_behalf_of needs the login/)
+      end
+
+      it 'hands such a transport the scope as the text the header carries' do
+        storing = Class.new do
+          attr_reader :on_behalf_of
+
+          def initialize(on_behalf_of = nil) = @on_behalf_of = on_behalf_of
+          def with_on_behalf_of(identifier) = self.class.new(identifier)
+        end
+
+        expect(described_class.build(unit_client.config, storing.new).on_behalf_of(7).inspect).to include('on_behalf_of="7"')
+      end
+
       it 'says what the request would have run as' do
         expect { unit_client.on_behalf_of(nil) }.to raise_error(ArgumentError, /performed as the account this client authenticates as/)
       end
