@@ -6,9 +6,32 @@ require 'securerandom'
 class Helper
   class SetupError < StandardError; end
 
+  # The Zammad the integration specs run against, where one was named.
+  #
+  # There is no default. These specs run the auto wizard and then create,
+  # change and delete groups, organizations, users, tickets, states and
+  # priorities, and `http://localhost:3000/` used to stand in for a TEST_URL
+  # that was not set. That is where a Zammad under development listens, and
+  # a bare `rspec` runs these files along with the unit specs, so the
+  # commonest way to run the suite wrote test records into whatever was
+  # there. Where to write is for whoever runs them to say.
+  #
+  # @return [String, nil] nil when TEST_URL is not set
+  def self.target
+    url = ENV['TEST_URL'].to_s.strip
+    url.empty? ? nil : url
+  end
+
+  # Where no TEST_URL is set, a URL nothing answers at stands in for it. The
+  # spec files build their client while they are loaded, which is before
+  # RSpec has left their examples out, so this cannot raise; the examples
+  # never run, and {.ensure_configured!} refuses them if they are made to.
+  # `.invalid` is reserved for names that never resolve.
+  UNSET_URL = 'http://test-url-not-set.invalid/'
+
   def self.config
     {
-      url:      ENV['TEST_URL']      || 'http://localhost:3000/',
+      url:      target || UNSET_URL,
       user:     ENV['TEST_USER']     || 'admin@example.com',
       password: ENV['TEST_PASSWORD'] || 'test'
     }
@@ -35,6 +58,7 @@ class Helper
   # requests, each with a ten second open timeout - once per example, so a
   # Zammad that never came up took the suite a very long time to say so.
   def self.ensure_configured!
+    raise SetupError, 'TEST_URL is not set, so there is no Zammad to run the integration specs against' if target.nil?
     return true if @ensure_configured
     raise @setup_failure if @setup_failure
 

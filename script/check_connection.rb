@@ -20,7 +20,11 @@ require 'faraday'
 require 'json'
 require 'securerandom'
 
-URL      = ENV['TEST_URL']      || 'http://localhost:3000/'
+# No default for the URL. This script creates and deletes records, and
+# `http://localhost:3000/` is where a Zammad under development listens.
+URL = ENV['TEST_URL'].to_s.strip
+abort 'TEST_URL is not set. This script creates and deletes records in the Zammad it drives, so name one: TEST_URL=http://localhost:3000/' if URL.empty?
+
 LOGIN    = ENV['TEST_USER']     || 'admin@example.com'
 PASSWORD = ENV['TEST_PASSWORD'] || 'test'
 SUFFIX   = SecureRandom.hex(4)

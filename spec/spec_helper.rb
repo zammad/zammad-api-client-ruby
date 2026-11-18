@@ -43,6 +43,22 @@ RSpec.configure do |config|
     metadata[:order]       = :defined
   end
 
+  # Integration specs write to the Zammad they are pointed at, so they run
+  # only where TEST_URL names one: see Helper.target. Left out rather than
+  # failed, so that a bare `rspec` is the unit specs and nothing else, and
+  # said once so that nobody takes it for a run of them.
+  #
+  # The notice goes out when the first of them is loaded rather than before
+  # the suite: RSpec runs no suite hook for a run that selected nothing,
+  # which is what `rspec spec/integration` is without a TEST_URL.
+  if Helper.target.nil?
+    config.filter_run_excluding :integration
+    config.when_first_matching_example_defined(:integration) do
+      warn 'Integration specs left out: they create and delete records, so they run only against the Zammad that ' \
+           'TEST_URL names. Set TEST_URL, TEST_USER and TEST_PASSWORD to run them.'
+    end
+  end
+
   # The instance has to have an admin account before anything can
   # authenticate. Doing this from a hook rather than from one spec file keeps
   # the suite independent of file order.

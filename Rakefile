@@ -11,17 +11,29 @@ namespace :spec do
     task.pattern = 'spec/unit/**/*_spec.rb'
   end
 
-  desc 'Run the integration specs against a live Zammad (see TEST_URL)'
-  RSpec::Core::RakeTask.new(:integration) do |task|
+  desc 'Run the integration specs against the Zammad that TEST_URL names'
+  RSpec::Core::RakeTask.new(integration: :live_target) do |task|
     task.pattern = 'spec/integration/**/*_spec.rb'
   end
 end
 
 desc 'Run all specs'
-task spec: ['spec:unit', 'spec:integration']
+task spec: [:live_target, 'spec:unit', 'spec:integration']
 
-desc 'Drive a live Zammad instance end to end with this gem (see TEST_URL)'
-task :check_connection do
+# The integration specs and check_connection create and delete records, so
+# neither has a default for where. Asked here as well as in each of them, so
+# that a task which was asked to run against a live Zammad says why it did
+# not rather than passing over specs that were left out.
+desc 'Check that TEST_URL names the Zammad to run the live checks against'
+task :live_target do
+  next if !ENV['TEST_URL'].to_s.strip.empty?
+
+  abort 'TEST_URL is not set. This task creates and deletes records in the Zammad it runs against, so name one: ' \
+        'TEST_URL=http://localhost:3000/ TEST_USER=admin@example.com TEST_PASSWORD=test'
+end
+
+desc 'Drive the Zammad that TEST_URL names end to end with this gem'
+task check_connection: :live_target do
   sh 'ruby script/check_connection.rb'
 end
 

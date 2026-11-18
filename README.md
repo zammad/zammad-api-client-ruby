@@ -1309,7 +1309,10 @@ Set `COVERAGE=true` to produce a coverage report in `coverage/`.
 ### Testing against a live Zammad
 
 The integration specs and `check_connection` need a reachable Zammad instance and **will
-create and delete records**, so point them at something disposable:
+create and delete records**, so they run only where `TEST_URL` names one, and there is no
+default: point it at something disposable. Without it, `rspec` runs the unit specs and
+says the integration specs were left out, and `rake spec:integration`, `rake spec` and
+`rake check_connection` stop before running anything.
 
 ```sh
 export TEST_URL=http://localhost:3000/
