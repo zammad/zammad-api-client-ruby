@@ -1,0 +1,75 @@
+module ZammadAPI
+  # Generic over the resource it holds, so that what a walk yields is a
+  # Resources::Ticket rather than something untyped: `client.tickets.all` is a
+  # Collection[Resources::Ticket].
+  class Collection[R < Resources::Base]
+    include Enumerable[R]
+
+    # Both are private_constant in the source; RBS has no way to say so.
+    SORT_DIRECTIONS: Array[String]
+    SORT_ATTRIBUTE: Regexp
+
+    @transport: Transport
+    @resource_class: untyped
+    @path: String
+    @operation: String
+    @query: Hash[Symbol, untyped]
+    @max_per_page: Integer
+    @sortable: bool
+    @unsortable_hint: String
+    @per_page: Integer
+    @page: Integer?
+    @countable: bool
+
+    def initialize: (
+      transport: Transport,
+      resource_class: untyped,
+      path: String,
+      operation: String,
+      max_per_page: Integer,
+      sortable: bool,
+      unsortable_hint: String,
+      ?query: Hash[Symbol, untyped],
+      ?per_page: Integer?,
+      ?page: Integer?,
+      ?countable: bool
+    ) -> void
+
+    def each: () { (R) -> void } -> Collection[R]
+            | () -> Enumerator[R, Collection[R]]
+    def find_each: (?batch_size: Integer?) { (R) -> void } -> Collection[R]
+                 | (?batch_size: Integer?) -> Enumerator[R, Collection[R]]
+    def in_batches: (?of: Integer?) { (Array[R]) -> void } -> Collection[R]
+                  | (?of: Integer?) -> Enumerator[Array[R], Collection[R]]
+    def page: (Integer number, ?per_page: Integer?) -> Collection[R]
+    def first: () -> R?
+             | (Integer count) -> Array[R]
+    def take: (Integer count) -> Array[R]
+    def find: (?untyped ifnone) { (R) -> boolish } -> R?
+            | (*untyped) -> untyped
+    def order: (*(Symbol | String) attributes, **(Symbol | String) directions) -> Collection[R]
+    def pluck: (*(Symbol | String) keys) -> Array[untyped]
+    def count: (*untyped) ?{ (R) -> boolish } -> Integer
+    def size: (*untyped) ?{ (R) -> boolish } -> Integer
+    def length: (*untyped) ?{ (R) -> boolish } -> Integer
+    def empty?: () -> bool
+    def inspect: () -> String
+
+    private
+
+    def own_request_for_first?: (untyped count) -> bool
+    def find_by_id_message: (untyped) -> String
+    def resource_reader: () -> String
+    def sort_columns: (Array[untyped] attributes, Hash[untyped, untyped] directions) -> Hash[String, String]
+    def sort_attribute!: (untyped attribute) -> String
+    def sort_direction!: (String name, untyped direction) -> String
+    def sorted_by: () -> Hash[String, String]
+    def positive_integer!: (untyped, String) -> Integer
+    def page_size!: (untyped, String) -> Integer
+    def walk: () { (Array[R]) -> void } -> void
+    def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped]) -> Collection[R]
+    def fetch: (Integer, Integer) -> [ Array[R], Integer ]
+    def total_count: () -> Integer?
+    def clamp_per_page: (untyped) -> Integer
+  end
+end

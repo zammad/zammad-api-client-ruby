@@ -1,0 +1,32 @@
+# The signatures a typed project writes for its own code. Not published with
+# the gem: see spec/typed/usage.rb.
+module TypedUsage
+  class Role < ZammadAPI::Resources::Base
+    attr_accessor name: String
+  end
+
+  def self.title: (ZammadAPI::Client) -> String
+  def self.misspelled_reader: (ZammadAPI::Client) -> untyped
+  def self.logins: (ZammadAPI::Client) -> Array[String]
+  def self.block_parameter: (ZammadAPI::Client) -> untyped
+  def self.first_group: (ZammadAPI::Client) -> ZammadAPI::Resources::Group?
+  def self.first_tickets: (ZammadAPI::Client) -> Array[ZammadAPI::Resources::Ticket]
+  def self.found: (ZammadAPI::Client) -> ZammadAPI::Resources::Organization?
+  def self.newest_open: (ZammadAPI::Client) -> String?
+  def self.batches: (ZammadAPI::Client) -> Array[Integer]
+  def self.customer_email: (ZammadAPI::Client) -> String?
+  def self.article_bodies: (ZammadAPI::Client) -> Array[String]
+  def self.written: (ZammadAPI::Client) -> bool
+  def self.custom_attribute: (ZammadAPI::Client) -> [untyped, String?]
+  def self.role_names: (ZammadAPI::Client) -> Array[String]
+  def self.unsaved: (ZammadAPI::Client) -> String
+end
+
+# An attribute an administrator added, declared by the project that uses it.
+module ZammadAPI
+  module Resources
+    class Ticket
+      attr_accessor escalation_reason: String?
+    end
+  end
+end
