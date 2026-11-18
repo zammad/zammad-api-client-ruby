@@ -256,6 +256,33 @@ RSpec.describe ZammadAPI::Collection do
       expect(batches).to eq([[1, 2]])
     end
 
+    # The batch is the block's own Array, and working it off with `shift` is
+    # an ordinary way to consume one. The walk used to read the size of that
+    # Array after the block returned, so a drained batch looked like an empty
+    # page and ended the walk.
+    it 'keeps walking when the block empties the batch it was handed' do
+      stub_page(1, [{ id: 1 }, { id: 2 }], per_page: 2)
+      stub_page(2, [{ id: 3 }], per_page: 2)
+
+      ids = []
+      collection.in_batches(of: 2) { |batch| ids << batch.shift.id until batch.empty? }
+      expect(ids).to eq([1, 2, 3])
+    end
+
+    it 'does not take a batch the block shortened for a short page' do
+      stub_page(1, [{ id: 1 }, { id: 2 }], per_page: 2)
+      stub_page(2, [{ id: 3 }, { id: 4 }], per_page: 2)
+      stub_page(3, [], per_page: 2)
+
+      ids = []
+      collection.in_batches(of: 2) do |batch|
+        ids.concat(batch.map(&:id))
+        batch.pop if ids.size > 2
+      end
+      expect(ids).to eq([1, 2, 3, 4])
+      expect(a_request(:get, url).with(query: hash_including('page' => '3'))).to have_been_made
+    end
+
     it 'returns an Enumerator without a block' do
       expect(collection.in_batches).to be_a(Enumerator)
     end

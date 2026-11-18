@@ -618,6 +618,11 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   callers are told to write — and so did a record `save` carrying such a value. The body is
   encoded before the request is logged now, so a refused one leaves no line claiming a
   request that was never made, and the test kit refuses it the same way.
+- A walk no longer ends when the block empties the batch it was handed. The size of a page
+  was read after the block returned, so an `in_batches` consumer that worked its batch off
+  with `shift` looked like an empty page and the walk stopped after the first one, and a
+  batch the block shortened looked like the last. The records are counted before they are
+  handed over.
 
 ### Changed
 

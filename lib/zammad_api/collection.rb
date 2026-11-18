@@ -469,11 +469,18 @@ module ZammadAPI
         # the records were built from one line earlier.
         raise PaginationError.build(operation: @operation, page: page, resource_class: @resource_class) if digest == previous
 
-        yield records if !records.empty?
+        # Counted before the block has the page, not after. The Array handed
+        # over is the block's to do with as it likes, and a consumer that
+        # works a batch off with `shift` hands it back empty: read afterwards,
+        # that was an empty page, and an import stopped after its first batch
+        # with every later page still on the server.
+        received = records.size
+
+        yield records if received.positive?
 
         # A collection limited to a single page never advances.
         break if @page
-        break if records.empty?
+        break if received.zero?
 
         # Every stop condition here is derived from the records the endpoint
         # actually served. There was one that was not - an index endpoint was
@@ -491,8 +498,8 @@ module ZammadAPI
         # endpoint whose cap was never this generous - every page came back
         # short and the walk stopped on page one with a truncated result and
         # nothing to show for it.
-        page_size = records.size if page_size.zero?
-        break if records.size < page_size
+        page_size = received if page_size.zero?
+        break if received < page_size
 
         previous = digest
         page += 1
