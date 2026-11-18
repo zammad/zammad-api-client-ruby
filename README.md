@@ -462,9 +462,16 @@ response says which backend answered, so `find_by` cannot tell that miss from on
 a field the search does not read. You can, and the walk is one word away:
 
 ```ruby
-client.tickets.detect { it.state == 'open' }    # walks the index, and misses nothing
+client.tickets.detect { it[:state] == 'open' }  # walks the index: every ticket this client may read
 client.tickets.search('printer', condition: {'ticket.state_id' => {operator: 'is', value: [2]}})
 ```
+
+The walk compares `it[:state]`, as `find_by` does, and not `it.state`. Every record the
+client may read goes through the block, and a reader raises for an attribute the record in
+hand does not carry, which would end the walk on that record rather than pass it over. A
+user without an organization carries no `organization`, and Zammad serves a reduced record
+where the client may not see the whole of one. What the walk cannot find is a record the
+client may not read, or a value on a record it only sees reduced.
 
 Zammad records can carry administrator-defined custom attributes, so readers are resolved
 against the attributes the record arrived with rather than declared ahead of time. A reader

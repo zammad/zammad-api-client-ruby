@@ -197,8 +197,10 @@ module ZammadAPI
     # already said correctly. Nothing here can tell that miss from one caused
     # by a field the search does not read, because nothing in a response says
     # which backend answered. The caller does know which lookup they are
-    # writing: +detect { ... }+ on the resource is the walk, and misses
-    # nothing.
+    # writing: +detect { ... }+ on the resource is the walk, over every
+    # record this client may read. Compared with +[]+ there, as it is below,
+    # because a reader raises for an attribute the record in hand does not
+    # carry and would end the walk on it.
     #
     # Every page of hits is read until one matches. Only the first
     # {SEARCH_MAX_PER_PAGE} used to be, to keep a miss at one request, on the
