@@ -221,9 +221,14 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   records it would be calling sorted; a search sorts for every resource that can be
   searched.
 - `search` takes what a search endpoint narrows by besides the term as keywords:
-  `condition:`, `ids:`, `role_ids:`, `group_ids:` and `permissions:`. Any other keyword
-  raises `ArgumentError`, because Zammad drops a parameter it does not know rather than
-  refusing it, and the search would come back unnarrowed with nothing to say so.
+  `condition:` and `ids:` on every search, and `role_ids:`, `group_ids:` and `permissions:`
+  on users, the one search that reads them. Any other keyword raises `ArgumentError`,
+  because Zammad drops a parameter it does not know rather than refusing it, and the search
+  would come back unnarrowed with nothing to say so. That includes a user keyword on
+  another resource: `tickets.search('printer', group_ids: [2])` was sent as written and
+  answered with tickets from every group, where a `condition` on `ticket.group_id` is what
+  narrows them. A resource of your own declares what its search reads with
+  `search_filters`.
 - There is no `where`. During the development of 2.0 there was one, which took `sort_by`
   and `order_by` on a generic index, nothing at all on tickets and users, and the search
   parameters on a search, and raised for everything else — an attribute filter above all,

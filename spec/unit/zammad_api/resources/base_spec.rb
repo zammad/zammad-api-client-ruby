@@ -906,6 +906,20 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(subclass.searchable?).to be(true)
     end
 
+    it 'inherits the filters its parent\'s search reads' do
+      expect(Class.new(ZammadAPI::Resources::User).search_filter_names).to eq(%i[role_ids group_ids permissions])
+    end
+
+    it 'has no search filters of its own unless it or a parent declares some' do
+      expect(subclass.search_filter_names).to eq([])
+    end
+
+    it 'takes filter names as strings too' do
+      subclass.search_filters 'role_ids'
+
+      expect(subclass.search_filter_names).to eq([:role_ids])
+    end
+
     it 'inherits the page limit' do
       expect(subclass.page_limit).to eq(100)
     end

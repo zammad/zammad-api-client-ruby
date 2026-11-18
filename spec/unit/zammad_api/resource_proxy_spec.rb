@@ -760,7 +760,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
     context 'with a keyword the search endpoint would drop' do
       it 'refuses an attribute name' do
         expect { proxy.search('support', name: 'Users') }
-          .to raise_error(ArgumentError, /search does not take name: a search endpoint narrows by the term, and by condition, ids/)
+          .to raise_error(ArgumentError, %r{search does not take name on api/v1/groups: this search endpoint narrows by the term, and by condition, ids, and drops})
       end
 
       it 'says where an attribute value goes instead' do
@@ -786,6 +786,73 @@ RSpec.describe ZammadAPI::ResourceProxy do
       it 'makes no request' do
         expect { proxy.search('support', name: 'Users') }.to raise_error(ArgumentError)
         expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+      end
+    end
+
+    # model_search_render hands role_ids, group_ids and permissions to the
+    # search of every model, and only User::Search reads them. A ticket
+    # search given group_ids was sent as written and answered with tickets
+    # from every group the client can read.
+    context 'with a keyword only the user search reads' do
+      it 'refuses group_ids on tickets' do
+        expect { client.tickets.search('printer', group_ids: [2]) }
+          .to raise_error(ArgumentError, %r{search does not take group_ids on api/v1/tickets: this search endpoint narrows by the term, and by condition, ids, and drops})
+      end
+
+      it 'says how tickets are narrowed by group instead' do
+        expect { client.tickets.search('printer', group_ids: [2]) }
+          .to raise_error(ArgumentError, /or in a condition - search\(term, condition: \{'ticket\.group_id' => \{operator: 'is', value: \[2\]\}\}\)/)
+      end
+
+      it 'refuses role_ids and permissions on organizations' do
+        expect { client.organizations.search('acme', role_ids: [2], permissions: ['ticket.agent']) }
+          .to raise_error(ArgumentError, /search does not take role_ids, permissions on/)
+      end
+
+      it 'refuses them on groups' do
+        expect { proxy.search('support', group_ids: [1]) }.to raise_error(ArgumentError, /search does not take group_ids on/)
+      end
+
+      it 'makes no request' do
+        expect { client.tickets.search('printer', group_ids: [2]) }.to raise_error(ArgumentError)
+        expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+      end
+
+      it 'still takes all three on users, and names them among what that search narrows by' do
+        expect(client.users.search('smith', role_ids: [2], group_ids: [3], permissions: ['ticket.agent'])).to be_a(ZammadAPI::Collection)
+        expect { client.users.search('smith', active: true) }
+          .to raise_error(ArgumentError, /and by condition, ids, role_ids, group_ids, permissions, and drops/)
+      end
+
+      it 'still takes condition and ids on every search' do
+        expect(client.tickets.search('printer', ids: [1], condition: { 'ticket.group_id' => { operator: 'is', value: [2] } }))
+          .to be_a(ZammadAPI::Collection)
+      end
+    end
+
+    context 'with a resource a caller declared' do
+      let(:role_class) do
+        Class.new(ZammadAPI::Resources::Base) do
+          def self.name = 'Role'
+
+          path 'api/v1/roles'
+          searchable true
+        end
+      end
+
+      it 'takes condition and ids, which every search reads' do
+        expect(client.resource(role_class).search('agent', ids: [1])).to be_a(ZammadAPI::Collection)
+      end
+
+      it 'refuses a keyword it did not declare' do
+        expect { client.resource(role_class).search('agent', permissions: ['admin']) }
+          .to raise_error(ArgumentError, %r{search does not take permissions on api/v1/roles})
+      end
+
+      it 'takes a keyword it declared' do
+        role_class.search_filters :permissions
+
+        expect(client.resource(role_class).search('agent', permissions: ['admin'])).to be_a(ZammadAPI::Collection)
       end
     end
 

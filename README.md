@@ -290,6 +290,7 @@ Say what else is true of the endpoint, where it differs from the defaults:
 | ------------------ | ------- | -------------------------------------------------------------------- |
 | `path '…'`         | *required* | The index endpoint, relative to the instance URL.                 |
 | `searchable true`  | `false` | Zammad routes `<path>/search`, so `search` works and `find_by` uses it. |
+| `search_filters :role_ids` | none | What that search narrows by besides the term, `condition:` and `ids:`. `search` refuses any other keyword. |
 | `max_per_page 100` | `1000`  | The largest page the index endpoint serves.                          |
 | `sortable false`   | `true`  | The index endpoint is always served in the same order, so `order` refuses it. |
 | `belongs_to :role, class_name: 'Role'` | — | A foreign key, read as a record through `record.related.role`. |
@@ -716,20 +717,24 @@ client.users.find_by(email: 'someone@example.com')
 client.tickets.search('state.name:open').first(10)
 ```
 
-`search` also takes the other things a search endpoint narrows by, as keywords —
-`condition:`, `ids:`, `role_ids:`, `group_ids:` and `permissions:`:
+`search` also takes the other things a search endpoint narrows by, as keywords:
+`condition:` and `ids:` on every search, and `role_ids:`, `group_ids:` and `permissions:`
+on users, the one search that reads them:
 
 ```ruby
 client.users.search('smith', role_ids: [2])
 client.users.search('smith', group_ids: [1], permissions: ['ticket.agent'])
 client.tickets.search('printer', condition: {'ticket.state_id' => {operator: 'is', value: [1, 2]}})
+client.tickets.search('printer', condition: {'ticket.group_id' => {operator: 'is', value: [2]}})
 ```
 
 Any other keyword raises `ArgumentError`. Zammad drops a parameter it does not know, so
 `search('smith', active: true)` would come back unnarrowed with nothing to say so; an
 attribute value goes in the term, a sort in `order`, and paging in `page`, `in_batches` or
-`find_each`. A `nil` value raises too: there is no query string that means "this field is
-null".
+`find_each`. A user keyword on another resource raises for the same reason: Zammad takes
+`group_ids` on a ticket search and drops it, so tickets are narrowed by group with the
+condition above. A `nil` value raises too: there is no query string that means "this field
+is null".
 
 Zammad routes a search endpoint per model, not for every model. `users`, `organizations`,
 `tickets` and `groups` have one; `ticket_states`, `ticket_priorities` and `ticket_articles`

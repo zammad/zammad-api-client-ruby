@@ -40,11 +40,18 @@ module ZammadAPI
     # ApplicationController#model_search_render.
     SEARCH_MAX_PER_PAGE = 200
 
-    # What Zammad's search endpoints narrow by besides the term, from the call
-    # ApplicationController#model_search_render makes into Model.search. Unlike
-    # an index endpoint a search does narrow, but through these parameters and
-    # the term - never through an attribute name of its own.
-    SEARCH_FILTER_KEYS = %i[condition ids role_ids group_ids permissions].freeze
+    # What every one of Zammad's search endpoints narrows by besides the term:
+    # the two parameters that CanSearch, the part all of them share, reads out
+    # of the call ApplicationController#model_search_render makes into
+    # Model.search. Unlike an index endpoint a search does narrow, but through
+    # these parameters and the term - never through an attribute name of its
+    # own.
+    #
+    # That call hands over +role_ids+, +group_ids+ and +permissions+ as well,
+    # and they used to be in this list for it. Only the user search reads
+    # them, so a resource says which of them its search takes: see
+    # {Resources::Base.search_filters}.
+    SEARCH_FILTER_KEYS = %i[condition ids].freeze
 
     # Said at the end of the error for sorting an index endpoint that is
     # always served in id order, on a resource that can be searched.
@@ -352,6 +359,13 @@ module ZammadAPI
     # unnarrowed and nothing would say so. An attribute value belongs in the
     # term, and a sort in {Collection#order}.
     #
+    # That goes for a keyword another resource's search reads, too.
+    # +role_ids:+, +group_ids:+ and +permissions:+ narrow a user search and no
+    # other, and +client.tickets.search('printer', group_ids: [2])+ was sent
+    # as written and answered with tickets from every group the client can
+    # read. Tickets are narrowed by group through a +condition+ on
+    # +ticket.group_id+.
+    #
     # @example
     #   client.users.search('smith')
     #   client.users.search('smith', role_ids: [2])
@@ -359,8 +373,8 @@ module ZammadAPI
     #   client.tickets.search('state.name:open').order(created_at: :desc)
     #
     # @param term [String] the Zammad search term
-    # @param filters [Hash] any of +condition:+, +ids:+, +role_ids:+,
-    #   +group_ids:+ and +permissions:+
+    # @param filters [Hash] +condition:+ and +ids:+ on every search, and on
+    #   users +role_ids:+, +group_ids:+ and +permissions:+
     # @return [Collection]
     # @raise [ArgumentError] when +term+ is not a non-empty string, or for a
     #   keyword the search endpoint does not read, a nil value, or two
@@ -418,18 +432,24 @@ module ZammadAPI
     # @raise [ArgumentError]
     def search_filters(filters)
       normalized = DuplicateKeys.normalize(filters) { it.to_s.to_sym }
-      unknown    = normalized.keys - SEARCH_FILTER_KEYS
+      unknown    = normalized.keys - search_filter_keys
       raise ArgumentError, unknown_search_filter_message(unknown) if !unknown.empty?
 
       Transport.stringify_query(normalized)
       normalized
     end
 
+    # What the search endpoint of this resource narrows by besides the term.
+    #
+    # @return [Array<Symbol>]
+    def search_filter_keys = SEARCH_FILTER_KEYS + resource_class.search_filter_names
+
     def unknown_search_filter_message(unknown)
-      "search does not take #{unknown.join(', ')}: a search endpoint narrows by the term, and by #{SEARCH_FILTER_KEYS.join(', ')}, and drops " \
-        'anything else, which would hand back an unnarrowed search. ' \
-        "Put an attribute value in the term - search('state.name:open') - sort with search(term).order(...), " \
-        'and page with page, in_batches or find_each.'
+      "search does not take #{unknown.join(', ')} on #{path}: this search endpoint narrows by the term, and by #{search_filter_keys.join(', ')}, " \
+        'and drops anything else, which would hand back an unnarrowed search. ' \
+        "Put an attribute value in the term - search('state.name:open') - or in a condition - " \
+        "search(term, condition: {'ticket.group_id' => {operator: 'is', value: [2]}}) - " \
+        'sort with search(term).order(...), and page with page, in_batches or find_each.'
     end
 
     # Zammad routes a search endpoint per model, not for every model: users,

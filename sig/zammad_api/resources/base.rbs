@@ -34,14 +34,17 @@ module ZammadAPI
       self.@path: String?
       self.@searchable: bool?
       self.@max_per_page: Integer?
+      self.@search_filters: Array[Symbol]?
       self.@sortable: bool?
 
       def self.path: (String) -> void
       def self.searchable: (bool) -> void
       def self.max_per_page: (Integer) -> void
+      def self.search_filters: (*Symbol | String names) -> void
       def self.sortable: (bool) -> void
       def self.resource_path: () -> String
       def self.searchable?: () -> bool
+      def self.search_filter_names: () -> Array[Symbol]
       def self.page_limit: () -> Integer
       def self.sortable?: () -> bool
       def self.member_path: ((Integer | String) id) -> String

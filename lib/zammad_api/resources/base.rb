@@ -74,6 +74,30 @@ module ZammadAPI
           @searchable = value
         end
 
+        # Declares what this resource's search endpoint narrows by, besides
+        # the term and the two filters every search reads.
+        #
+        # Every search endpoint goes through
+        # ApplicationController#model_search_render, which hands the same
+        # parameters to the search of whichever model it was asked for. What
+        # that search does with them is the model's own business. +condition+
+        # and +ids+ are read by the part all of them share, CanSearch, and
+        # need no declaring. +role_ids+, +group_ids+ and +permissions+ are
+        # read by User::Search and by no other: a ticket search handed
+        # +group_ids+ takes it, drops it and answers unnarrowed, on the SQL
+        # path and the Elasticsearch one alike.
+        #
+        # Declared rather than accepted everywhere, so that
+        # {ResourceProxy#search} can refuse a keyword this resource's search
+        # would drop - the same refusal it makes for a keyword no search
+        # reads at all.
+        #
+        # @param names [Array<Symbol>]
+        # @return [void]
+        def search_filters(*names)
+          @search_filters = names.map(&:to_sym).freeze
+        end
+
         # Declares the largest page size this resource's index endpoint
         # serves.
         #
@@ -109,6 +133,14 @@ module ZammadAPI
 
         # @return [Boolean] whether Zammad routes a +/search+ endpoint here
         def searchable? = declaration(:searchable) { false }
+
+        # @return [Array<Symbol>] what this resource's search endpoint narrows
+        #   by besides the term, +condition+ and +ids+
+        def search_filter_names
+          declaration(:search_filters) do
+            [] #: Array[Symbol]
+          end
+        end
 
         # @return [Integer] the largest page size this endpoint serves
         def page_limit = declaration(:max_per_page) { DEFAULT_MAX_PER_PAGE }
