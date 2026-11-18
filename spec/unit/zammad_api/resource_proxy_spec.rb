@@ -88,6 +88,26 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect { proxy.find('') }.to raise_error(ArgumentError, /record id is required/)
       expect(a_request(:any, /zammad\.test/)).not_to have_been_made
     end
+
+    # A record where its id belongs went into the path as it inspects, and
+    # the 404 for that path was read as an answer about the record.
+    context 'with a record where its id belongs' do
+      let(:record) { ZammadAPI::Resources::Group.from_response(client.instance_variable_get(:@transport), { id: 1, name: 'Users' }) }
+
+      it 'refuses exists? rather than answering false for a record that exists' do
+        expect { proxy.exists?(record) }.to raise_error(ArgumentError, /pass its id/)
+        expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+      end
+
+      it 'refuses find' do
+        expect { proxy.find(record) }.to raise_error(ArgumentError, /pass its id/)
+      end
+
+      it 'refuses destroy rather than raising NotFoundError for a record that is there' do
+        expect { proxy.destroy(record) }.to raise_error(ArgumentError, /pass its id/)
+        expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+      end
+    end
   end
 
   describe '#create' do

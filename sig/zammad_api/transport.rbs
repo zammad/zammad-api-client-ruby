@@ -29,6 +29,7 @@ module ZammadAPI
     REDACTED: String
     UNRESERVED_IN_PATH: Regexp
     DOT_SEGMENTS: Array[String]
+    RECORD_ID_TYPES: Array[Class]
     ABSOLUTE_URL: Regexp
     RESERVED_HEADERS: Hash[String, String]
 
@@ -54,6 +55,7 @@ module ZammadAPI
     def self.blank_on_behalf_of_message: (untyped identifier) -> String
     def self.stringify_header_value: (String, untyped) -> String
     def self.escape_path_segment: (untyped) -> String
+    def self.not_a_record_id_message: (untyped value) -> String
     def self.relative_path: (untyped) -> String
     def self.refuse_unreadable_path!: (String relative) -> void
     def self.unreadable_path_message: (String relative) -> String
