@@ -873,9 +873,13 @@ whole result beside each page, with `with_total_count`, and an empty page ends t
 only once the pages read have covered that many hits. The total is never what ends a walk
 on a page that still held records.
 
-Two limits remain, and at both an empty page ends the walk whatever is behind it. A Zammad
-before 6.5.1 does not report the total beside expanded records. And Elasticsearch stops
-counting at ten thousand hits, so past that many a page of stale hits reads as the end.
+Three limits remain, and at each an empty page ends the walk whatever is behind it. A
+Zammad before 6.5.1 does not report the total beside expanded records. Elasticsearch stops
+counting at ten thousand hits, so past that many a page of stale hits reads as the end. And
+the pages read are reckoned at the size that was asked for, 200 hits unless a batch size
+says otherwise: an instance that serves a search in smaller pages than that has covered
+fewer hits than the walk takes it to have. Asked for 200 and served 50, an empty first page
+beside a total of 150 reads as the end, with the hits from the 51st on unread.
 
 `first` and `take` size their own request rather than taking records off the front of one
 sized for walking, so the cheap-looking call is cheap:

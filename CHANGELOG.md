@@ -656,9 +656,11 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   pages read cover the total reported beside it. The total never ends a walk on a page that
   held records, because Elasticsearch stops counting at ten thousand hits. An empty page
   still ends the walk where there is no total to go by: on a Zammad before 6.5.1, which
-  answers with the records alone, and past the ten thousandth hit on Elasticsearch. The
-  test kit pages a search stubbed as `{records: [...], total_count: n}` the way it pages
-  an Array.
+  answers with the records alone, and past the ten thousandth hit on Elasticsearch. It can
+  also end the walk short of the total on an instance that serves a search in smaller pages
+  than were asked for, because the pages read are reckoned at the size asked for. The test
+  kit pages a search stubbed as `{records: [...], total_count: n}` the way it pages an
+  Array.
 - A repeated page is recognised by the records on it rather than by their payload. A job
   that writes to the records it is handed changes what they serialize as, so an endpoint
   that ignores `page` served the same records with a different payload each time: the
