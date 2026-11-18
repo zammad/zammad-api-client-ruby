@@ -40,6 +40,7 @@ module ZammadAPI
     def self.stringify_query_hash: (Hash[untyped, untyped], String?) -> Hash[String, untyped]
     def self.stringify_query_value: (String, untyped) -> untyped
     def self.stringify_headers: (Hash[untyped, untyped]) -> Hash[String, String]
+    def self.stringify_on_behalf_of: ((String | Integer)? identifier) -> String?
     def self.stringify_header_value: (String, untyped) -> String
     def self.escape_path_segment: (untyped) -> String
     def self.relative_path: (untyped) -> String

@@ -290,6 +290,28 @@ module ZammadAPI
       value.to_s
     end
 
+    # The +From+ scope as a transport holds it: text, and a copy of its own.
+    #
+    # Text, because a user id is a documented way to name the user and
+    # arrives as an Integer, which reached Net::HTTP intact and died there
+    # with `undefined method 'strip' for an instance of Integer`.
+    #
+    # A copy, because `String#to_s` hands back the receiver. The scoped
+    # client held the caller's own String, so a login buffer that was reused
+    # after `client.on_behalf_of(login)` changed who every later request from
+    # that client was performed for - the one thing a scope exists to pin.
+    # Copied rather than interned, for the reason {Config} copies what it is
+    # given: nothing a caller passed in should outlive what holds it.
+    #
+    # Public for the same reason as {.stringify_query}: {Test} carries the
+    # scope the way this class does, so that what it records is what the
+    # header would have carried.
+    #
+    # @api private
+    # @param identifier [String, Integer, nil] login, email or user id
+    # @return [String, nil] frozen, or nil for no scope
+    def self.stringify_on_behalf_of(identifier) = identifier.nil? ? nil : identifier.to_s.dup.freeze
+
     # Percent-encodes one segment of a request path.
     #
     # Record ids are pasted into the path, and an id taken straight from a
@@ -402,18 +424,16 @@ module ZammadAPI
 
     # Returns a copy of this transport that sends the +From+ header.
     #
-    # A user id is a documented way to name the user, and arrives here as an
-    # Integer. Header values are stringified here rather than at the point the
-    # header is set, so that {Test} records the value the wire would carry -
-    # an Integer used to reach Net::HTTP intact and die there with
-    # `undefined method 'strip' for an instance of Integer`, while the test
-    # kit accepted it happily.
+    # The scope is stringified here rather than at the point the header is
+    # set, so that {Test} records the value the wire would carry: an Integer
+    # used to die inside Net::HTTP while the test kit accepted it happily.
+    # See {.stringify_on_behalf_of} for what is held.
     #
     # @param identifier [String, Integer, nil] login, email or user id
     # @return [Transport]
     def with_on_behalf_of(identifier)
       copy = dup
-      copy.instance_variable_set(:@on_behalf_of, identifier&.to_s)
+      copy.instance_variable_set(:@on_behalf_of, Transport.stringify_on_behalf_of(identifier))
       copy
     end
 

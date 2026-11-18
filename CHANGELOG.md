@@ -674,6 +674,10 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `'ticket_id'` as well, the String key came later in the Hash and won when the article
   symbolized its keys, so the article was posted to the ticket the caller's Hash named.
   Both spellings are taken out before the ticket's id goes in.
+- `on_behalf_of` keeps the user it was given. The scoped client held the caller's own
+  String, so a login buffer reused after `client.on_behalf_of(login)` changed who every
+  later request from that client was performed for. The scope is copied and frozen, in the
+  test kit's transport as well.
 
 ### Changed
 

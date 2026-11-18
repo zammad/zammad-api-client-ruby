@@ -475,9 +475,9 @@ module ZammadAPI
 
       def config = test.config
 
-      # Stringified like the real transport's, so that a recorded scope is what
-      # a request would have carried.
-      def with_on_behalf_of(identifier) = self.class.new(test, on_behalf_of: identifier&.to_s)
+      # Stringified and copied by the real transport's own rule, so that a
+      # recorded scope is what a request would have carried.
+      def with_on_behalf_of(identifier) = self.class.new(test, on_behalf_of: ::ZammadAPI::Transport.stringify_on_behalf_of(identifier))
 
       # {Client#with} re-validates the options and hands them here. There is
       # no connection to rebuild, and the derived client reports the derived

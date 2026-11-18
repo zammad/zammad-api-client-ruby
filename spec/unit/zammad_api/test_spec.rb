@@ -505,6 +505,15 @@ RSpec.describe ZammadAPI::Test do
       expect(zammad.requests.last.on_behalf_of).to eq('42')
     end
 
+    it 'records the scope a client was given, not what its string became afterwards' do
+      login  = +'agent@example.com'
+      scoped = client.on_behalf_of(login)
+      login.replace('admin@example.com')
+      scoped.groups.find(1)
+
+      expect(zammad.requests.last.on_behalf_of).to eq('agent@example.com')
+    end
+
     it 'leaves on_behalf_of nil for an unscoped client' do
       client.groups.find(1)
 

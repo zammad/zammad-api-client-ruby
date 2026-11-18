@@ -731,6 +731,41 @@ RSpec.describe ZammadAPI::Transport do
       expect(unit_transport.with_on_behalf_of(nil).on_behalf_of).to be_nil
     end
 
+    # `String#to_s` hands back the receiver, so the scoped transport held the
+    # caller's own String: a login buffer reused after the scope was taken
+    # changed who every later request was performed for.
+    context 'when the string it was given changes afterwards' do
+      let(:login)  { +'agent@example.com' }
+      let(:scoped) { unit_transport.with_on_behalf_of(login) }
+
+      before do
+        scoped
+        login.replace('admin@example.com')
+      end
+
+      it 'goes on sending the scope it was given' do
+        stub = stub_request(:get, url).with(headers: { 'From' => 'agent@example.com' }).to_return(json_response([]))
+        scoped.get('api/v1/groups', operation: 'test')
+
+        expect(stub).to have_been_requested
+      end
+
+      it 'goes on reporting the scope it was given' do
+        expect(scoped.on_behalf_of).to eq('agent@example.com')
+      end
+    end
+
+    it 'holds the scope frozen' do
+      expect(unit_transport.with_on_behalf_of(+'agent@example.com').on_behalf_of).to be_frozen
+    end
+
+    it 'leaves the string it was given writable' do
+      login = +'agent@example.com'
+      unit_transport.with_on_behalf_of(login)
+
+      expect(login).not_to be_frozen
+    end
+
     it 'returns a different transport' do
       transport = unit_transport
       expect(transport.with_on_behalf_of('someone')).not_to be(transport)
