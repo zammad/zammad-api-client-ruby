@@ -40,7 +40,11 @@ user         = client.users.find_by(email: email)
 # either, so it stops, before anything is created. `[]` rather than a reader,
 # because a user with no organization may not carry the attribute at all.
 if user && (organization.nil? || user[:organization_id] != organization.id)
-  abort "#{email} is already a user (id=#{user.id}) of #{user[:organization] || 'no organization'}, not of #{company}. " \
+  # Named where the response carries the name, by id where it carries only
+  # that, and "no organization" only for a user that has neither.
+  current = user[:organization] || (user[:organization_id] ? "organization id=#{user[:organization_id]}" : 'no organization')
+
+  abort "#{email} is already a user (id=#{user.id}) of #{current}, not of #{company}. " \
         'Nothing was created or changed. Move the user in Zammad first, if that is what is meant.'
 end
 
