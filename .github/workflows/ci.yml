@@ -1,11 +1,13 @@
 name: CI
 on:
   push:
-    branches: [master]
+    # 1-stable is the maintenance line for 1.x, kept apart from 2.0.
+    branches: [1-stable]
   pull_request:
-  schedule:
-    # Run every on Friday to ensure everything works as expected.
-    - cron:  '0 6 * * 5'
+  # No schedule here: GitHub runs a scheduled workflow from the default branch
+  # only, so a cron entry on this branch would never fire. Start a run by hand
+  # instead, to see whether 1.x still passes against the current Zammad.
+  workflow_dispatch:
 jobs:
   lint:
     runs-on: ubuntu-latest
