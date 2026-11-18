@@ -594,6 +594,15 @@ module ZammadAPI
     # divisor that fits. Five thousand stale hits are read past in
     # thirty-four requests.
     #
+    # It takes the endpoint to serve the size it is asked for, up to
+    # +max_per_page+, which is what #hits_past? takes as well. One that
+    # serves less pages by its own size, so page 3 of 192 served as 100 is
+    # hits 201 to 300: hits are passed over, or handed back twice, and the
+    # pages read cover less than the walk takes them to. A page of one, which
+    # every endpoint serves, could not go wrong that way. Zammad serves a
+    # search the 200 this asks for at most, so it takes an instance whose
+    # cap was lowered, and the README says so beside the walk's own limits.
+    #
     # Not for a size a caller chose. `in_batches(of: 10)` says how many
     # records a batch may hold, and a page of 160 is not one of those.
     #

@@ -912,7 +912,10 @@ counting at ten thousand hits, so past that many a page of stale hits reads as t
 the pages read are reckoned at the size that was asked for, 200 hits unless a batch size
 says otherwise: an instance that serves a search in smaller pages than that has covered
 fewer hits than the walk takes it to have. Asked for 200 and served 50, an empty first page
-beside a total of 150 reads as the end, with the hits from the 51st on unread.
+beside a total of 150 reads as the end, with the hits from the 51st on unread. On such an
+instance `first`, `take` and `empty?` can also miss hits behind stale ones, or hand one
+back twice, since the larger pages they ask for past an empty one (see below) are served
+from other positions than the ones asked for. Zammad itself serves a search 200 at a time.
 
 `first` and `take` size their own request rather than taking records off the front of one
 sized for walking, so the cheap-looking call is cheap:
