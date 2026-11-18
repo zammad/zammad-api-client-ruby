@@ -956,7 +956,11 @@ RSpec.describe ZammadAPI::Collection do
       expect(search.map(&:id)).to eq((1..(page_size * 2)).to_a)
     end
 
-    it 'ends on the empty page' do
+    # The bare array is what a Zammad before 7.0 answers with, and it says
+    # nothing about how many hits there are. An empty page is then all there
+    # is to end on, hits behind it or not: see the next group for an endpoint
+    # that does say.
+    it 'ends on the empty page where the endpoint reports no total' do
       stub_search_page(1, hits(1..3))
       last = stub_search_page(2, [])
       stub_search_page(3, hits([4]))
@@ -977,6 +981,151 @@ RSpec.describe ZammadAPI::Collection do
 
       expect(search.page(2).map(&:id)).to eq([1, 2, 3])
       expect(a_request(:get, search_url).with(query: hash_including('page' => '3'))).not_to have_been_made
+    end
+  end
+
+  # A page of a search can hold nothing with hits still behind it, for the
+  # reason it can come back short: every id the search named for it has lost
+  # its record. It takes one stale hit on the page of one that `first` and
+  # `empty?` ask for, and a search serves the newest first. A Zammad from 7.0
+  # on reports the size of the whole result beside the page where it is asked
+  # to, which is what tells such a page from the end.
+  describe 'a search that reports its total beside each page' do
+    subject(:search) { client.users.search('smith') }
+
+    let(:search_url) { "#{ClientHelper::BASE_URL}api/v1/users/search" }
+
+    def stub_counted_page(page, ids, total:)
+      stub_request(:get, search_url)
+        .with(query: hash_including('page' => page.to_s))
+        .to_return(json_response({ records: ids.map { { id: it } }, total_count: total }))
+    end
+
+    def walked_ids(per_page:) = search.find_each(batch_size: per_page).map(&:id)
+
+    it 'asks for the total with every page of a walk' do
+      stub_counted_page(1, [1], total: 2)
+      stub_counted_page(2, [2], total: 2)
+      stub_counted_page(3, [], total: 2)
+      walked_ids(per_page: 1)
+
+      expect(a_request(:get, search_url).with(query: hash_including('with_total_count' => 'true'))).to have_been_made.times(3)
+    end
+
+    it 'reads the records out of the object the total arrives in' do
+      stub_counted_page(1, [1, 2, 3], total: 3)
+      stub_counted_page(2, [], total: 3)
+
+      expect(search.map(&:id)).to eq([1, 2, 3])
+    end
+
+    it 'reads on past an empty page the total says has hits behind it' do
+      stub_counted_page(1, [1], total: 3)
+      stub_counted_page(2, [], total: 3)
+      stub_counted_page(3, [3], total: 3)
+      stub_counted_page(4, [], total: 3)
+
+      expect(walked_ids(per_page: 1)).to eq([1, 3])
+    end
+
+    # Two empty pages hold the same nothing, and the guard against a page
+    # that repeats used to read that as an endpoint ignoring `page`.
+    it 'reads on past two empty pages in a row' do
+      stub_counted_page(1, [1], total: 4)
+      stub_counted_page(2, [], total: 4)
+      stub_counted_page(3, [], total: 4)
+      stub_counted_page(4, [4], total: 4)
+      stub_counted_page(5, [], total: 4)
+
+      expect(walked_ids(per_page: 1)).to eq([1, 4])
+    end
+
+    it 'ends on an empty page once the pages read cover the total' do
+      stub_counted_page(1, [1, 2], total: 4)
+      last = stub_counted_page(2, [], total: 4)
+      stub_counted_page(3, [5], total: 4)
+
+      expect(walked_ids(per_page: 2)).to eq([1, 2])
+      expect(last).to have_been_requested.once
+      expect(a_request(:get, search_url).with(query: hash_including('page' => '3'))).not_to have_been_made
+    end
+
+    # Elasticsearch stops counting at ten thousand hits and reports that as
+    # the total. A walk ended on the figure would stop there.
+    it 'does not end on the total while a page still holds records' do
+      stub_counted_page(1, [1], total: 2)
+      stub_counted_page(2, [2], total: 2)
+      stub_counted_page(3, [3], total: 2)
+      stub_counted_page(4, [], total: 2)
+
+      expect(walked_ids(per_page: 1)).to eq([1, 2, 3])
+    end
+
+    it 'makes no more requests than the total has pages' do
+      (1..5).each { stub_counted_page(it, [], total: 3) }
+
+      expect(walked_ids(per_page: 1)).to eq([])
+      expect(a_request(:get, search_url).with(query: hash_including({}))).to have_been_made.times(3)
+    end
+
+    it 'finds the first live hit behind a stale one' do
+      stub_counted_page(1, [], total: 3)
+      stub_counted_page(2, [2], total: 3)
+
+      expect(search.first.id).to eq(2)
+    end
+
+    it 'is not empty where the first hit is stale and the next is live' do
+      stub_counted_page(1, [], total: 3)
+      stub_counted_page(2, [2], total: 3)
+
+      expect(search.empty?).to be(false)
+    end
+
+    it 'is empty, in one request, where the stale hit was the only one' do
+      stub_counted_page(1, [], total: 1)
+
+      expect(search.empty?).to be(true)
+      expect(a_request(:get, search_url).with(query: hash_including({}))).to have_been_made.once
+    end
+
+    it 'still raises PaginationError for a search that repeats a page of records' do
+      stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response({ records: [{ id: 1 }], total_count: 9 }))
+
+      expect { search.to_a }.to raise_error(ZammadAPI::PaginationError, /ignoring the page parameter/)
+    end
+
+    it 'ends on the empty page where the total is not a count' do
+      stub_counted_page(1, [1], total: 'lots')
+      stub_counted_page(2, [], total: -4)
+      stub_counted_page(3, [3], total: 'lots')
+
+      expect(walked_ids(per_page: 1)).to eq([1])
+    end
+
+    it 'raises ParseError for an object that is not a page of records' do
+      stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response({ total_count: 3 }))
+
+      expect { search.to_a }.to raise_error(ZammadAPI::ParseError, /expected a JSON array, got Hash/)
+    end
+
+    # One page is one request whatever it holds, so there is no walk for a
+    # total to end, and the request is the one it always was.
+    it 'does not ask a search limited to one page for the total' do
+      stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response([{ id: 1 }]))
+      search.page(2).to_a
+
+      expect(a_request(:get, search_url).with(query: { 'expand' => 'true', 'query' => 'smith', 'page' => '2', 'per_page' => '200' })).to have_been_made.once
+    end
+
+    # model_index_render drops the parameter with every other it does not
+    # know, so asking would be noise on every request of every walk.
+    it 'does not ask an index for the total' do
+      index_url = "#{ClientHelper::BASE_URL}api/v1/users"
+      stub_request(:get, index_url).with(query: hash_including({})).to_return(json_response([]))
+      client.users.all.to_a
+
+      expect(a_request(:get, index_url).with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => '1000' })).to have_been_made.once
     end
   end
 

@@ -47,8 +47,9 @@ module ZammadAPI
     #   as many as the endpoint serves
     # @param search [Boolean] whether this is a search endpoint, which
     #   differs from an index in two ways a collection has to know about: it
-    #   answers +only_total_count+, and it can serve a page short of its size
-    #   before the last one
+    #   reports the size of the whole result, alone for +only_total_count+
+    #   and beside a page for +with_total_count+, and it can serve a page
+    #   short of its size, or with nothing on it, before the last one
     # @param sortable [Boolean] whether this endpoint reads +sort_by+ and
     #   +order_by+
     # @param unsortable_hint [String] what to do instead where it does not
@@ -443,7 +444,14 @@ module ZammadAPI
       previous  = nil
       page_size = 0
       loop do
-        records, digest = fetch(page, @per_page)
+        records, digest, total = fetch(page, @per_page)
+
+        # Counted before the block has the page, not after. The Array handed
+        # over is the block's to do with as it likes, and a consumer that
+        # works a batch off with `shift` hands it back empty: read afterwards,
+        # that was an empty page, and an import stopped after its first batch
+        # with every later page still on the server.
+        received = records.size
 
         # Before the records are handed over, not after. Yielding first meant
         # an endpoint that ignores `page` had its repeated page imported,
@@ -467,29 +475,31 @@ module ZammadAPI
         # insensitivity this needs - and taking it from the decoded payload
         # rather than from the built records costs nothing extra, because that
         # payload is what the records were built from one line earlier.
-        raise PaginationError.build(operation: @operation, page: page, resource_class: @resource_class) if digest == previous
-
-        # Counted before the block has the page, not after. The Array handed
-        # over is the block's to do with as it likes, and a consumer that
-        # works a batch off with `shift` hands it back empty: read afterwards,
-        # that was an empty page, and an import stopped after its first batch
-        # with every later page still on the server.
-        received = records.size
+        #
+        # An empty page is not held against the one before it. Two in a row
+        # are what a search serves for two pages of hits whose records are
+        # gone, with more beyond them - see #hits_past? - and there is nothing
+        # on either for the block to be handed twice.
+        raise PaginationError.build(operation: @operation, page: page, resource_class: @resource_class) if received.positive? && digest == previous
 
         yield records if received.positive?
 
         # A collection limited to a single page never advances.
         break if @page
-        break if received.zero?
+        # An empty page ends the walk, unless it is a search saying that it
+        # has hits beyond this one.
+        break if received.zero? && !hits_past?(page, total)
 
         # Every stop condition here is derived from the records the endpoint
-        # actually served. There was one that was not - an index endpoint was
-        # believed to report the size of the whole result in a header, which
-        # would have ended a short walk one request earlier - and Zammad sends
-        # no such header from any endpoint, so it never once fired. What it
-        # did leave behind was a stop condition that could end a walk early on
-        # a figure the records did not corroborate, which is the one way a
-        # walk can be wrong rather than merely slow.
+        # actually served, and the one figure read beside them - a search's
+        # total, in #hits_past? - can only keep a walk going. There was a
+        # stop condition that was not: an index endpoint was believed to
+        # report the size of the whole result in a header, which would have
+        # ended a short walk one request earlier. Zammad sends no such header
+        # from any endpoint, so it never once fired. What it did leave behind
+        # was a stop condition that could end a walk early on a figure the
+        # records did not corroborate, which is the one way a walk can be
+        # wrong rather than merely slow.
         #
         # How big a page this endpoint actually serves, learned from the first
         # one rather than assumed. The requested size is clamped to a per-
@@ -509,9 +519,10 @@ module ZammadAPI
         # deleted in between, or one Elasticsearch still lists because its
         # index has drifted from the database. So a search can serve 199 of
         # 200 on page two with page three still to come, and stopping there
-        # truncated the result with nothing to say so. Only the empty page
-        # above ends a search walk, which costs one more request where the
-        # last page of hits is part-filled.
+        # truncated the result with nothing to say so. Only an empty page
+        # ends a search walk, which costs one more request where the last
+        # page of hits is part-filled - and not every empty page does, for
+        # the same reason: see #hits_past?.
         page_size = received if page_size.zero?
         break if !@search && received < page_size
 
@@ -536,23 +547,78 @@ module ZammadAPI
       )
     end
 
-    # Fetches one page and the digest the repeated-page guard compares.
+    # Whether a search reports hits beyond the page just read, which is what
+    # tells a page with nothing on it from the end of the result.
     #
-    # @return [Array(Array<Resources::Base>, Integer)] the records and the
-    #   digest
+    # A search page can come back empty with hits still to come, for the
+    # reason it can come back short: every id the search named for it has
+    # lost its record. On a page of 200 that takes 200 stale hits in a row.
+    # On the page of one that {#first} and {#empty?} ask for it takes one,
+    # and a search sorts by `updated_at`, newest first - so the hit likeliest
+    # to be stale, a record deleted a moment ago that Elasticsearch has yet
+    # to drop, is the first one served. `search(term).first` answered nil and
+    # `empty?` true for a search with live hits right behind it, and `each`
+    # ended on such a page with the rest unread.
+    #
+    # So a search that is walked asks for the size of the whole result beside
+    # every page - see #page_query - and an empty page ends the walk only
+    # once the pages read have covered it.
+    #
+    # The figure is not used the other way round, to end a walk on a page
+    # that still held records and save the request after it. Elasticsearch
+    # stops counting at ten thousand hits and reports that as the total, so
+    # a walk ended on the figure would stop there with the rest unread -
+    # which is the stop condition the note in #walk is about. Past that
+    # figure an empty page ends the walk, as it does where there is no figure
+    # at all: a Zammad before 7.0 answers `with_total_count` under `expand`
+    # with the bare array. That is the gap this leaves.
+    #
+    # Reckoned in the page size that was asked for. An endpoint that pages
+    # smaller has covered fewer hits than this takes it to have, and the
+    # walk then ends on an empty page it might have read past - no earlier
+    # than it ended before the figure was read at all.
+    #
+    # What reading on costs is bounded by the same figure: a request per
+    # page of the hits the endpoint reports, and none beyond them.
+    def hits_past?(page, total) = !total.nil? && page * @per_page < total
+
+    # Fetches one page: the records, the digest the repeated-page guard
+    # compares, and the size of the whole result where the endpoint reported
+    # it beside them.
+    #
+    # @return [Array(Array<Resources::Base>, Integer, Integer)] the records,
+    #   the digest and the total
+    # @return [Array(Array<Resources::Base>, Integer, nil)] where no total
+    #   was reported
     def fetch(page, per_page)
       response = @transport.get(
         @path,
         operation:      @operation,
         resource_class: @resource_class,
-        query:          @query.merge(page: page, per_page: per_page)
+        query:          page_query(page, per_page)
       )
-      decoded = response.decoded(:array, operation: @operation, resource_class: @resource_class)
+      decoded, total = response.decoded_list(operation: @operation, resource_class: @resource_class)
       # The digest for the repeated-page guard is taken here, from the decoded
       # payload, which is the one structure that has everything the guard needs
       # and is already in hand. See the guard in `walk` for why it is this and
       # not the records or the raw body.
-      [decoded.map { @resource_class.from_response(@transport, it) }, page_digest(decoded)]
+      [decoded.map { @resource_class.from_response(@transport, it) }, page_digest(decoded), total]
+    end
+
+    # The parameters of a request for one page.
+    #
+    # `with_total_count` goes out where the answer is read, which is a search
+    # being walked: see #hits_past?. An index drops the parameter along with
+    # everything else it does not know, and a collection limited to one page
+    # has no walk to end, so both are sent what they always were.
+    #
+    # It costs Zammad nothing it was not doing. model_search_render asks the
+    # search for the total on every request and leaves it out of the answer
+    # unless the parameter is there.
+    def page_query(page, per_page)
+      query = @query.merge(page: page, per_page: per_page)
+
+      @search && @page.nil? ? query.merge(with_total_count: true) : query
     end
 
     # What the repeated-page guard compares two pages by: which records they

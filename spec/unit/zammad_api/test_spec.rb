@@ -639,6 +639,56 @@ RSpec.describe ZammadAPI::Test do
     end
   end
 
+  # The object a Zammad from 7.0 on answers a walked search with. It is a
+  # list too, so the page after it holds no records - and reports the same
+  # total, which is what a walk reads to tell that page from the end.
+  describe 'a search stubbed once with its total beside the records' do
+    subject(:zammad) { described_class.new }
+
+    let(:client) { zammad.client }
+
+    it 'reads the whole search without a second stub' do
+      zammad.stub(:get, 'api/v1/users/search', body: { records: [{ id: 1 }, { id: 2 }], total_count: 2 })
+
+      expect(client.users.search('smith').map(&:id)).to eq([1, 2])
+    end
+
+    it 'answers a later page with no records and the same total' do
+      zammad.stub(:get, 'api/v1/users/search', body: { records: [{ id: 1 }, { id: 2 }], total_count: 2 })
+
+      expect(client.get('api/v1/users/search', query: { query: 'smith', page: 2 }).body).to eq(records: [], total_count: 2)
+    end
+
+    it 'answers page 1 as it was written' do
+      zammad.stub(:get, 'api/v1/users/search', body: { records: [{ id: 1 }, { id: 2 }], total_count: 2 })
+
+      expect(client.get('api/v1/users/search', query: { query: 'smith', page: 1 }).body).to eq(records: [{ id: 1 }, { id: 2 }], total_count: 2)
+    end
+
+    # The stub holds two records and says there are five hundred hits, so the
+    # walk reads on, a page of two hundred at a time, until it has covered
+    # them: the page it was served, and two that hold nothing.
+    it 'is read on past, where the total says there are hits beyond the stub' do
+      zammad.stub(:get, 'api/v1/users/search', body: { records: [{ id: 1 }, { id: 2 }], total_count: 500 })
+
+      expect(client.users.search('smith').map(&:id)).to eq([1, 2])
+      expect(zammad.requests.map { it.query['page'] }).to eq(%w[1 2 3])
+    end
+
+    it 'records the parameter a walked search asks for the total with' do
+      zammad.stub(:get, 'api/v1/users/search', body: [])
+      client.users.search('smith').to_a
+
+      expect(zammad.requests.last.query).to include('with_total_count' => 'true')
+    end
+
+    it 'leaves an object that is not a counted list as it was written' do
+      zammad.stub(:get, 'api/v1/settings', body: { records: 'none' })
+
+      expect(client.get('api/v1/settings', query: { page: 2 }).body).to eq(records: 'none')
+    end
+  end
+
   # Every full read asks for the page after its last one, and that request
   # used to take the next stub in the queue and serve it as an empty page:
   # three stubs answered three reads with the first, the third and the third.

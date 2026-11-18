@@ -40,7 +40,8 @@ module ZammadAPI
     # were dead, and the one of them that could have acted - ending a walk on
     # a figure the records did not corroborate - was the one that could have
     # been wrong. {Collection#total_count} asks a search endpoint for its
-    # figure the way Zammad actually offers it.
+    # figure the way Zammad actually offers it, and {#decoded_list} reads
+    # the one a search reports beside a page.
 
     # @return [Boolean] whether the status code is in the 2xx range
     def success? = SUCCESS_STATUSES.cover?(status)
@@ -108,6 +109,33 @@ module ZammadAPI
           actual:         body.class,
           resource_class: resource_class
         )
+      end
+    end
+
+    # Returns the records of a list, and the size of the whole result where
+    # the endpoint reports it beside them.
+    #
+    # A list is an array. A search asked for +with_total_count+ answers with
+    # an object instead, +{records: [...], total_count: n}+, where its Zammad
+    # reads that parameter under +expand+ - 7.0 and later - and with the
+    # array it always did where it does not. Both are a list, and
+    # {Collection} reads either.
+    #
+    # A total that cannot be one - a negative figure, a string - is reported
+    # as none rather than refused. The records beside it are still the page,
+    # and a walk without a total is a walk as it was before there was one.
+    #
+    # @param operation [String] description used in the error message
+    # @param resource_class [Class, nil] used in the error message
+    # @return [Array(Array<Hash>, Integer)] the records and the total
+    # @return [Array(Array<Hash>, nil)] where the endpoint reported no total
+    # @raise [ParseError] when the body is neither shape
+    def decoded_list(operation:, resource_class: nil)
+      case body
+      in { records: Array => records, total_count: total }
+        [array_of_objects!(records, operation: operation, resource_class: resource_class), total.is_a?(Integer) && !total.negative? ? total : nil]
+      else
+        [decoded(:array, operation: operation, resource_class: resource_class), nil]
       end
     end
 

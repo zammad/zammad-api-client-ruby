@@ -400,10 +400,20 @@ module ZammadAPI
     # So a stub that does not name a page answers one, and a request for any
     # page after it gets an empty one. A stub that does name a page is left
     # exactly as written - that is how a test says what the second page holds.
+    #
+    # A search stubbed with its total beside the records, the object Zammad
+    # answers `with_total_count` with, is a list as well: the page after it
+    # holds no records and reports the same total. Served again as written it
+    # was the repeated page above, for the one stub that says how many hits
+    # there are.
     def paged_body(stub, params, body)
-      return body if !body.is_a?(Array)
+      return body if !later_page?(stub[:query], params)
 
-      later_page?(stub[:query], params) ? [] : body
+      case body
+      in Array then []
+      in { records: Array, total_count: _ } then body.merge(records: [])
+      else body
+      end
     end
 
     # Decoded by {Response.decode_body}, the rule {Transport#decode} reads, so

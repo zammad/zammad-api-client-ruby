@@ -658,7 +658,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
 
     it 'requests the search endpoint' do
       stub = stub_request(:get, "#{url}/search")
-        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => ZammadAPI::ResourceProxy::SEARCH_MAX_PER_PAGE.to_s, 'query' => 'support' })
+        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => ZammadAPI::ResourceProxy::SEARCH_MAX_PER_PAGE.to_s, 'query' => 'support', 'with_total_count' => 'true' })
         .to_return(json_response([]))
 
       proxy.search('support').to_a

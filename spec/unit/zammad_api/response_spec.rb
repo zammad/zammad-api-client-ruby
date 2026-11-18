@@ -86,6 +86,55 @@ RSpec.describe ZammadAPI::Response do
     end
   end
 
+  # A list is an array, and a search asked for its total answers with an
+  # object holding the array and the figure. A walk reads either.
+  describe '#decoded_list' do
+    it 'returns an array body, and no total' do
+      expect(build(body: [{ a: 1 }]).decoded_list(operation: 'get list')).to eq([[{ a: 1 }], nil])
+    end
+
+    it 'returns the records and the total of a counted list' do
+      expect(build(body: { records: [{ a: 1 }], total_count: 7 }).decoded_list(operation: 'get list')).to eq([[{ a: 1 }], 7])
+    end
+
+    it 'accepts a counted list with no records' do
+      expect(build(body: { records: [], total_count: 0 }).decoded_list(operation: 'get list')).to eq([[], 0])
+    end
+
+    it 'reports a negative total as none, and keeps the records' do
+      expect(build(body: { records: [{ a: 1 }], total_count: -1 }).decoded_list(operation: 'get list')).to eq([[{ a: 1 }], nil])
+    end
+
+    it 'reports a total that is not a number as none' do
+      expect(build(body: { records: [], total_count: '7' }).decoded_list(operation: 'get list')).to eq([[], nil])
+    end
+
+    it 'raises for records that are not objects' do
+      expect { build(body: { records: [1, 2], total_count: 2 }).decoded_list(operation: 'get list') }
+        .to raise_error(ZammadAPI::ParseError, "Can't get list: expected a JSON array of objects, got an array holding Integer")
+    end
+
+    it 'raises for an object that holds no records' do
+      expect { build(body: { total_count: 2 }).decoded_list(operation: 'get list') }
+        .to raise_error(ZammadAPI::ParseError, "Can't get list: expected a JSON array, got Hash")
+    end
+
+    it 'raises for records that are not a list' do
+      expect { build(body: { records: 'none', total_count: 0 }).decoded_list(operation: 'get list') }
+        .to raise_error(ZammadAPI::ParseError, /expected a JSON array, got Hash/)
+    end
+
+    it 'raises when the body was never JSON' do
+      expect { build(body: '<html>', raw_body: '<html>').decoded_list(operation: 'get list') }
+        .to raise_error(ZammadAPI::ParseError, /got String/)
+    end
+
+    it 'names the resource class in the message' do
+      expect { build(body: {}).decoded_list(operation: 'get list', resource_class: ZammadAPI::Resources::User) }
+        .to raise_error(/\(ZammadAPI::Resources::User\)/)
+    end
+  end
+
   it 'is immutable' do
     expect(build).to be_frozen
   end

@@ -866,6 +866,17 @@ deleted in between, or one Elasticsearch still lists after it was removed, leave
 short with more hits behind it. A short page therefore ends the walk of an index and not of
 a search, which costs a search one more request where its last page of hits is part-filled.
 
+A page can come back with nothing on it for the same reason, and on the page of one that
+`first` and `empty?` ask for, one stale hit is enough — at the top of the result, since a
+search serves the newest first. So a search that is walked asks Zammad for the size of the
+whole result beside each page, with `with_total_count`, and an empty page ends the walk
+only once the pages read have covered that many hits. The total is never what ends a walk
+on a page that still held records.
+
+Two limits remain, and at both an empty page ends the walk whatever is behind it. A Zammad
+before 7.0 does not report the total beside expanded records. And Elasticsearch stops
+counting at ten thousand hits, so past that many a page of stale hits reads as the end.
+
 `first` and `take` size their own request rather than taking records off the front of one
 sized for walking, so the cheap-looking call is cheap:
 
@@ -1144,6 +1155,15 @@ Name a `page` to say what each one holds, and the stub is served exactly as writ
 ```ruby
 zammad.stub(:get, 'api/v1/groups', body: first_hundred, query: {page: 1})
 zammad.stub(:get, 'api/v1/groups', body: [{id: 101}], query: {page: 2})
+```
+
+A search that is walked asks for its total with `with_total_count`, and an Array answers
+it the way a Zammad before 7.0 does, with the records alone. To stand in for one that
+reports the total, stub the object it answers with. It is paged like an Array: a later
+page holds no records and the same total.
+
+```ruby
+zammad.stub(:get, 'api/v1/users/search', body: {records: [{id: 1}, {id: 2}], total_count: 2})
 ```
 
 ### Scopes that overlap

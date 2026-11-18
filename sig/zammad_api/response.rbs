@@ -17,6 +17,7 @@ module ZammadAPI
     def success?: () -> bool
     def json?: () -> bool
     def decoded: (Symbol shape, operation: String, ?resource_class: Class?) -> untyped
+    def decoded_list: (operation: String, ?resource_class: Class?) -> [ Array[Hash[Symbol, untyped]], Integer? ]
 
     private
 

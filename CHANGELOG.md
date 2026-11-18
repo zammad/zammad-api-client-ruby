@@ -644,6 +644,18 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   rest of the hits unread, and `find_by` answered `nil` for a record on a later one. Only
   an empty page ends a search walk now, at the cost of one more request where the last page
   of hits is part-filled.
+- A search is read on past a page with nothing on it where Zammad says there are hits
+  behind it. A page comes back empty for the reason it comes back short, every id on it
+  having lost its record, and on the page of one that `first` and `empty?` ask for a single
+  stale hit does it: `search(term).first` answered `nil` and `empty?` answered `true` with
+  live hits behind a record deleted a moment before, and `each` ended on such a page. A
+  search that is walked sends `with_total_count` and ends on an empty page only once the
+  pages read cover the total reported beside it. The total never ends a walk on a page that
+  held records, because Elasticsearch stops counting at ten thousand hits. An empty page
+  still ends the walk where there is no total to go by: on a Zammad before 7.0, which
+  answers with the records alone, and past the ten thousandth hit on Elasticsearch. The
+  test kit pages a search stubbed as `{records: [...], total_count: n}` the way it pages
+  an Array.
 - A repeated page is recognised by the records on it rather than by their payload. A job
   that writes to the records it is handed changes what they serialize as, so an endpoint
   that ignores `page` served the same records with a different payload each time: the
