@@ -65,7 +65,15 @@ module ZammadAPI
         # the caller reading Zammad's 422 to work out that the ticket they
         # were adding to had never been saved - the one path in the gem that
         # needed a stored id and went to the server to find out it had none.
-        record = TicketArticle.new(transport, attributes.merge(ticket_id: require_id!))
+        #
+        # Both spellings of the key are taken out before this ticket's id
+        # goes in. `merge(ticket_id: ...)` replaces a Symbol key and leaves a
+        # String one standing beside it, and the article symbolizes its keys
+        # in the order they come: given `ticket_id` under both spellings, the
+        # String one came last and won, so `add_article` on ticket 7 POSTed
+        # an article naming whichever ticket the caller's Hash did.
+        own    = attributes.reject { |key, _| key.to_s == 'ticket_id' }
+        record = TicketArticle.new(transport, own.merge(ticket_id: require_id!))
         record.save!
         record
       end

@@ -669,6 +669,11 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   was sent before the body is read: the record holds the values it sent with nothing
   staged, and `reload` brings in the rest. A save Zammad rejected keeps its changes staged,
   as before.
+- `ticket.add_article` adds to that ticket whatever its attributes say. A `ticket_id:`
+  among them was replaced by the ticket's own, but only under the Symbol spelling: given
+  `'ticket_id'` as well, the String key came later in the Hash and won when the article
+  symbolized its keys, so the article was posted to the ticket the caller's Hash named.
+  Both spellings are taken out before the ticket's id goes in.
 
 ### Changed
 

@@ -92,6 +92,52 @@ RSpec.describe ZammadAPI::Resources::Ticket do
       expect(ticket.add_article(body: 'hello')).to be_persisted
     end
 
+    # The article goes to the ticket it was added to, whatever the attributes
+    # say. Given `ticket_id` under both spellings, the Symbol was replaced and
+    # the String, coming later in the Hash, replaced it again when the article
+    # symbolized its keys - so the POST named the caller's ticket.
+    context 'when the attributes name a ticket of their own' do
+      before do
+        stub_request(:post, article_url).with(query: hash_including({}))
+          .to_return(json_response({ id: 9, ticket_id: 42 }, status: 201))
+      end
+
+      def posted_ticket_ids
+        ids = []
+        expect(a_request(:post, article_url).with(query: hash_including({})) { |request| ids << JSON.parse(request.body)['ticket_id'] })
+          .to have_been_made.once
+        ids
+      end
+
+      it 'uses its own id over a Symbol key' do
+        ticket.add_article(ticket_id: 9, body: 'hello')
+        expect(posted_ticket_ids).to eq([42])
+      end
+
+      it 'uses its own id over a String key' do
+        ticket.add_article('body' => 'hello', 'ticket_id' => 9)
+        expect(posted_ticket_ids).to eq([42])
+      end
+
+      it 'uses its own id over both spellings at once' do
+        ticket.add_article(:ticket_id => 1, 'ticket_id' => 9, :body => 'hello', :type => 'note')
+        expect(posted_ticket_ids).to eq([42])
+      end
+
+      it 'sends ticket_id once' do
+        ticket.add_article(:ticket_id => 1, 'ticket_id' => 9, :body => 'hello')
+
+        expect(a_request(:post, article_url).with(query: hash_including({}), body: '{"body":"hello","ticket_id":42}')).to have_been_made
+      end
+
+      it 'leaves the Hash it was given as it was' do
+        attributes = { :ticket_id => 1, 'ticket_id' => 9, :body => 'hello' }
+        ticket.add_article(attributes)
+
+        expect(attributes).to eq(:ticket_id => 1, 'ticket_id' => 9, :body => 'hello')
+      end
+    end
+
     # An article belongs to a ticket by id. Unchecked, this POSTed
     # `ticket_id: null` and left the caller reading Zammad's 422 to work out
     # that the ticket had never been saved.
