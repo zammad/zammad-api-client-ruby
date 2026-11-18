@@ -987,10 +987,30 @@ RSpec.describe ZammadAPI::ResourceProxy do
           .to raise_error(ArgumentError, /query parameter condition\[conditions\]\[1\] has no plain value under a key the element before it has/)
       end
 
-      it 'takes a condition that holds a group of conditions' do
-        nested = { operator: 'OR', conditions: [{ name: 'ticket.state_id', operator: 'is', value: [2] }, { operator: 'AND', conditions: [{ name: 'ticket.group_id', operator: 'is', value: [1] }] }] }
+      # Read off the URL Faraday built, in the order it was written: WebMock
+      # sorts a query before it compares one, and the order is the point.
+      # Rails begins the second element at its `operator`, so that has to
+      # come before the conditions it holds, or the group is read into the
+      # condition before it.
+      it 'takes a condition that holds a group of conditions, and sends the group as an element of its own' do
+        nested   = { operator: 'OR', conditions: [{ name: 'ticket.state_id', operator: 'is', value: [2] }, { operator: 'AND', conditions: [{ name: 'ticket.group_id', operator: 'is', value: [1] }] }] }
+        sent     = nil
+        recorder = Class.new(Faraday::Middleware) do
+          define_method(:on_request) { |env| sent = URI.decode_www_form(env.url.query).map(&:first) }
+        end
+        stub_request(:get, /search/).with(query: hash_including({})).to_return(json_response([]))
 
-        expect(client.tickets.search('x', condition: nested)).to be_a(ZammadAPI::Collection)
+        search = unit_client(middleware: ->(builder) { builder.use(recorder) }).tickets.search('x', condition: nested)
+        expect(search).to be_a(ZammadAPI::Collection)
+
+        search.to_a
+        expect(sent.grep(/\Acondition\[conditions\]/)).to eq(
+          [
+            'condition[conditions][][name]', 'condition[conditions][][operator]', 'condition[conditions][][value][]',
+            'condition[conditions][][operator]', 'condition[conditions][][conditions][][name]',
+            'condition[conditions][][conditions][][operator]', 'condition[conditions][][conditions][][value][]'
+          ]
+        )
       end
 
       it 'still accepts a condition whose keys only look alike' do
