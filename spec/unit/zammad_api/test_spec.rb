@@ -534,6 +534,13 @@ RSpec.describe ZammadAPI::Test do
       expect(zammad.requests.last.on_behalf_of).to be_nil
     end
 
+    # The stand-in carries the scope by the real transport's rule, so it
+    # refuses one the wire would carry as no scope at all.
+    it 'refuses a blank scope reached through the transport, the way the real transport does' do
+      expect { client.send(:instance_variable_get, :@transport).with_on_behalf_of(' ') }
+        .to raise_error(ArgumentError, /on_behalf_of needs the login/)
+    end
+
     # Through the real transport's own rules, so that a stand-in cannot accept
     # a header the wire would refuse or record it in a shape the wire would
     # not carry.

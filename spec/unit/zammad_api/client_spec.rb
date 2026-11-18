@@ -843,7 +843,7 @@ RSpec.describe ZammadAPI::Client do
     # each of these handed back a client that ran every request as the
     # account it authenticates as - with no error to say the scope was gone.
     describe 'an identifier that names nobody' do
-      [nil, '', '   ', "\t\n"].each do |blank|
+      [nil, '', '   ', "\t\n", "\u00A0", "\u3000"].each do |blank|
         it "refuses #{blank.inspect}" do
           expect { unit_client.on_behalf_of(blank) }
             .to raise_error(ArgumentError, /on_behalf_of needs the login, email address or id of a user, and was given #{Regexp.escape(blank.inspect)}/)

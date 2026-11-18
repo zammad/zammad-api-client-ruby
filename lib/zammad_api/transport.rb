@@ -369,10 +369,39 @@ module ZammadAPI
     # scope the way this class does, so that what it records is what the
     # header would have carried.
     #
+    # An identifier that names nobody is refused here, the one place every
+    # way to a +From+ header goes through, rather than only by
+    # {Client#on_behalf_of}. Zammad skips a header with nothing in it, so a
+    # transport scoped to one sent every request as the account it
+    # authenticates as. Nothing in it is what Rails calls blank, which
+    # counts Unicode spaces as well as ASCII ones: Zammad asks
+    # `request_header_from.blank?`.
+    #
     # @api private
     # @param identifier [String, Integer, nil] login, email or user id
     # @return [String, nil] frozen, or nil for no scope
-    def self.stringify_on_behalf_of(identifier) = identifier.nil? ? nil : identifier.to_s.dup.freeze
+    # @raise [ArgumentError] for an identifier with nothing in it
+    def self.stringify_on_behalf_of(identifier)
+      return nil if identifier.nil?
+
+      text = identifier.to_s
+      raise ArgumentError, blank_on_behalf_of_message(identifier) if BLANK.match?(text)
+
+      text.dup.freeze
+    end
+
+    # What Rails calls blank, for a String: nothing but whitespace, Unicode
+    # spaces included. +strip+ removes the ASCII ones only, so a no-break
+    # space passed a check built on it and was then read as nothing.
+    BLANK = /\A[[:space:]]*\z/
+
+    # @api private
+    # @return [String]
+    def self.blank_on_behalf_of_message(identifier)
+      "on_behalf_of needs the login, email address or id of a user, and was given #{identifier.inspect}. " \
+        'Zammad reads a From header with nothing in it as no header at all, so every request would be performed ' \
+        'as the account this client authenticates as, with nothing to say the scope was missing.'
+    end
 
     # Percent-encodes one segment of a request path.
     #

@@ -970,6 +970,14 @@ RSpec.describe ZammadAPI::Transport do
       expect(unit_transport.with_on_behalf_of(nil).on_behalf_of).to be_nil
     end
 
+    # Every way to a From header goes through here, not only
+    # Client#on_behalf_of, and a header with nothing in it is no scope.
+    ['', '  ', "\u00A0"].each do |blank|
+      it "refuses #{blank.inspect}, which Zammad reads as no From header" do
+        expect { unit_transport.with_on_behalf_of(blank) }.to raise_error(ArgumentError, /on_behalf_of needs the login/)
+      end
+    end
+
     # `String#to_s` hands back the receiver, so the scoped transport held the
     # caller's own String: a login buffer reused after the scope was taken
     # changed who every later request was performed for.

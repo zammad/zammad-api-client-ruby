@@ -60,7 +60,6 @@ module ZammadAPI
 
     def raw: (Symbol method, String path, ?query: Hash[untyped, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?) -> Response
     def unknown_resource_message: (Symbol | String) -> String
-    def blank_on_behalf_of_message: (untyped identifier) -> String
     def proxy_for: (untyped resource_class) -> ResourceProxy[untyped]
     def setup: (Config config, untyped transport) -> self
   end
