@@ -72,11 +72,19 @@ class Helper
     end
   end
 
+  # The body is asked about only where it is a JSON object. Valid JSON
+  # that is not one - `null`, a list, a number - raised NoMethodError on
+  # the lookup, which is neither the SetupError {.ensure_configured!}
+  # memoizes nor an answer, so every example ran the probe again. Anything
+  # but an object saying the wizard ran leaves {.verify_setup_done!} to
+  # decide.
+  #
   # @return [Boolean] whether the auto wizard ran now
   # @raise [SetupError] when the instance cannot be reached at all
   def self.auto_wizard?
     response = connection.get('api/v1/getting_started/auto_wizard')
-    parse(response.body)['auto_wizard_success'] == true
+    body     = parse(response.body)
+    body.is_a?(Hash) && body['auto_wizard_success'] == true
   rescue Faraday::Error => e
     # {.verify_setup_done!} wraps its failure into a SetupError naming the URL
     # and the user; this probe runs one line earlier and did not, so the
