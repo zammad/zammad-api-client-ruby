@@ -85,8 +85,8 @@ module ZammadAPI
       def writable_attributes?: () -> bool
       def attribute_writable?: (Symbol key) -> bool
       def refuse_unwritable!: (Symbol key, untyped value) -> void
-      def replace_attributes!: (Response, operation: String, ?saved: bool) -> void
-      def acknowledge_changes!: () -> void
+      def replace_attributes!: (Response, operation: String, ?sent: Hash[Symbol, untyped]?) -> void
+      def acknowledge_changes!: (Hash[Symbol, untyped] sent) -> void
       def reset_pending_state!: () -> void
       def forget_related_targets: () -> void
       def write_attribute: (Symbol, untyped) -> untyped

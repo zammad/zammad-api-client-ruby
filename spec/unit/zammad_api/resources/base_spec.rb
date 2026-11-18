@@ -1340,5 +1340,60 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(other.save).to be(false)
       expect(other.changes).to eq(title: ['Help', ''])
     end
+
+    # What Zammad acknowledged is what the request carried. The baseline used
+    # to be taken from the record once the answer was in, so a write that
+    # landed while the request was out - from a logger or a middleware of the
+    # caller's that reaches the record, or from another thread - was settled
+    # along with it, for a value that was never sent.
+    context 'when the record is written to while the request is out' do
+      subject(:other) { client.tickets.find(1) }
+
+      before do
+        stub_request(:put, ticket_url).with(query: hash_including({})).to_return do
+          other.title = 'C'
+          { status: 200, body: '<html>proxy</html>' }
+        end
+
+        other.title = 'B'
+        begin
+          other.save
+        rescue ZammadAPI::ParseError
+          nil
+        end
+      end
+
+      it 'sent the value that was staged when the request left' do
+        expect(a_request(:put, ticket_url).with(query: hash_including({}), body: { title: 'B' })).to have_been_made.once
+      end
+
+      it 'reads the value Zammad was sent, not the one written since' do
+        expect(other.title).to eq('B')
+      end
+
+      it 'has nothing staged, as after a response it could read' do
+        expect(other.changes).to eq({})
+      end
+
+      it 'stages the later value when it is written again' do
+        other.title = 'C'
+
+        expect(other.changes).to eq(title: %w[B C])
+      end
+    end
+
+    # The same write under a response that can be read, which is what the
+    # above is held to: the attributes it carries replace the record's.
+    it 'drops a write made while the request was out where the response can be read, too' do
+      other = client.tickets.find(1)
+      stub_request(:put, ticket_url).with(query: hash_including({})).to_return do
+        other.title = 'C'
+        json_response({ id: 1, title: 'B' })
+      end
+      other.update!(title: 'B')
+
+      expect(other.title).to eq('B')
+      expect(other.changes).to eq({})
+    end
   end
 end

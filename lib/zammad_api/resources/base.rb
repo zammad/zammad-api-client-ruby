@@ -517,9 +517,14 @@ module ZammadAPI
           return true if !changed?
         end
 
+        # What the request carries, held from before it goes out. The
+        # attributes are frozen and replaced on write, so this is the Hash the
+        # request is built from and stays that whatever is written meanwhile:
+        # see #acknowledge_changes!.
+        sent     = @attributes
         response = new_record? ? create_record : update_record
 
-        replace_attributes!(response, operation: 'save object', saved: true)
+        replace_attributes!(response, operation: 'save object', sent: sent)
         true
       end
 
@@ -703,10 +708,13 @@ module ZammadAPI
       # from {#require_id!} the retried `save` would have taken the "nothing
       # to send" short circuit and reported true, having made no request at
       # all, for a record that may or may not be in Zammad.
-      def replace_attributes!(response, operation:, saved: false)
+      #
+      # +sent+ is what a save was sent with, and is what tells one from a
+      # read.
+      def replace_attributes!(response, operation:, sent: nil)
         @new_record = false
-        @saved      = saved
-        acknowledge_changes! if saved
+        @saved      = !sent.nil?
+        acknowledge_changes!(sent) if sent
         @attributes = frozen_attributes(response.decoded(:object, operation: operation, resource_class: self.class))
         @baseline   = @attributes
         reset_pending_state!
@@ -731,9 +739,22 @@ module ZammadAPI
       # and anything Zammad derived is missing - and {#reload} is what
       # brings that in. A save Zammad rejected never gets here, so what it
       # was sent stays staged to be corrected and sent again.
-      def acknowledge_changes!
-        @baseline = @attributes
-        @changes  = {}
+      #
+      # What was sent, and not what the record holds by the time the answer
+      # is in. The two differ where the record was written to while the
+      # request was out - by a logger or a middleware of the caller's that
+      # reaches the record, or by another thread - and the baseline used to
+      # be taken from the record as it then stood: a PUT that carried title
+      # "B", with "C" staged before the answer came, left the record reading
+      # "C" with nothing staged, so the next `save` reported true without a
+      # request for a value Zammad was never sent. A write made meanwhile is
+      # dropped instead, which is what a response that can be read does to
+      # it: the attributes it carries replace the record's, whatever was
+      # written to them since the request left.
+      def acknowledge_changes!(sent)
+        @attributes = sent
+        @baseline   = sent
+        @changes    = {}
       end
 
       # The part of that which is not about arriving with new attributes, but
