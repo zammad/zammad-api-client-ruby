@@ -238,7 +238,7 @@ module ZammadAPI
         take(method, relative, params)
       end
 
-      raise UnstubbedRequestError, unstubbed_message(method, relative) if stub.nil?
+      raise UnstubbedRequestError, unstubbed_message(method, relative, params) if stub.nil?
 
       response = response_for(stub, params)
       return response if response.success?
@@ -464,9 +464,30 @@ module ZammadAPI
       Response.new(status: stub[:status], headers: stub[:headers].dup.freeze, body: body, raw_body: raw_body, json: json)
     end
 
-    def unstubbed_message(method, path)
+    # Where the endpoint is stubbed and only the query kept every stub from
+    # answering, the message says so, with the query the request carried
+    # and the scopes the stubs name. Listing the endpoint among what is
+    # stubbed, as it does for a wrong path, read as a contradiction: a read
+    # over stubs for pages 1 and 2 asks for page 3, and was told that
+    # `GET api/v1/users/search was not stubbed (stubbed: GET
+    # api/v1/users/search)`.
+    def unstubbed_message(method, path, params)
+      request = "#{method.to_s.upcase} #{path}"
+      scopes  = @monitor.synchronize { @stubs[key(method, path)]&.map { it[:query] }&.uniq }
+      return unmatched_query_message(request, params, scopes) if scopes
+
       stubbed_endpoints = stubbed.empty? ? 'nothing is stubbed' : "stubbed: #{stubbed.join(', ')}"
-      "#{method.to_s.upcase} #{path} was not stubbed on this #{self.class.name} (#{stubbed_endpoints})"
+      "#{request} was not stubbed on this #{self.class.name} (#{stubbed_endpoints})"
+    end
+
+    def unmatched_query_message(request, params, scopes)
+      message = "#{request} with query #{params.inspect} was not stubbed on this #{self.class.name}: " \
+                "its stubs answer only #{scopes.map { "query: #{it.inspect}" }.join(', ')}."
+      return message if !params.key?('page') || !scopes.all? { it&.key?('page') }
+
+      "#{message} A read asks for the page after the last one it was served, to learn that there are no more: " \
+        'stub that page as well, with body: [], or leave page out of the scope, and the stub serves its records as one ' \
+        'page and an empty page after it.'
     end
 
     # Routes the client's requests to {Test#answer}, and carries the

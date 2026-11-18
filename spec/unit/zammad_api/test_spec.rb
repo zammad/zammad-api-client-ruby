@@ -424,6 +424,33 @@ RSpec.describe ZammadAPI::Test do
       expect { client.groups.find(1) }.to raise_error(%r{stubbed: GET api/v1/groups/2})
     end
 
+    # Listing the endpoint among what is stubbed read as a contradiction.
+    context 'when the endpoint is stubbed for other queries' do
+      before do
+        zammad.stub(:get, 'api/v1/users/search', body: [{ id: 1 }], query: { page: 1 })
+        zammad.stub(:get, 'api/v1/users/search', body: [{ id: 2 }], query: { page: 2 })
+      end
+
+      it 'names the query the request carried and the scopes its stubs answer' do
+        expect { client.users.search('x').to_a }.to raise_error(
+          described_class::UnstubbedRequestError,
+          %r{GET api/v1/users/search with query \{.*"page" => "3".*\} was not stubbed .*: its stubs answer only query: \{"page" => "1"\}, query: \{"page" => "2"\}\.}
+        )
+      end
+
+      it 'says that a read asks for the page after its last one' do
+        expect { client.users.search('x').to_a }
+          .to raise_error(described_class::UnstubbedRequestError, /A read asks for the page after the last one it was served/)
+      end
+
+      it 'says nothing about pages where the scopes do not name one' do
+        zammad.reset.stub(:get, 'api/v1/users/search', body: [], query: { ids: [1] })
+
+        expect { client.users.search('x', ids: [2]).to_a }
+          .to raise_error(described_class::UnstubbedRequestError) { |error| expect(error.message).not_to include('page after') }
+      end
+    end
+
     it 'is outside ZammadAPI::Error, so code under test cannot rescue it as an API failure' do
       expect(described_class::UnstubbedRequestError.ancestors).not_to include(ZammadAPI::Error)
       expect(described_class::UnstubbedRequestError.ancestors).to include(StandardError)

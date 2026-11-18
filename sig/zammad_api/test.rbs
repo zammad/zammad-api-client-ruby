@@ -63,7 +63,8 @@ module ZammadAPI
     def paged_body: (Hash[Symbol, untyped] stub, Hash[String, untyped] params, untyped body) -> untyped
     def response_for: (Hash[Symbol, untyped] stub, Hash[String, untyped] params) -> Response
     def build_response: (Hash[Symbol, untyped] stub, untyped body, String raw_body, json: bool) -> Response
-    def unstubbed_message: (Symbol method, String path) -> String
+    def unstubbed_message: (Symbol method, String path, Hash[String, untyped] params) -> String
+    def unmatched_query_message: (String request, Hash[String, untyped] params, Array[Hash[String, untyped]?] scopes) -> String
 
     class Transport
       include ::ZammadAPI::Transport::Verbs
