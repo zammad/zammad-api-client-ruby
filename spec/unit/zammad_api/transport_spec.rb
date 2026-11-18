@@ -799,6 +799,32 @@ RSpec.describe ZammadAPI::Transport do
         .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.cause).to be(failure) }
     end
 
+    # Rendering a report is the error's own code, and this asks for it from
+    # inside the rescue that turns the error into a ConfigurationError. A
+    # `detailed_message` written without the `highlight:` keyword is all it
+    # takes: `full_message` passes it one and gets ArgumentError back.
+    context 'when the error a middleware raised cannot render its own report' do
+      let(:failure) do
+        Class.new(StandardError) do
+          def detailed_message = "unreadable: #{message}"
+        end.new('boom')
+      end
+
+      it 'has a report that raises, which is what this is about' do
+        expect { failure.full_message(highlight: false) }.to raise_error(ArgumentError)
+      end
+
+      it 'still reports a configuration error' do
+        expect { unit_transport(middleware: ->(_) { raise failure }) }
+          .to raise_error(ZammadAPI::ConfigurationError, /config could not be used to build a connection: .*: boom/)
+      end
+
+      it 'drops the cause, which cannot be shown to quote nothing' do
+        expect { unit_transport(middleware: ->(_) { raise failure }) }
+          .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.cause).to be_nil }
+      end
+    end
+
     it 'keeps the cause of an unregistered adapter' do
       expect { unit_transport(adapter: :nonsense) }
         .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.cause).to be_a(Faraday::Error) }

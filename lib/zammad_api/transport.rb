@@ -612,10 +612,21 @@ module ZammadAPI
     # keeps its cause. A `middleware:` callable that raises is a bug in the
     # caller's own code, and the backtrace into it is the one thing the
     # message cannot carry.
+    #
+    # An error that cannot render its report is dropped as well. Rendering is
+    # the error's own code - `detailed_message` is there to be overridden,
+    # and one written without the `highlight:` keyword raises ArgumentError
+    # from inside `full_message` - and this runs in the rescue above, so what
+    # it raised left in place of the ConfigurationError, past the rescue
+    # building a client is documented to need. A report that cannot be read
+    # cannot be shown to quote nothing, which is the one condition a cause is
+    # kept on.
     def reportable_cause(error)
       report = error.full_message(highlight: false)
 
       redact_config_values(report) == report ? error : nil
+    rescue
+      nil
     end
 
     # The underlying error quotes the value it rejected, and for a proxy that

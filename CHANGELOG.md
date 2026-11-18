@@ -688,7 +688,10 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `full_message`, a log formatter and an error tracker all showed `URI::InvalidURIError`
   quoting the proxy URL in full. The cause is dropped where its report would print a
   configured value that redaction changes, and kept everywhere else, so a `middleware:`
-  callable that raises still shows the backtrace into the caller's code.
+  callable that raises still shows the backtrace into the caller's code. An error that
+  cannot render its report at all, such as one whose `detailed_message` takes no
+  `highlight:` keyword, is dropped as a cause too, rather than leaving in place of the
+  `ConfigurationError`.
 - `middleware:` that adds `c.response :raise_error` is refused with a `ConfigurationError`
   when the client is built, as `c.response :json` already is. It sits below the retry
   middleware and raises for a 4xx or 5xx before this gem sees the response, so a `GET`
