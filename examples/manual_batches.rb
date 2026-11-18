@@ -61,12 +61,20 @@ end
 # id order and they arrive at the end.
 #
 # So this loop is for a set that only grows. Where tickets can be deleted
-# while the job runs, or between two runs of it, checkpoint the id of the last
-# ticket handled instead, and skip up to it on the way back in:
+# between two runs of the job, checkpoint the id of the last ticket handled
+# instead, and skip up to it on the way back in:
 #
 #   tickets.find_each.lazy.drop_while { it.id <= last_id }.each { ... }
 #
-# That reads the earlier pages again and skips nothing.
+# That reads the earlier pages again, so a ticket deleted while the job was
+# down no longer moves the place it picks up from.
+#
+# It does nothing about a ticket deleted while a walk is under way, and
+# neither does anything else here. `find_each` pages by position too: delete
+# ticket 1 once page 1 has been read, and page 2 starts one ticket further
+# on, with the ticket that moved up into page 1 never handed over. No way of
+# reading an index that is paged by position rules that out. A job that has
+# to be sure walks again, until a walk turns up no ticket it has not handled.
 
 puts '3. resumable page loop'
 
