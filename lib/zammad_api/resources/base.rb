@@ -780,11 +780,22 @@ module ZammadAPI
       # A record being created has nothing it was served with to measure
       # against, and keeps all it sent. It has no id to be saved again by,
       # so there is no second request for a key to be missing from.
+      #
+      # What the association proxy has resolved goes with the attributes it
+      # was resolved from. This puts the record back on what it sent, which
+      # is a write to every attribute at once, and it was the one write to a
+      # foreign key that left the proxy alone: `customer_id` sent as 9,
+      # written to 10 while the request was out and `related.customer` read
+      # then, and the record was back on 9 with user 10 still memoized as
+      # its customer. {#reset_pending_state!} empties the proxy too, but
+      # only once the body has decoded, and a body that does not is what
+      # this method is here for.
       def acknowledge_changes!(sent)
         settled     = new_record? ? sent : sent.slice(*@baseline.keys).freeze
         @attributes = settled
         @baseline   = settled
         @changes    = {}
+        forget_related_targets
       end
 
       # The part of that which is not about arriving with new attributes, but

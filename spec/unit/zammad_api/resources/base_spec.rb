@@ -1460,6 +1460,42 @@ RSpec.describe ZammadAPI::Resources::Base do
       end
     end
 
+    # Settling the record on what it sent is a write to its foreign keys like
+    # any other, and what the association proxy resolved from a value written
+    # meanwhile is not the answer for the one the record is put back on.
+    context 'when an association is resolved from a key written while the request is out' do
+      subject(:other) { client.tickets.find(1) }
+
+      let(:related) { other.related }
+
+      before do
+        stub_request(:get, ticket_url).with(query: hash_including({})).to_return(json_response({ id: 1, customer_id: 3 }))
+        [9, 10].each do |id|
+          stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/users/#{id}").with(query: hash_including({})).to_return(json_response({ id: id }))
+        end
+        stub_request(:put, ticket_url).with(query: hash_including({})).to_return do
+          other.customer_id = 10
+          related.customer
+          { status: 200, body: '<html>proxy</html>' }
+        end
+
+        other.customer_id = 9
+        begin
+          other.save
+        rescue ZammadAPI::ParseError
+          nil
+        end
+      end
+
+      it 'is back on the key it sent' do
+        expect(other.customer_id).to eq(9)
+      end
+
+      it 'resolves the association from the key it sent, on a proxy held from before' do
+        expect(related.customer.id).to eq(9)
+      end
+    end
+
     # The same write under a response that can be read, which is what the
     # above is held to: the attributes it carries replace the record's.
     it 'drops a write made while the request was out where the response can be read, too' do

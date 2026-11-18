@@ -680,7 +680,10 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   answer from its memo and request the articles of a ticket that is gone. A lookup that is
   still on the wire when the foreign key is written, by a logger or a middleware that
   reaches the record or by another thread, no longer leaves the record it fetched behind as
-  the answer for the new key.
+  the answer for the new key. The proxy is emptied as well where a save answered with a 2xx
+  nothing could read puts the record back on what it sent: a key written while that request
+  was out, and an association read from it, left the record on the key it sent with the
+  other key's record still the answer.
 - Records of two Zammad instances are no longer equal for sharing a class and an id. An id
   is only unique within one installation, so a script reading two of them, such as a
   migration or a sync, held ticket 1 of each as one record: `uniq` dropped one of the two,
