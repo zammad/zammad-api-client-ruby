@@ -661,6 +661,14 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   and a Hash keyed by record answered for one instance with the other's value. `==`,
   `eql?` and `hash` take in the `url` the record's client was configured with. Two clients
   for one URL, and a client and its `on_behalf_of` scope, still hold the same record.
+- An update Zammad acknowledged is not sent again. The staged changes were dropped only
+  once the response had decoded, so an update answered with a 2xx nothing could read, such
+  as a proxy's HTML page, raised `ParseError` with the whole change set still staged, and
+  the next `save` sent all of it again along with whatever had been staged since. For a
+  ticket's `article` that is a second article and a second e-mail. A 2xx now settles what
+  was sent before the body is read: the record holds the values it sent with nothing
+  staged, and `reload` brings in the rest. A save Zammad rejected keeps its changes staged,
+  as before.
 
 ### Changed
 

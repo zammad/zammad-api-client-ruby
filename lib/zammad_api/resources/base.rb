@@ -706,9 +706,34 @@ module ZammadAPI
       def replace_attributes!(response, operation:, saved: false)
         @new_record = false
         @saved      = saved
+        acknowledge_changes! if saved
         @attributes = frozen_attributes(response.decoded(:object, operation: operation, resource_class: self.class))
         @baseline   = @attributes
         reset_pending_state!
+      end
+
+      # The same argument, for what was staged: a 2xx is Zammad saying it
+      # applied the changes, whether or not the rest of the answer parsed.
+      #
+      # They used to stay staged until the body had decoded. An update
+      # answered with a 2xx nothing could read - the same proxy page - raised
+      # ParseError with the whole change set still in place, so the next
+      # `save` sent all of it again along with whatever had been staged
+      # since. For most attributes that is the same value twice. For a
+      # ticket's `article` it is a second article, and a second e-mail to
+      # the customer: the one write {Transport::RETRIABLE_METHODS} leaves
+      # PUT out to keep from being repeated, repeated by the caller's next
+      # unrelated save instead.
+      #
+      # So the baseline moves up to what was sent, before the body is read.
+      # If that then raises, the record holds the values it sent and nothing
+      # staged: it is not what Zammad would serve - `updated_at` is behind,
+      # and anything Zammad derived is missing - and {#reload} is what
+      # brings that in. A save Zammad rejected never gets here, so what it
+      # was sent stays staged to be corrected and sent again.
+      def acknowledge_changes!
+        @baseline = @attributes
+        @changes  = {}
       end
 
       # The part of that which is not about arriving with new attributes, but

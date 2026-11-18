@@ -1253,4 +1253,92 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect { group.destroy }.to raise_error(ZammadAPI::Error, /was saved/)
     end
   end
+
+  # The same argument for what was staged. Zammad answered 2xx, so it applied
+  # the changes, and they used to stay staged because the body did not parse:
+  # the next save sent all of them again. For a ticket's `article` that is a
+  # second article and a second e-mail, from a save that was about the title.
+  describe 'an update whose success body cannot be parsed' do
+    subject(:ticket) { client.tickets.find(1) }
+
+    let(:ticket_url) { "#{ClientHelper::BASE_URL}api/v1/tickets/1" }
+    let(:article)    { { body: 'Reset link sent.', type: 'email', to: 'customer@example.com' } }
+
+    before do
+      stub_request(:get, ticket_url).with(query: hash_including({})).to_return(json_response({ id: 1, title: 'Help', note: nil }))
+      stub_request(:put, ticket_url).with(query: hash_including({}))
+        .to_return({ status: 200, body: '<html>proxy</html>' }, json_response({ id: 1, title: 'Renamed' }))
+
+      ticket.article = article
+      begin
+        ticket.save
+      rescue ZammadAPI::ParseError
+        nil
+      end
+    end
+
+    it 'still reports the parse failure' do
+      other = client.tickets.find(1)
+      other.note = 'x'
+      stub_request(:put, ticket_url).with(query: hash_including({})).to_return(status: 200, body: '<html>proxy</html>')
+
+      expect { other.save }.to raise_error(ZammadAPI::ParseError)
+    end
+
+    it 'no longer holds the changes Zammad acknowledged as staged' do
+      expect(ticket.changed?).to be(false)
+      expect(ticket.changes).to eq({})
+    end
+
+    it 'does not send the acknowledged changes again with the next save' do
+      ticket.title = 'Renamed'
+      ticket.save
+
+      expect(a_request(:put, ticket_url).with(query: hash_including({}), body: { title: 'Renamed' })).to have_been_made.once
+      expect(a_request(:put, ticket_url).with(query: hash_including({}), body: hash_including('article' => anything))).to have_been_made.once
+    end
+
+    it 'sends nothing for a save with nothing new staged' do
+      expect(ticket.save).to be(true)
+      expect(a_request(:put, ticket_url).with(query: hash_including({}))).to have_been_made.once
+    end
+
+    it 'goes on reading the values it sent' do
+      expect(ticket[:article]).to eq(article)
+      expect(ticket.title).to eq('Help')
+    end
+
+    it 'stages a value written back to what it was before the save, which Zammad no longer holds' do
+      other = client.tickets.find(1)
+      other.title = 'Sent'
+      stub_request(:put, ticket_url).with(query: hash_including({})).to_return(status: 200, body: '<html>proxy</html>')
+      begin
+        other.save
+      rescue ZammadAPI::ParseError
+        nil
+      end
+
+      other.title = 'Help'
+
+      expect(other.changes).to eq(title: %w[Sent Help])
+    end
+
+    it 'is brought up to date by a reload' do
+      stub_request(:get, ticket_url).with(query: hash_including({})).to_return(json_response({ id: 1, title: 'Help', article_count: 2 }))
+      ticket.reload
+
+      expect(ticket.key?(:article)).to be(false)
+      expect(ticket.article_count).to eq(2)
+    end
+
+    it 'keeps a change Zammad rejected staged, to be corrected and sent again' do
+      other = client.tickets.find(1)
+      other.title = ''
+      stub_request(:put, ticket_url).with(query: hash_including({}))
+        .to_return(json_response({ error: 'Title is required' }, status: 422))
+
+      expect(other.save).to be(false)
+      expect(other.changes).to eq(title: ['Help', ''])
+    end
+  end
 end
