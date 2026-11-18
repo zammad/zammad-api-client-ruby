@@ -49,6 +49,8 @@ module ZammadAPI
     def self.stringify_header_value: (String, untyped) -> String
     def self.escape_path_segment: (untyped) -> String
     def self.relative_path: (untyped) -> String
+    def self.refuse_unreadable_path!: (String relative) -> void
+    def self.unreadable_path_message: (String relative) -> String
     def self.encode_body: (untyped body, operation: String, ?resource_class: Class?) -> String?
 
     def initialize: (Config) -> void

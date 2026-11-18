@@ -430,16 +430,72 @@ module ZammadAPI
     # three places is one that gets changed in one of them - at which point
     # the stand-in quietly stops matching what the client sends.
     #
+    # A path that cannot be read as a URL is refused here as well, which is
+    # where it stops being Faraday's to refuse. Faraday reads the path with
+    # URI when the request is built, and URI raises an error of its own for
+    # one it cannot read: `client.get('api/v1/tägs')` and
+    # `client.get(' api/v1/x')` left as URI::InvalidURIError, which is
+    # neither a {ZammadAPI::Error} nor the ArgumentError a raw request
+    # documents for a path, so no rescue a caller was told to write caught
+    # it. And it was raised after the request had been logged, leaving a line
+    # for a request that never left - what {#perform} stringifies the query
+    # and the headers first to prevent.
+    #
     # @api private
     # @param path [Object]
     # @return [String]
-    # @raise [ArgumentError] for an absolute URL
+    # @raise [ArgumentError] for an absolute URL, or a path that cannot be
+    #   read as a URL
     def self.relative_path(path)
       relative = path.to_s.sub(%r{\A/+}, '')
-      return relative if !ABSOLUTE_URL.match?(relative)
+      if ABSOLUTE_URL.match?(relative)
+        raise ArgumentError, 'a request path is relative to the instance URL, and this one is an absolute URL: sending it would hand ' \
+                             "this client's credentials to another host. Pass the path alone, such as 'api/v1/tickets'."
+      end
 
-      raise ArgumentError, 'a request path is relative to the instance URL, and this one is an absolute URL: sending it would hand ' \
-                           "this client's credentials to another host. Pass the path alone, such as 'api/v1/tickets'."
+      refuse_unreadable_path!(relative)
+      relative
+    end
+
+    # Reads a path the two ways Faraday will: the whole of it as a URL, and
+    # a query string written into it as parameters.
+    #
+    # The second can fail where the first does not. `?a=1&a[b]=2` names one
+    # parameter as a value and as a structure, and decoding it raised
+    # TypeError from inside the connection.
+    #
+    # Neither message quotes the path, for the reason the one above does
+    # not, and neither passes on the message of the error underneath, which
+    # does quote it.
+    #
+    # @api private
+    # @param relative [String]
+    # @return [void]
+    # @raise [ArgumentError]
+    def self.refuse_unreadable_path!(relative)
+      begin
+        URI.parse(relative)
+      rescue URI::InvalidURIError
+        raise ArgumentError, unreadable_path_message(relative)
+      end
+
+      begin
+        QueryEncoder.decode(relative.partition('#').first.partition('?').last)
+      rescue TypeError, Faraday::Error
+        raise ArgumentError, 'the query string written into this request path cannot be read as parameters: it names one of them ' \
+                             'both as a value and as a structure, or nests them deeper than a query string is read. ' \
+                             'Pass the parameters as query: instead, which takes them as a Hash.'
+      end
+    end
+
+    # @api private
+    # @return [String]
+    def self.unreadable_path_message(relative)
+      found = relative.ascii_only? ? 'a space, or another character a URL does not allow, or a % that begins no escape' : 'a character outside ASCII'
+
+      "a request path is written the way a URL is, and this one cannot be read as one: it holds #{found}. " \
+        'Percent-encode what a URL cannot hold as it is - a space is %20, and ä is %C3%A4 - ' \
+        'or pass a parameter as query:, which encodes its value.'
     end
 
     # A request path as it may be printed: with the credentials of a query

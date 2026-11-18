@@ -109,6 +109,11 @@ RSpec.describe ZammadAPI::Test do
         .to raise_error(ArgumentError, /a request path is relative to the instance URL/)
     end
 
+    it 'refuses a path that cannot be read as a URL the way the real transport does' do
+      expect { client.get('api/v1/tägs') }.to raise_error(ArgumentError, /cannot be read as one: it holds a character outside ASCII/)
+      expect(zammad.requests).to be_empty
+    end
+
     it 'records nothing for a path it refuses' do
       expect { client.get('https://other.example/collect') }.to raise_error(ArgumentError)
       expect(zammad.requests).to be_empty

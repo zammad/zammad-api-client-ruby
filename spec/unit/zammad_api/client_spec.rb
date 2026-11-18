@@ -511,6 +511,73 @@ RSpec.describe ZammadAPI::Client do
           .to raise_error(ArgumentError) { |error| expect(error.message).not_to include('s3cret') }
       end
 
+      # Faraday reads the path with URI, and URI raises an error of its own
+      # for one it cannot read: neither a ZammadAPI::Error nor the
+      # ArgumentError a path is documented to raise, and raised after the
+      # request had been logged.
+      describe 'a path that cannot be read as a URL' do
+        it 'refuses one holding a character outside ASCII' do
+          expect { client.get('api/v1/tägs') }
+            .to raise_error(ArgumentError, /this one cannot be read as one: it holds a character outside ASCII/)
+        end
+
+        it 'refuses one holding a space' do
+          expect { client.get(' api/v1/roles') }.to raise_error(ArgumentError, /it holds a space, or another character a URL does not allow/)
+        end
+
+        it 'refuses one holding a % that begins no escape' do
+          expect { client.get('api/v1/roles%zz') }.to raise_error(ArgumentError, /cannot be read as one/)
+        end
+
+        it 'refuses one whose query string holds what a URL cannot' do
+          expect { client.get('api/v1/roles?name=prüfung') }.to raise_error(ArgumentError, /a character outside ASCII/)
+        end
+
+        it 'says how to write it' do
+          expect { client.get('api/v1/tägs') }.to raise_error(ArgumentError, /a space is %20, and ä is %C3%A4 - or pass a parameter as query:/)
+        end
+
+        it 'refuses a query string that names a parameter as two kinds of thing' do
+          expect { client.get('api/v1/roles?a=1&a[b]=2') }
+            .to raise_error(ArgumentError, /the query string written into this request path cannot be read as parameters/)
+        end
+
+        it 'does not quote the path, which may carry a secret' do
+          expect { client.get('api/v1/ro les?token=s3cret') }
+            .to raise_error(ArgumentError) { |error| expect(error.message).not_to include('s3cret') }
+        end
+
+        it 'refuses it for every verb' do
+          %i[post put delete].each do |verb|
+            expect { client.public_send(verb, 'api/v1/tägs') }.to raise_error(ArgumentError, /cannot be read as one/)
+          end
+        end
+
+        it 'makes no request and leaves no log line for one' do
+          log    = StringIO.new
+          logged = unit_client(logger: Logger.new(log, level: Logger::DEBUG))
+          stub_request(:any, /zammad\.test/)
+
+          expect { logged.get('api/v1/tägs') }.to raise_error(ArgumentError)
+          expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+          expect(log.string).to be_empty
+        end
+
+        it 'still sends the same path percent-encoded' do
+          stub = stub_request(:get, 'http://zammad.test/api/v1/t%C3%A4gs').to_return(json_response([]))
+
+          client.get('api/v1/t%C3%A4gs')
+          expect(stub).to have_been_requested
+        end
+
+        it 'still sends a query string written into the path' do
+          stub = stub_request(:get, roles_url).with(query: { 'name' => 'prüfung', 'page' => '2' }).to_return(json_response([]))
+
+          client.get('api/v1/roles?name=pr%C3%BCfung&page=2')
+          expect(stub).to have_been_requested
+        end
+      end
+
       it 'keeps a protocol-relative path on the instance' do
         stub = stub_request(:get, 'http://zammad.test/other.example/collect').to_return(json_response([]))
 

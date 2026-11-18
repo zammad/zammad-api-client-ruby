@@ -312,7 +312,8 @@ module ZammadAPI
     # @param path [String] path relative to {Config#url}; a leading slash is
     #   ignored, so paths can be pasted from the Zammad documentation. An
     #   absolute URL is refused, so the client's credentials only ever go to
-    #   the instance it was configured for.
+    #   the instance it was configured for. It is written the way a URL is:
+    #   a space or a character outside ASCII has to be percent-encoded.
     # @param query [Hash, nil] query string parameters
     # @param headers [Hash, nil] request headers. Names are case-insensitive,
     #   and +Authorization+ and +From+ are refused: the first is what the
@@ -321,7 +322,8 @@ module ZammadAPI
     # @raise [ResponseError] for any non-2xx response
     # @raise [TransportError] when the request could not be completed
     # @raise [ArgumentError] for a header this client sets itself, a value
-    #   that is not text, or a path that is an absolute URL
+    #   that is not text, a path that is an absolute URL, or one that cannot
+    #   be read as a URL
     def get(path, query: nil, headers: nil) = raw(:get, path, query: query, headers: headers)
 
     # Performs a +POST+ against any endpoint of the Zammad API.

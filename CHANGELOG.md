@@ -599,6 +599,13 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   sent the access token and the `on_behalf_of` scope to that host. The path is documented as
   relative to the instance URL, and record ids were already held inside their segment; this
   is the same escape one level up. The test kit refuses it too.
+- A raw request refuses a path that cannot be read as a URL with `ArgumentError`.
+  `client.get('api/v1/tägs')` and `client.get(' api/v1/x')` raised `URI::InvalidURIError`
+  from inside the connection, which is neither a `ZammadAPI::Error` nor the `ArgumentError`
+  a path is documented to raise, after the debug log had already written a line for a
+  request that never left. A query string in the path that names one parameter as a value
+  and as a structure raised `TypeError` the same way. Both are refused before anything is
+  logged, with a message that does not quote the path.
 - An instance `url` that carries credentials raises `ConfigurationError`. Faraday turns the
   userinfo of a URL into a Basic `Authorization` header, and its authorization middleware
   leaves a header that is already set alone, so with `url: 'https://old:pass@host/'` and
