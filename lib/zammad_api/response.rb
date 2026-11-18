@@ -117,7 +117,7 @@ module ZammadAPI
     #
     # A list is an array. A search asked for +with_total_count+ answers with
     # an object instead, +{records: [...], total_count: n}+, where its Zammad
-    # reads that parameter under +expand+ - 7.0 and later - and with the
+    # reads that parameter under +expand+ - 6.5.1 and later - and with the
     # array it always did where it does not. Both are a list, and
     # {Collection} reads either.
     #

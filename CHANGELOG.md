@@ -655,7 +655,7 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   search that is walked sends `with_total_count` and ends on an empty page only once the
   pages read cover the total reported beside it. The total never ends a walk on a page that
   held records, because Elasticsearch stops counting at ten thousand hits. An empty page
-  still ends the walk where there is no total to go by: on a Zammad before 7.0, which
+  still ends the walk where there is no total to go by: on a Zammad before 6.5.1, which
   answers with the records alone, and past the ten thousandth hit on Elasticsearch. The
   test kit pages a search stubbed as `{records: [...], total_count: n}` the way it pages
   an Array.

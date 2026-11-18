@@ -874,7 +874,7 @@ only once the pages read have covered that many hits. The total is never what en
 on a page that still held records.
 
 Two limits remain, and at both an empty page ends the walk whatever is behind it. A Zammad
-before 7.0 does not report the total beside expanded records. And Elasticsearch stops
+before 6.5.1 does not report the total beside expanded records. And Elasticsearch stops
 counting at ten thousand hits, so past that many a page of stale hits reads as the end.
 
 `first` and `take` size their own request rather than taking records off the front of one
@@ -1158,7 +1158,7 @@ zammad.stub(:get, 'api/v1/groups', body: [{id: 101}], query: {page: 2})
 ```
 
 A search that is walked asks for its total with `with_total_count`, and an Array answers
-it the way a Zammad before 7.0 does, with the records alone. To stand in for one that
+it the way a Zammad before 6.5.1 does, with the records alone. To stand in for one that
 reports the total, stub the object it answers with. It is paged like an Array: a later
 page holds no records and the same total.
 

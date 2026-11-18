@@ -570,7 +570,7 @@ module ZammadAPI
     # a walk ended on the figure would stop there with the rest unread -
     # which is the stop condition the note in #walk is about. Past that
     # figure an empty page ends the walk, as it does where there is no figure
-    # at all: a Zammad before 7.0 answers `with_total_count` under `expand`
+    # at all: a Zammad before 6.5.1 answers `with_total_count` under `expand`
     # with the bare array. That is the gap this leaves.
     #
     # Reckoned in the page size that was asked for. An endpoint that pages

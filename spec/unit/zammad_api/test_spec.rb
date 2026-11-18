@@ -639,7 +639,7 @@ RSpec.describe ZammadAPI::Test do
     end
   end
 
-  # The object a Zammad from 7.0 on answers a walked search with. It is a
+  # The object a Zammad from 6.5.1 on answers a walked search with. It is a
   # list too, so the page after it holds no records - and reports the same
   # total, which is what a walk reads to tell that page from the end.
   describe 'a search stubbed once with its total beside the records' do

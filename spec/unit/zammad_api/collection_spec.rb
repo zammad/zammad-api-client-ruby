@@ -956,7 +956,7 @@ RSpec.describe ZammadAPI::Collection do
       expect(search.map(&:id)).to eq((1..(page_size * 2)).to_a)
     end
 
-    # The bare array is what a Zammad before 7.0 answers with, and it says
+    # The bare array is what a Zammad before 6.5.1 answers with, and it says
     # nothing about how many hits there are. An empty page is then all there
     # is to end on, hits behind it or not: see the next group for an endpoint
     # that does say.
@@ -987,7 +987,7 @@ RSpec.describe ZammadAPI::Collection do
   # A page of a search can hold nothing with hits still behind it, for the
   # reason it can come back short: every id the search named for it has lost
   # its record. It takes one stale hit on the page of one that `first` and
-  # `empty?` ask for, and a search serves the newest first. A Zammad from 7.0
+  # `empty?` ask for, and a search serves the newest first. A Zammad from 6.5.1
   # on reports the size of the whole result beside the page where it is asked
   # to, which is what tells such a page from the end.
   describe 'a search that reports its total beside each page' do
