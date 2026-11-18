@@ -11,7 +11,10 @@ require 'zammad_api'
 
 client = ZammadAPI::Client.from_env
 
-puts "connected to Zammad #{client.version} as #{client.me.email}"
+# `me` answers for any account. `client.version` would name the Zammad
+# version as well, but Zammad serves it to administrators only, and an
+# agent's token is answered with ZammadAPI::AuthorizationError.
+puts "connected to #{client.config.redacted_url} as #{client.me.email}"
 
 # Create a ticket together with its first article.
 ticket = client.tickets.create(
@@ -37,7 +40,9 @@ ticket.add_article(subject: 'Update', body: 'Reset link sent.', type: 'note')
 puts "#{ticket.articles.size} article(s)"
 
 # Assignments are staged, and `save` sends only what changed. It answers
-# false, with the reason in `error`, where Zammad rejects the change.
+# false, with the reason in `error`, where Zammad rejects the change as
+# invalid (a 422). Any other failure raises: a 403 as
+# ZammadAPI::AuthorizationError, for one.
 ticket.priority = '3 high'
 puts "sending #{ticket.changes.inspect}"
 abort "Zammad rejected the change: #{ticket.error.message}" if !ticket.save

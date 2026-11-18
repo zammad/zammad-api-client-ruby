@@ -277,10 +277,16 @@ module ZammadAPI
     # The version of the Zammad instance, not of this gem — that is
     # {ZammadAPI::VERSION}.
     #
+    # Zammad serves it to administrators only: its VersionControllerPolicy
+    # permits +admin+ and nothing else. An agent's or a customer's
+    # credentials are answered with a 403, so to check that a client can
+    # reach Zammad at all, ask {#me}, which every account may.
+    #
     # @example
     #   client.version # => "6.4.0"
     #
     # @return [String, nil] nil when the instance reported no version
+    # @raise [AuthorizationError] when the account is not an administrator
     def version
       response = @transport.get('api/v1/version', operation: 'get the Zammad version')
       version  = response.decoded(:object, operation: 'get the Zammad version')[:version]

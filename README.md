@@ -170,11 +170,13 @@ authentication in place of the token configured beside them.
 
 ```ruby
 client.me.email # => "agent@example.com", the account the credentials belong to
-client.version  # => "6.4.0", the Zammad instance's version
+client.version  # => "6.4.0", the Zammad instance's version, for an administrator
 ```
 
-`client.version` is the version of the Zammad instance; `ZammadAPI::VERSION` is the
-version of this gem.
+`client.me` answers for any account, so it is the check that the client can reach Zammad
+and authenticate. `client.version` is the version of the Zammad instance, and Zammad serves
+it to administrators only: with an agent's or a customer's credentials it raises
+`ZammadAPI::AuthorizationError`. `ZammadAPI::VERSION` is the version of this gem.
 
 ### Adapter and middleware
 
