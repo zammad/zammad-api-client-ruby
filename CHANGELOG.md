@@ -813,6 +813,15 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `client.users.new(login: 'x', password: 'hunter2')` showed the password in IRB and under
   `pp`, in an RSpec failure and in any exception report that interpolates the record.
   `attributes`, `to_h` and `to_json` still hand the value over.
+- The test kit sends a read again that the client would retry. It raised for the first
+  stubbed 429 or 5xx, where the real transport asks again: stubbed 503 and then 200,
+  `client.groups.find(1)` returns the group against Zammad and raised `ServerError` against
+  the stand-in, and a single stubbed 503 was recorded as one request where the wire carries
+  three. A `GET` is now attempted up to `retries` more times, each attempt recorded and
+  answered by the next stub, with no wait in between. Whether a response is retried is the
+  transport's own rule, so a write is not repeated and a `Retry-After` longer than
+  `timeout` ends the attempts. `ZammadAPI::Test.new(retries: 0)` raises for the first
+  failure, as before.
 
 ### Changed
 

@@ -52,6 +52,22 @@ module Faraday
     def self.decode: (String? query) -> untyped
   end
 
+  # The retry middleware, asked what it would do with a response. See
+  # ZammadAPI::Transport.retried?.
+  module Retry
+    class Middleware
+      def initialize: (untyped app, ?untyped options) -> void
+      def calculate_sleep_amount: (Integer retries, untyped env) -> Float?
+    end
+  end
+
+  module Utils
+    # Response headers, read whatever the case of the name.
+    class Headers
+      def initialize: (?Hash[untyped, untyped] hash) -> void
+    end
+  end
+
   def self.new: (**untyped) ?{ (Connection) -> void } -> Connection
   def self.default_adapter: () -> Symbol
 end
