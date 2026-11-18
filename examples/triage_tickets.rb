@@ -18,8 +18,11 @@ client  = ZammadAPI::Client.from_env
 flagged = 0
 nudged  = 0
 
-# `first` stops paginating as soon as it has what it asked for.
-client.tickets.search('state.name:open').first(200).each do |ticket|
+# Oldest first: a search is served newest-updated first, so without the
+# order the 200 read would be the freshest, and on an instance with more
+# open tickets than that the stale ones would never be looked at. `first`
+# stops paginating as soon as it has what it asked for.
+client.tickets.search('state.name:open').order(updated_at: :asc).first(200).each do |ticket|
   # Records implement `deconstruct_keys`, so case/in works on them.
   case ticket
   in { priority: '3 high', owner_id: 1 } # 1 is Zammad's "-", i.e. unassigned
@@ -30,9 +33,10 @@ client.tickets.search('state.name:open').first(200).each do |ticket|
     puts "stale: ##{ticket.number} #{ticket.title}"
 
     ticket.priority = '3 high'
-    # Sends the one changed attribute, nothing else. A rejection comes back as
-    # false rather than raising, so it is checked: an unchecked save carries
-    # on as if the priority had been raised.
+    # Sends the one changed attribute, nothing else. A change Zammad rejects
+    # as invalid (a 422) comes back as false rather than raising, so it is
+    # checked: an unchecked save carries on as if the priority had been
+    # raised. Any other failure, such as a 403, raises.
     if !ticket.save
       warn "  could not raise the priority of ##{ticket.number}: #{ticket.error.message}"
       next
