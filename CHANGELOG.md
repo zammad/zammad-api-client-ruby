@@ -691,6 +691,13 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   than were asked for, because the pages read are reckoned at the size asked for. The test
   kit pages a search stubbed as `{records: [...], total_count: n}` the way it pages an
   Array.
+- `first`, `take` and `empty?` read on past stale search hits in pages that grow. They size
+  their request to the records they want, and held to that size, reading on past an empty
+  page cost a request for every stale hit in a row: 5000 requests for `empty?` behind 5000
+  of them, on an instance whose Elasticsearch index has drifted from its database. Past an
+  empty page they now ask for the largest page that starts where the last one ended,
+  doubling up to the 200 a search serves, and the same read takes 34. No hit is passed over
+  or read twice. A batch size given to `in_batches` or `find_each` is left as it is.
 - A `StopIteration` raised by the block a collection yields to is raised, not taken for the
   end of the walk. The walk ran inside `Kernel#loop`, which rescues it, so a block calling
   `next` on an enumerator of its own that ran out, as in `map { [it.id, labels.next] }`,

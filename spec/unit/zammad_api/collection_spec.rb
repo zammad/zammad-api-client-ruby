@@ -1123,6 +1123,97 @@ RSpec.describe ZammadAPI::Collection do
       expect(a_request(:get, search_url).with(query: hash_including({}))).to have_been_made.once
     end
 
+    # `first` and `empty?` ask for a page of the size they want, and a search
+    # is read on past an empty one. Held to that size, the two cost a request
+    # for every stale hit in a row: five thousand of them for `empty?` on an
+    # instance whose index has drifted from its database.
+    describe 'read by first, behind hits that have lost their records' do
+      # A search over `hits`, of which `stale` have lost their record, served
+      # the way Zammad serves one: the ids for the page first, and then the
+      # records that are still there. Answers with every page it was asked
+      # for, as page and size.
+      def stub_search_over(hits, stale: [])
+        asked = []
+        stub_request(:get, search_url).with(query: hash_including({})).to_return do |request|
+          params = URI.decode_www_form(URI(request.uri).query).to_h
+          page   = Integer(params['page'])
+          size   = Integer(params['per_page'])
+          asked << [page, size]
+          json_response({ records: (Array(hits)[(page - 1) * size, size].to_a - Array(stale)).map { { id: it } }, total_count: Array(hits).size })
+        end
+        asked
+      end
+
+      it 'asks for a larger page after each empty one, starting where the last ended' do
+        asked = stub_search_over(1..20, stale: 1..20)
+
+        expect(search.empty?).to be(true)
+        expect(asked).to eq([[1, 1], [2, 1], [2, 2], [2, 4], [2, 8], [2, 16]])
+      end
+
+      it 'reads past five thousand stale hits in tens of requests, not thousands' do
+        asked = stub_search_over(1..5000, stale: 1..5000)
+
+        expect(search.empty?).to be(true)
+        expect(asked.size).to eq(34)
+      end
+
+      it 'never asks for a page larger than the endpoint serves' do
+        asked = stub_search_over(1..5000, stale: 1..5000)
+        search.first(3)
+
+        expect(asked.map(&:last).max).to be <= ZammadAPI::ResourceProxy::SEARCH_MAX_PER_PAGE
+      end
+
+      it 'covers every hit once, however the pages were sized' do
+        asked = stub_search_over(1..5000, stale: 1..5000)
+        search.first(7)
+
+        covered = asked.flat_map { |page, size| Array.new(size) { ((page - 1) * size) + it + 1 } }
+        expect(covered.first(5000)).to eq((1..5000).to_a)
+      end
+
+      it 'finds the first live hit behind a run of stale ones' do
+        stub_search_over(1..300, stale: 1..137)
+
+        expect(search.first.id).to eq(138)
+      end
+
+      # Whatever is stale, the answer is the live hits in the order they are
+      # served: none passed over where a page changed size, none handed over
+      # twice.
+      [
+        { stale: [],                  wanted: 3 },
+        { stale: [1],                 wanted: 3 },
+        { stale: [2, 3, 4, 5, 6, 7],  wanted: 3 },
+        { stale: (1..40).to_a - [17], wanted: 2 },
+        { stale: (2..90).to_a,        wanted: 5 },
+        { stale: (1..300).step(2),    wanted: 9 },
+        { stale: (4..250).to_a,       wanted: 4 }
+      ].each do |example|
+        it "reads the first #{example[:wanted]} live hits in order with #{example[:stale].to_a.size} of 300 stale" do
+          stub_search_over(1..300, stale: example[:stale])
+
+          expect(search.first(example[:wanted]).map(&:id)).to eq(((1..300).to_a - example[:stale].to_a).first(example[:wanted]))
+        end
+      end
+
+      it 'still costs one request where the first hit is live' do
+        asked = stub_search_over(1..300)
+        search.first
+
+        expect(asked).to eq([[1, 1]])
+      end
+
+      # A batch size is the caller saying how many records a batch may hold.
+      it 'does not widen a batch size the caller chose' do
+        asked = stub_search_over(1..100, stale: 1..100)
+        search.in_batches(of: 10) { nil }
+
+        expect(asked.map(&:last).uniq).to eq([10])
+      end
+    end
+
     it 'still raises PaginationError for a search that repeats a page of records' do
       stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response({ records: [{ id: 1 }], total_count: 9 }))
 

@@ -53,7 +53,11 @@ module ZammadAPI
     # @param sortable [Boolean] whether this endpoint reads +sort_by+ and
     #   +order_by+
     # @param unsortable_hint [String] what to do instead where it does not
-    def initialize(transport:, resource_class:, path:, operation:, max_per_page:, sortable:, unsortable_hint:, query: {}, per_page: nil, page: nil, search: false)
+    # @param widens [Boolean] whether a walk may ask for a larger page than
+    #   +per_page+ once one has come back with nothing on it, which a read
+    #   sized by {#first} may and a batch size a caller chose may not: see
+    #   {#widened}
+    def initialize(transport:, resource_class:, path:, operation:, max_per_page:, sortable:, unsortable_hint:, query: {}, per_page: nil, page: nil, search: false, widens: false)
       @transport       = transport
       @resource_class  = resource_class
       @path            = path
@@ -79,6 +83,7 @@ module ZammadAPI
       @per_page        = clamp_per_page(per_page || max_per_page)
       @page            = page
       @search          = search
+      @widens          = widens
     end
 
     # Yields every record, fetching further pages as needed.
@@ -238,12 +243,17 @@ module ZammadAPI
     # says which records it holds, so re-sizing it would move them - the same
     # reason {#page_size!} refuses to.
     #
+    # The size is where the read starts, and not what it is held to. A
+    # search can serve a page with nothing on it and hits still behind it,
+    # and a read that stayed this small then paid a request for every one
+    # of them: see {#widened}.
+    #
     # @param count [Integer, nil] how many records to read
     # @return [Resources::Base, Array<Resources::Base>, nil] one record, or an
     #   array of them when +count+ was given
     def first(count = nil)
       wanted = count || 1
-      sized  = own_request_for_first?(wanted) ? with(per_page: wanted) : self
+      sized  = own_request_for_first?(wanted) ? with(per_page: wanted, widens: true) : self
       # Through the enumerator rather than `super`, so that the sized
       # collection does the reading and this method is not asked to be both
       # the caller and the callee of Enumerable#first.
@@ -333,7 +343,9 @@ module ZammadAPI
     #
     # Costs the one request {#first} costs: a page of a single record, except
     # on a collection limited to one page, where the page size decides which
-    # records that page holds and so cannot be narrowed.
+    # records that page holds and so cannot be narrowed. A search whose
+    # first hits have lost their records costs the few more it takes to read
+    # past them.
     #
     # @example
     #   client.tickets.search('state.name:merged').empty?
@@ -451,8 +463,9 @@ module ZammadAPI
       # end. The records and the pages after that were dropped and `map`
       # answered with what it had, where the same block over an Array raises.
       # Every way out of this loop is a `break` below.
+      per_page  = @per_page
       while page
-        records, digest, total = fetch(page, @per_page)
+        records, digest, total = fetch(page, per_page)
 
         # Counted before the block has the page, not after. The Array handed
         # over is the block's to do with as it likes, and a consumer that
@@ -494,9 +507,15 @@ module ZammadAPI
 
         # A collection limited to a single page never advances.
         break if @page
+
+        # The hits the pages read so far have covered, reckoned in the size
+        # asked for. Every page this walk asks for starts where the one
+        # before it ended, whatever size either was, so the last page's
+        # number and size say it all.
+        covered = page * per_page
         # An empty page ends the walk, unless it is a search saying that it
         # has hits beyond this one.
-        break if received.zero? && !hits_past?(page, total)
+        break if received.zero? && !hits_past?(covered, total)
 
         # Every stop condition here is derived from the records the endpoint
         # actually served, and the one figure read beside them - a search's
@@ -535,11 +554,59 @@ module ZammadAPI
         break if !@search && received < page_size
 
         previous = digest
-        page += 1
+        page, per_page = page_after(page, per_page, received)
       end
     end
 
-    def with(page: @page, per_page: @per_page, query: @query)
+    # The page that follows one a walk has read, and its size: the next of
+    # the same size, except past an empty page in a read sized by {#first},
+    # which asks for more at a time from there. Only a search gets this far
+    # with nothing received.
+    #
+    # @return [Array(Integer, Integer)] the page to ask for and its size
+    def page_after(page, per_page, received)
+      received.zero? && @widens ? widened(page * per_page) : [page + 1, per_page]
+    end
+
+    # The page to ask for after an empty one, in a read that may widen: the
+    # largest the endpoint serves that starts exactly where the pages read so
+    # far ended.
+    #
+    # {#first} and {#empty?} size their request to the records they want,
+    # and a search is read on past a page with nothing on it while the total
+    # says there are hits behind it. Kept at that size, the two together
+    # cost a request for every stale hit: on an instance whose Elasticsearch
+    # index has drifted from its database - one restored without a reindex -
+    # `search(term).empty?` behind five thousand of them made five thousand
+    # requests, one after the other, before it answered.
+    #
+    # The size that was asked for stopped being the right one at the first
+    # empty page: it was chosen to fetch no more than was wanted, and what it
+    # fetched was nothing. But a larger page cannot simply be asked for from
+    # there. A page is a position - page 3 of 50 is hits 101 to 150 - so one
+    # of another size starts somewhere else, and a read that moved to it
+    # would pass over hits or be handed records a second time.
+    #
+    # So the next page is one whose size divides what has been covered,
+    # which makes its start fall exactly on the end of the last: with 8 hits
+    # covered, page 2 of 8 is hits 9 to 16. The size doubles that way from a
+    # page of one, and from the endpoint's own limit on it is the largest
+    # divisor that fits. Five thousand stale hits are read past in
+    # thirty-four requests.
+    #
+    # Not for a size a caller chose. `in_batches(of: 10)` says how many
+    # records a batch may hold, and a page of 160 is not one of those.
+    #
+    # @param covered [Integer] the hits the pages read so far have covered
+    # @return [Array(Integer, Integer)] the page to ask for and its size
+    def widened(covered)
+      pages = covered.fdiv(@max_per_page).ceil
+      pages += 1 until (covered % pages).zero?
+
+      [pages + 1, covered / pages]
+    end
+
+    def with(page: @page, per_page: @per_page, query: @query, widens: false)
       self.class.new(
         transport:       @transport,
         resource_class:  @resource_class,
@@ -551,7 +618,8 @@ module ZammadAPI
         query:           query,
         per_page:        per_page,
         page:            page,
-        search:          @search
+        search:          @search,
+        widens:          widens
       )
     end
 
@@ -581,14 +649,17 @@ module ZammadAPI
     # at all: a Zammad before 6.5.1 answers `with_total_count` under `expand`
     # with the bare array. That is the gap this leaves.
     #
-    # Reckoned in the page size that was asked for. An endpoint that pages
+    # Reckoned in the page sizes that were asked for. An endpoint that pages
     # smaller has covered fewer hits than this takes it to have, and the
     # walk then ends on an empty page it might have read past - no earlier
     # than it ended before the figure was read at all.
     #
     # What reading on costs is bounded by the same figure: a request per
-    # page of the hits the endpoint reports, and none beyond them.
-    def hits_past?(page, total) = !total.nil? && page * @per_page < total
+    # page of the hits the endpoint reports, and none beyond them. How large
+    # those pages are is what #widened is about.
+    #
+    # @param covered [Integer] the hits the pages read so far have covered
+    def hits_past?(covered, total) = !total.nil? && covered < total
 
     # Fetches one page: the records, the digest the repeated-page guard
     # compares, and the size of the whole result where the endpoint reported

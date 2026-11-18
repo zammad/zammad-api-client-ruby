@@ -20,6 +20,7 @@ module ZammadAPI
     @per_page: Integer
     @page: Integer?
     @search: bool
+    @widens: bool
 
     def initialize: (
       transport: Transport,
@@ -32,7 +33,8 @@ module ZammadAPI
       ?query: Hash[Symbol, untyped],
       ?per_page: Integer?,
       ?page: Integer?,
-      ?search: bool
+      ?search: bool,
+      ?widens: bool
     ) -> void
 
     def each: () { (R) -> void } -> Collection[R]
@@ -67,8 +69,10 @@ module ZammadAPI
     def positive_integer!: (untyped, String) -> Integer
     def page_size!: (untyped, String) -> Integer
     def walk: () { (Array[R]) -> void } -> void
-    def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped]) -> Collection[R]
-    def hits_past?: (Integer page, Integer? total) -> bool
+    def page_after: (Integer page, Integer per_page, Integer received) -> [ Integer, Integer ]
+    def widened: (Integer covered) -> [ Integer, Integer ]
+    def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped], ?widens: bool) -> Collection[R]
+    def hits_past?: (Integer covered, Integer? total) -> bool
     def fetch: (Integer, Integer) -> [ Array[R], Integer, Integer? ]
     def page_query: (Integer page, Integer per_page) -> Hash[Symbol, untyped]
     def page_digest: (Array[Hash[Symbol, untyped]] decoded) -> Integer
