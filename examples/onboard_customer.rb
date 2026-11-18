@@ -17,6 +17,12 @@ client = ZammadAPI::Client.from_env
 company, email, firstname, lastname = ARGV
 abort "usage: #{$PROGRAM_NAME} COMPANY EMAIL FIRSTNAME LASTNAME" if [company, email, firstname, lastname].any?(&:nil?)
 
+# Zammad stores an address trimmed and in lower case, and `find_by` matches a
+# value exactly. Looked up as typed, Jane@Acme.Test misses the jane@acme.test
+# Zammad holds: the check below then sees no user, and the script makes the
+# organization before Zammad refuses the address as taken.
+email = email.strip.downcase
+
 # `find_by` searches and then checks the hits itself, because Zammad's index
 # endpoints cannot filter. It returns a record that genuinely carries the
 # attribute, or nil - never an unrelated one.
