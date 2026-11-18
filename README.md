@@ -1383,8 +1383,9 @@ If this is not the time to move, [1.x stays available](#staying-on-1x).
   `ZammadAPI::ValidationError` as `save` used to. `update` and `update!` are the same pair.
 
 - **`collection.each`** walks every page, where 1.x read one and stopped:
-  `client.tickets.all.each { ... }` touched the first 100 tickets and now touches every
-  ticket the client can read, at a request per page. A loop written to handle the first
+  `client.ticket.all.each { ... }`, as 1.x spelled it, touched the first 100 tickets. It
+  still runs in 2.0, through the deprecated singular reader (`client.tickets` is the new
+  name), and now touches every ticket the client can read, at a request per page. A loop written to handle the first
   page, or one that writes to each record it is handed, does that to all of them now.
   Limit it explicitly with `first(n)` or `page(1, per_page: n)`.
 
