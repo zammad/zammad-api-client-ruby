@@ -46,6 +46,18 @@ RSpec.describe ZammadAPI::Transport do
       expect(stub).to have_been_requested
     end
 
+    # Net::HTTP refused it at the request, quoting the value.
+    it 'refuses a raw request header with a line break inside it, without quoting it' do
+      expect { described_class.stringify_headers('X-Api-Key' => "abc\r\nsecret") }
+        .to raise_error(ArgumentError, /\Aheader x-api-key holds a line break, which a header cannot carry/) { |error|
+          expect(error.message).not_to include('secret')
+        }
+    end
+
+    it 'takes one that only ends in a line break, which Net::HTTP strips' do
+      expect(described_class.stringify_headers('X-Note' => "abc\n")).to eq('x-note' => "abc\n")
+    end
+
     it 'carries a header value given in UTF-16 as the same text in UTF-8' do
       expect(described_class.stringify_headers('X-Note' => 'ä'.encode('UTF-16LE'))).to eq('x-note' => 'ä')
     end
@@ -1035,6 +1047,10 @@ RSpec.describe ZammadAPI::Transport do
 
     # The blank check raised Encoding::CompatibilityError for text in an
     # encoding ASCII is no part of, for an identifier that names someone too.
+    it 'refuses an identifier with a line break inside it' do
+      expect { unit_transport.with_on_behalf_of("agent\nadmin") }.to raise_error(ArgumentError, /on_behalf_of holds a line break/)
+    end
+
     it 'refuses a blank identifier given in UTF-16' do
       expect { unit_transport.with_on_behalf_of(' '.encode('UTF-16LE')) }.to raise_error(ArgumentError, /on_behalf_of needs the login/)
     end

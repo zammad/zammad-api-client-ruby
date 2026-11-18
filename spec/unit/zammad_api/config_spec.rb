@@ -180,6 +180,33 @@ RSpec.describe ZammadAPI::Config do
     end
   end
 
+  # Each is sent as a header. Net::HTTP refused a line break inside one at
+  # the first request, with an ArgumentError that quoted the value.
+  describe 'a line break in an option sent as a header' do
+    {
+      http_token:   { http_token: "secret-abc\nsecret-def" },
+      oauth2_token: { http_token: nil, oauth2_token: "secret-abc\r\nsecret-def" },
+      user_agent:   { user_agent: "my-app\nsecret-def" }
+    }.each do |name, options|
+      it "refuses one inside #{name}, without quoting it" do
+        expect { build(**options) }.to raise_error(ZammadAPI::ConfigurationError) { |error|
+          expect(error.message).to start_with("config #{name} holds a line break, which a header cannot carry")
+          expect(error.message).not_to include('secret-def')
+        }
+      end
+    end
+
+    # Net::HTTP strips it, so a token read from a file with its newline on
+    # worked, and still does.
+    it 'takes a token that only ends in one' do
+      expect(build(http_token: "secret\n").http_token).to eq("secret\n")
+    end
+
+    it 'does not check a password, which basic authentication encodes' do
+      expect(build(http_token: nil, user: 'agent', password: "pass\nword").password).to eq("pass\nword")
+    end
+  end
+
   describe 'the Faraday seam' do
     it 'symbolizes an adapter given as a string' do
       expect(build(adapter: 'test').adapter).to eq(:test)

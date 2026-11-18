@@ -371,7 +371,36 @@ module ZammadAPI
       raise ArgumentError, "header #{name} is nil, and a header is always text: pass a value, or leave the header out" if value.nil?
       raise ArgumentError, "header #{name} was given as #{value.inspect}, and a header is always text: pass a String" if !value.is_a?(String) && !value.is_a?(Symbol) && !value.is_a?(Numeric)
 
-      wire_text(value, "header #{name}")
+      text = wire_text(value, "header #{name}")
+      raise ArgumentError, "header #{name} holds a line break, which a header cannot carry: #{LINE_BREAK_ADVICE}" if line_break?(text)
+
+      text
+    end
+
+    # What to do about a line break in a header value, said wherever one is
+    # refused.
+    LINE_BREAK_ADVICE = 'the value is not quoted here, as it may be a credential. Read it without the line break - ' \
+                        'a value read from a file usually ends in one, which is taken, but one inside it is not.'
+
+    # Whether a header value holds a line break no header can carry.
+    #
+    # Net::HTTP strips the whitespace around a header value and refuses one
+    # with a line break left in it, with an ArgumentError that quotes the
+    # value: `http_token: "abc\ndef"` was taken when the client was built
+    # and raised at its first request, neither as a {ZammadAPI::Error} nor
+    # where the token was configured, with the token in the message. The
+    # +From+ scope and a raw request's headers went the same way. A line
+    # break at either end is stripped there, so a token read from a file
+    # with its newline still on works, and is still taken.
+    #
+    # @api private
+    # @param text [String]
+    # @return [Boolean]
+    def self.line_break?(text)
+      text = text.encode(Encoding::UTF_8) if !text.encoding.ascii_compatible?
+      /[\r\n]/.match?(text.strip)
+    rescue EncodingError
+      false
     end
 
     # The +From+ scope as a transport holds it: text, and a copy of its own.
@@ -408,6 +437,7 @@ module ZammadAPI
 
       text = wire_text(identifier, 'on_behalf_of')
       raise ArgumentError, blank_on_behalf_of_message(identifier) if BLANK.match?(text)
+      raise ArgumentError, "on_behalf_of holds a line break, which the From header cannot carry: #{LINE_BREAK_ADVICE}" if line_break?(text)
 
       text.dup.freeze
     end

@@ -81,6 +81,8 @@ module ZammadAPI
     def positive_number?: (untyped) -> bool
     def validate_numbers!: () -> void
     def validate_user_agent!: () -> void
+    HEADER_OPTIONS: Array[Symbol]
+    def validate_header_options!: () -> void
     def validate_ssl_verify!: () -> void
     def validate_middleware!: () -> void
     def validate_logger!: () -> void

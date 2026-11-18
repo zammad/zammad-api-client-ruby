@@ -454,6 +454,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   header, which Faraday filled in with its own — so the gem silently stopped identifying
   itself in the instance log an operator greps to find its requests. A `user_agent` that is
   not a String raises `ConfigurationError`.
+- A line break inside `http_token`, `oauth2_token` or `user_agent` raises
+  `ConfigurationError` when the client is built, and one inside an `on_behalf_of`
+  identifier or a raw request's header raises `ArgumentError`. Each was taken and then
+  refused by Net::HTTP at the first request, with an `ArgumentError` that quoted the value,
+  the access token included. Neither message quotes it now. A line break at the end, as a
+  token read from a file has, is stripped by Net::HTTP and still taken.
 - Proxy credentials are redacted whether or not the proxy URL carries a scheme.
   `proxy: 'user:secret@proxy:8080'` — the shape an `http_proxy` setting is copied out of —
   rendered in `Config#inspect` in full.

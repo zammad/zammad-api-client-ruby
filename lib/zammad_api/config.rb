@@ -186,6 +186,7 @@ module ZammadAPI
       validate_credentials!
       validate_numbers!
       validate_user_agent!
+      validate_header_options!
       validate_ssl_verify!
       validate_middleware!
       validate_logger!
@@ -409,6 +410,25 @@ module ZammadAPI
       return if user_agent.is_a?(String)
 
       raise ConfigurationError, 'config user_agent needs to be a string'
+    end
+
+    # The options that are sent as a header: the two tokens in
+    # +Authorization+, and the user agent.
+    HEADER_OPTIONS = %i[http_token oauth2_token user_agent].freeze
+    private_constant :HEADER_OPTIONS
+
+    # A line break inside one of these was taken here and refused by
+    # Net::HTTP at the first request, with the value in the message: see
+    # {Transport.line_break?}. Refused here instead, without the value. A
+    # user and password are not checked: basic authentication sends them
+    # Base64-encoded, which carries a line break like anything else.
+    def validate_header_options!
+      HEADER_OPTIONS.each do |name|
+        value = public_send(name)
+        next if !value.is_a?(String) || !Transport.line_break?(value)
+
+        raise ConfigurationError, "config #{name} holds a line break, which a header cannot carry: #{Transport::LINE_BREAK_ADVICE}"
+      end
     end
 
     # A proxy is the second string here that may carry credentials, and the
