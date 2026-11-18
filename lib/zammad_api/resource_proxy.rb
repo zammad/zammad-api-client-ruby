@@ -504,9 +504,10 @@ module ZammadAPI
     # and a list of conditions a query string cannot keep apart - because
     # left to the request they would be reported when the collection is
     # first enumerated, some lines away from the search that wrote them.
-    # What it returns is discarded: the collection sends the values as they
-    # were given - a copy of them, see {#search} - and the transport
-    # stringifies them then.
+    # What it returns is what each keyword is asked about below, and not what
+    # is sent: the collection sends the values as they were given - a copy of
+    # them, see {#search} - and the transport stringifies them then, the
+    # same way.
     #
     # @return [Hash{Symbol => Object}]
     # @raise [ArgumentError]
@@ -515,27 +516,36 @@ module ZammadAPI
       unknown    = normalized.keys - search_filter_keys
       raise ArgumentError, unknown_search_filter_message(unknown) if !unknown.empty?
 
-      Transport.stringify_query(normalized)
-
-      empty = normalized.select { |_, value| empty_search_filter?(value) }
+      sent  = Transport.stringify_query(normalized)
+      empty = normalized.select { |name, _| empty_search_filter?(sent.fetch(name.to_s)) }
       raise ArgumentError, empty_search_filter_message(empty) if !empty.empty?
 
       normalized
     end
 
     # Whether Zammad would read a keyword's value as the keyword not having
-    # been given: what Rails calls blank, for the types a filter comes in.
+    # been given: what Rails calls blank, asked of the value as it goes on
+    # the wire. Asked of that and not of the value as given, because a
+    # Symbol or anything else with an empty +to_s+ is sent as an empty
+    # String, and a Hash that holds nothing but empty Hashes is not written
+    # at all - `condition: {'ticket.state_id' => {}}` left the request
+    # without a +condition+.
+    #
     # Asked of the keyword's own value and not of what is nested in it - a
     # +condition+ naming an attribute with an empty +value+ is a selector,
-    # and what that selects is Zammad's to say.
+    # and what that selects is Zammad's to say. An empty list is written,
+    # so a Hash holding one is not empty here.
     #
     # Blank as Rails reads it, Unicode spaces included: see
     # {Transport::BLANK}.
+    #
+    # @param value [String, Array, Hash] as {Transport.stringify_query}
+    #   leaves it
     def empty_search_filter?(value)
       case value
-      when String      then Transport::BLANK.match?(value)
-      when Array, Hash then value.empty?
-      else false
+      when String then Transport::BLANK.match?(value)
+      when Array  then value.empty?
+      else !QueryEncoder.written?(value)
       end
     end
 

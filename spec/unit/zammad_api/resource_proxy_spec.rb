@@ -913,6 +913,23 @@ RSpec.describe ZammadAPI::ResourceProxy do
         expect { client.users.search('smith', permissions: "\u3000") }.to raise_error(ArgumentError, /search was given permissions:/)
       end
 
+      # Sent as `permissions=`, which is as blank as a String with nothing in
+      # it: the check is of what is sent, not of the class it was given as.
+      it 'refuses one given as a value whose text is empty' do
+        expect { client.users.search('smith', permissions: :'') }.to raise_error(ArgumentError, /search was given permissions: :""/)
+      end
+
+      # Nothing is written for an empty Hash, so the request went out with no
+      # condition at all.
+      it 'refuses a condition that holds nothing but empty Hashes' do
+        expect { client.tickets.search('printer', condition: { 'ticket.state_id' => {} }) }
+          .to raise_error(ArgumentError, /search was given condition: \{"ticket.state_id" => \{\}\}/)
+      end
+
+      it 'refuses group_ids naming a group with nothing under it' do
+        expect { client.users.search('smith', group_ids: { 2 => {} }) }.to raise_error(ArgumentError, /search was given group_ids:/)
+      end
+
       it 'says what the search would have come back with' do
         expect { client.users.search('smith', ids: []) }
           .to raise_error(ArgumentError, /everything matching the term, not narrowed to nothing/)
@@ -932,6 +949,12 @@ RSpec.describe ZammadAPI::ResourceProxy do
       # What is nested in a condition is a selector, and Zammad's to read.
       it 'still takes a condition whose value is empty' do
         expect(client.tickets.search('x', condition: { 'ticket.tags' => { operator: 'contains all', value: [] } })).to be_a(ZammadAPI::Collection)
+      end
+
+      # An empty list is written, as `condition[ticket.tags][value][]`, so
+      # the condition reaches Zammad.
+      it 'still takes a condition that holds nothing but an empty list' do
+        expect(client.tickets.search('x', condition: { 'ticket.tags' => { value: [] } })).to be_a(ZammadAPI::Collection)
       end
 
       it 'still takes a value that is not empty for being false or zero' do
