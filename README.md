@@ -392,12 +392,15 @@ client.users.find_by!(email: 'nobody@example.com') # raises NotFoundError
 client.groups.exists?(42)                          # => true
 ```
 
-`find_by` answers with the record if there is one this client can read, and `nil` if there
-is not, on every resource and for any kind of value. Zammad cannot be asked that directly,
+`find_by` answers with the first record that carries those values, and `nil` if it finds
+none, on every resource and for any kind of value. Zammad cannot be asked that directly,
 because its index endpoints cannot filter — see [Narrowing](#narrowing) — so `find_by`
 fetches candidates and checks them itself. A record it returns genuinely carries the
 attributes you asked for, compared exactly and against the value as Zammad stores it, so
-`find_by(email: 'Someone@Example.com')` does not match a login Zammad downcased.
+`find_by(email: 'Someone@Example.com')` does not match a login Zammad downcased. What a
+`nil` means depends on how the candidates were fetched: after a walk, that no record this
+client can read carries the values; after a search, that no hit does, and a search reads
+less than the whole record, as described below.
 
 There are two ways it fetches the candidates, and they cost differently:
 
@@ -422,14 +425,45 @@ The values are never joined into one term. An instance searching without Elastic
 matches the term literally, through a SQL `LIKE` over each string column, so `"Jane Doe"`
 would ask for a single column containing the whole of it and match nobody.
 
-What the search can surface is Zammad's business: a value the instance has not indexed, or
-cannot index, is a record `find_by` will not find. `find_by(...) || create(...)` can
-therefore still create a duplicate — as writing the search out by hand would.
-
 `find_by` reads the hits a page at a time until one matches, so a match usually costs one
 request and a miss costs one per page of hits. It cannot stop at the first page: Zammad's
 search sorts by `updated_at`, newest first, rather than by relevance, so where a few
 hundred records contain the term the one that carries it exactly can be on any page.
+
+What the search can surface is Zammad's business: a value the instance has not indexed, or
+cannot index, is a record `find_by` will not find. `find_by(...) || create(...)` can
+therefore still create a duplicate — as writing the search out by hand would.
+
+Which values those are depends on the instance. With Elasticsearch the term is looked for
+in everything a record is indexed with. Without it, Zammad reads a fixed set of columns:
+
+| Resource                            | What a search without Elasticsearch reads                      |
+| ----------------------------------- | -------------------------------------------------------------- |
+| `users`, `organizations`, `groups`  | The string columns of the record's own table.                  |
+| `tickets`                           | The title and number, and the from, to, subject and body of the ticket's articles. |
+
+Neither reads a name `expand` adds for an association, which is not a column, and a ticket
+search reads no other attribute of the ticket. So on such an instance these look for the
+word in fields that do not hold the value. They find the record only where the word
+happens to appear in one of those fields as well, and otherwise answer `nil` for a record
+that exists:
+
+```ruby
+client.tickets.find_by(state: 'open')           # the state is not among what a ticket search reads
+client.tickets.find_by(external_ref: 'SO-1001') # nor is a custom attribute of a ticket
+client.users.find_by(organization: 'Acme')      # a name expand adds, not a column
+```
+
+`find_by` does not walk the index after a search that found nothing. A miss is the ordinary
+case for `find_by(email: ...) || create(...)` on an address that is new, and that walk would
+read every user on the instance to confirm it, a thousand to the request. Nothing in a
+response says which backend answered, so `find_by` cannot tell that miss from one caused by
+a field the search does not read. You can, and the walk is one word away:
+
+```ruby
+client.tickets.detect { it.state == 'open' }    # walks the index, and misses nothing
+client.tickets.search('printer', condition: {'ticket.state_id' => {operator: 'is', value: [2]}})
+```
 
 Zammad records can carry administrator-defined custom attributes, so readers are resolved
 against the attributes the record arrived with rather than declared ahead of time. A reader

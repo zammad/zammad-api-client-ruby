@@ -99,11 +99,15 @@ module ZammadAPI
     # @raise [NotFoundError] when no such record exists
     def find(id) = resource_class.fetch_one(@transport, id)
 
-    # Fetches the first record carrying all of these attribute values: the
-    # record if there is one this client can read, nil if there is not.
+    # Fetches the first record carrying all of these attribute values, from
+    # the candidates Zammad hands over: nil if none of them does.
     #
-    # That is what the name promises, and it answers it for every resource
-    # and every kind of value. Zammad cannot be asked the question directly -
+    # It answers for every resource and every kind of value. Where it walks
+    # the index, the candidates are every record this client can read, and nil
+    # means there is no such record. Where it searches, they are the hits, and
+    # nil means no hit carried the values - which is the same thing only for a
+    # value the search looks at. See "What the search can surface" below for
+    # which those are. Zammad cannot be asked the question directly -
     # its index endpoints do not filter: ApplicationController#model_index_render
     # sorts and pages and drops every other parameter, so a query parameter on
     # the index, which is how this was first written, asked for
@@ -170,6 +174,31 @@ module ZammadAPI
     # has not indexed, or cannot index, is a record this does not find, so
     # +find_by(...) || create(...)+ can still create a duplicate - exactly as
     # writing the search out by hand would.
+    #
+    # Which values those are depends on the backend. Elasticsearch looks for
+    # the term in everything a record is indexed with. Without it the term is
+    # matched by the SQL LIKE mentioned above, and that reads a fixed set of
+    # columns: CanSearch takes the string columns of the model's own table,
+    # which covers users, organizations and groups, and Ticket::Search
+    # replaces that with the ticket's title and number and the from, to,
+    # subject and body of its articles. A name +expand+ adds for an
+    # association is not a column at all. So on such an instance
+    # +tickets.find_by(state: 'open')+, a ticket looked up by a custom
+    # attribute, and +users.find_by(organization: 'Acme')+ are searches for a
+    # word in fields that do not hold the value. They find the record only
+    # where the word happens to appear in one of those fields too, and
+    # otherwise answer nil for a record that exists.
+    #
+    # There is no walk of the index after a search that found nothing, which
+    # would close that gap. A miss is the ordinary case for what this is most
+    # used for - +find_by(email: ...) || create(...)+ on an address that is
+    # new - and the walk would turn each of them into a read of every user on
+    # the instance, a thousand to the request, to confirm what the search had
+    # already said correctly. Nothing here can tell that miss from one caused
+    # by a field the search does not read, because nothing in a response says
+    # which backend answered. The caller does know which lookup they are
+    # writing: +detect { ... }+ on the resource is the walk, and misses
+    # nothing.
     #
     # Every page of hits is read until one matches. Only the first
     # {SEARCH_MAX_PER_PAGE} used to be, to keep a miss at one request, on the

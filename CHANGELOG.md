@@ -244,8 +244,8 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - `Collection#pluck(*attributes)`, for reading one or more attributes from every record.
 - `client.<resource>.find_by(**params)` and `#find_by!`, which look a record up by
   attribute value, and `client.<resource>.exists?(id)`. `find_by` answers on every
-  resource and for any kind of value: the record if there is one this client can read,
-  `nil` if not. It fetches candidates and checks them itself, because Zammad's index
+  resource and for any kind of value: the first record that carries the values, `nil` if
+  it finds none. It fetches candidates and checks them itself, because Zammad's index
   endpoints cannot filter — through a search where the resource has a search endpoint and
   one of the values is a string, and by walking the index everywhere else, which is what
   `ticket_states`, `ticket_priorities` and `ticket_articles` and a lookup such as
@@ -253,7 +253,11 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   returns a record that genuinely carries the attributes asked for, or nil; a record that
   does not carry an attribute does not match it, not even for `nil`. What the search can
   surface is Zammad's business, so `find_by(...) || create(...)` can still create a
-  duplicate — as writing the search out by hand would. Every page of hits is read until
+  duplicate — as writing the search out by hand would. Without Elasticsearch a search
+  reads only the string columns of a user, organization or group, and of a ticket only the
+  title, the number and its articles, so a lookup by anything else answers `nil` there;
+  the README lists what that covers and why `find_by` does not walk the index after a
+  miss. Every page of hits is read until
   one matches, so a miss costs a request per page of hits: Zammad's search sorts by
   `updated_at`, newest first, rather than by relevance, so the exact match can be on any
   page.
