@@ -37,6 +37,30 @@ RSpec.describe ZammadAPI::AttributeAccess do
     it 'leaves keys alone that cannot become symbols' do
       expect(record_class.new(1 => 'one').attributes).to eq(1 => 'one')
     end
+
+    # Symbolizing is what makes two keys one, and the value that came first
+    # was dropped without a word.
+    context 'with one attribute under two spellings' do
+      it 'refuses the pair rather than keeping whichever came last' do
+        expect { record_class.new('name' => 'Support', name: 'Sales') }
+          .to raise_error(ArgumentError, /attribute name was given twice, as "name" and as :name/)
+      end
+
+      it 'refuses a pair inside a nested Hash' do
+        expect { record_class.new(preferences: { 'locale' => 'de', locale: 'en' }) }
+          .to raise_error(ArgumentError, /attribute locale was given twice/)
+      end
+
+      it 'refuses a pair inside a Hash in an Array' do
+        expect { record_class.new(notes: [{ 'body' => 'a', body: 'b' }]) }
+          .to raise_error(ArgumentError, /attribute body was given twice/)
+      end
+
+      it 'takes the same name at two depths, which is two attributes' do
+        expect(record_class.new('name' => 'Support', preferences: { name: 'Sales' }).attributes)
+          .to eq(name: 'Support', preferences: { name: 'Sales' })
+      end
+    end
   end
 
   describe 'reading' do

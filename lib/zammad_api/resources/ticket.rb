@@ -71,7 +71,10 @@ module ZammadAPI
         # String one standing beside it, and the article symbolizes its keys
         # in the order they come: given `ticket_id` under both spellings, the
         # String one came last and won, so `add_article` on ticket 7 POSTed
-        # an article naming whichever ticket the caller's Hash did.
+        # an article naming whichever ticket the caller's Hash did. An
+        # article refuses two spellings of one attribute now, and a String
+        # `ticket_id` left beside this ticket's would be refused as a pair
+        # the caller never wrote.
         own    = attributes.reject { |key, _| key.to_s == 'ticket_id' }
         record = TicketArticle.new(transport, own.merge(ticket_id: require_id!))
         record.save!

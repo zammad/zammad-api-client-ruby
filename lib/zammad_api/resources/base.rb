@@ -3,6 +3,7 @@
 require_relative '../associations'
 require_relative '../attribute_access'
 require_relative '../deep_copy'
+require_relative '../duplicate_keys'
 require_relative '../errors'
 require_relative '../transport'
 
@@ -342,6 +343,8 @@ module ZammadAPI
       # @param transport [Transport]
       # @param attributes [Hash, nil]
       # @raise [Error] when an attribute cannot be staged, such as +id+
+      # @raise [ArgumentError] when an attribute is named twice, as a String
+      #   and as a Symbol, at any depth
       def initialize(transport, attributes = {})
         given = attributes || {}
         # The same refusal the writers make, at the one door that did not make
@@ -441,7 +444,21 @@ module ZammadAPI
       # @raise [Error] when an attribute cannot be staged, such as +id+, or
       #   when the record was destroyed. Nothing is staged in either case, so
       #   the record is left as it was.
+      # @raise [ArgumentError] when an attribute is named twice, as a String
+      #   and as a Symbol. Nothing is staged then either.
       def assign_attributes(attributes)
+        # Two spellings of one attribute are refused before anything is
+        # written, for the reason the constructor refuses them - see
+        # {DeepCopy.frozen_hash}. Each key is written by its Symbol, so
+        # `assign_attributes('name' => 'A', name: 'B')` wrote the attribute
+        # twice and kept whichever Hash order put last.
+        #
+        # The values are copied here as well, which is where a pair inside
+        # one of them is refused. Left to the writes below, a value that
+        # names a nested key twice raised from the middle of them, with the
+        # attributes before it already staged.
+        staged = frozen_attributes(DuplicateKeys.normalize(attributes, noun: 'attribute', &:to_sym))
+
         # rubocop:disable Style/CombinableLoops -- combining them is the bug
         # Two passes on purpose: every key is checked before any of them is
         # written. Combined, `assign_attributes(name: 'X', id: 9, note: 'Y')`
@@ -453,8 +470,8 @@ module ZammadAPI
         # direct writer's own guard and cannot assume a caller came through
         # here. That is a second Symbol comparison per attribute, which is not
         # worth a bypass to avoid.
-        attributes.each { |key, value| refuse_unwritable!(key.to_sym, value) }
-        attributes.each { |key, value| write_attribute(key.to_sym, value) }
+        staged.each { |key, value| refuse_unwritable!(key, value) }
+        staged.each { |key, value| write_attribute(key, value) }
         # rubocop:enable Style/CombinableLoops
         self
       end
