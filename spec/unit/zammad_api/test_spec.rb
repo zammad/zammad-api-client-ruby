@@ -663,6 +663,155 @@ RSpec.describe ZammadAPI::Test do
   # first of those, so the obvious way to stand in for a list endpoint made
   # every full read of it raise PaginationError - against a real Zammad the
   # same code works, because page 2 comes back empty.
+  # The real transport sends a GET again that was answered 429 or 5xx. The
+  # stand-in raised for the first such answer, so a test of code that leans
+  # on the retry passed or failed the other way round from production.
+  describe 'a read the client retries' do
+    def find = client.groups.find(1)
+
+    context 'when it fails once and is then answered' do
+      before do
+        zammad.stub(:get, 'api/v1/groups/1', status: 503, body: { error: 'down' })
+        zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'Users' })
+      end
+
+      it 'answers with the record, as the wire does' do
+        expect(find.name).to eq('Users')
+      end
+
+      it 'records both attempts' do
+        find
+        expect(zammad.requests.map(&:path)).to eq(%w[api/v1/groups/1 api/v1/groups/1])
+      end
+
+      it 'records the second attempt as the request the first was' do
+        find
+        expect(zammad.requests.last).to eq(zammad.requests.first)
+      end
+    end
+
+    [429, 500, 502, 503, 504].each do |status|
+      it "asks again past a #{status}" do
+        zammad.stub(:get, 'api/v1/groups/1', status: status)
+        zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
+
+        expect(find.id).to eq(1)
+      end
+    end
+
+    context 'when it keeps failing' do
+      before { zammad.stub(:get, 'api/v1/groups/1', status: 503, body: { error: 'down' }) }
+
+      it 'raises the error for the status once the retries are spent' do
+        expect { find }.to raise_error(ZammadAPI::ServerError, /down/)
+      end
+
+      it 'records as many requests as the wire would carry' do
+        expect { find }.to raise_error(ZammadAPI::ServerError)
+        expect(zammad.requests.size).to eq(1 + zammad.config.retries)
+      end
+    end
+
+    it 'follows the number of retries it was built with' do
+      zammad = described_class.new(retries: 4)
+      zammad.stub(:get, 'api/v1/groups/1', status: 500)
+
+      expect { zammad.client.groups.find(1) }.to raise_error(ZammadAPI::ServerError)
+      expect(zammad.requests.size).to eq(5)
+    end
+
+    it 'raises for the first failure where it was built without retries' do
+      zammad = described_class.new(retries: 0)
+      zammad.stub(:get, 'api/v1/groups/1', status: 503)
+      zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
+
+      expect { zammad.client.groups.find(1) }.to raise_error(ZammadAPI::ServerError)
+      expect(zammad.requests.size).to eq(1)
+    end
+
+    it 'does not ask again past a status the client does not retry' do
+      zammad.stub(:get, 'api/v1/groups/1', status: 404)
+      zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
+
+      expect { find }.to raise_error(ZammadAPI::NotFoundError)
+      expect(zammad.requests.size).to eq(1)
+    end
+
+    # A write is never repeated on the wire, so it is not repeated here.
+    it 'does not repeat a POST' do
+      zammad.stub(:post, 'api/v1/groups', status: 503)
+      zammad.stub(:post, 'api/v1/groups', status: 201, body: { id: 1 })
+
+      expect { client.groups.create(name: 'Users') }.to raise_error(ZammadAPI::ServerError)
+      expect(zammad.requests.size).to eq(1)
+    end
+
+    it 'does not repeat a PUT' do
+      zammad.stub(:put, 'api/v1/groups/1', status: 504)
+
+      expect { client.put('api/v1/groups/1', body: { name: 'Users' }) }.to raise_error(ZammadAPI::ServerError)
+      expect(zammad.requests.size).to eq(1)
+    end
+
+    it 'does not repeat a DELETE' do
+      zammad.stub(:delete, 'api/v1/groups/1', status: 500)
+
+      expect { client.groups.destroy(1) }.to raise_error(ZammadAPI::ServerError)
+      expect(zammad.requests.size).to eq(1)
+    end
+
+    # The wire does not wait out a Retry-After longer than the timeout: it
+    # reports the response at once.
+    context 'when the answer asks for a longer wait than the timeout' do
+      before do
+        zammad.stub(:get, 'api/v1/groups/1', status: 429, headers: { 'Retry-After' => '3600' })
+        zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
+      end
+
+      it 'does not ask again' do
+        expect { find }.to raise_error(ZammadAPI::RateLimitError)
+        expect(zammad.requests.size).to eq(1)
+      end
+
+      it 'leaves the wait readable from the error' do
+        expect { find }.to raise_error(ZammadAPI::RateLimitError) { |error| expect(error.retry_after).to eq(3600) }
+      end
+    end
+
+    context 'when the answer asks for a wait within the timeout' do
+      before do
+        zammad.stub(:get, 'api/v1/groups/1', status: 429, headers: { 'Retry-After' => '30' })
+        zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
+      end
+
+      it 'asks again' do
+        expect(find.id).to eq(1)
+      end
+
+      it 'does not wait first' do
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        find
+
+        expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 5
+      end
+    end
+
+    it 'asks again for a page of a list, and reads the list from the stub after' do
+      zammad.stub(:get, 'api/v1/groups', status: 502)
+      zammad.stub(:get, 'api/v1/groups', body: [{ id: 1, name: 'A' }])
+
+      expect(client.groups.map(&:name)).to eq(['A'])
+    end
+
+    it 'carries the scope of a client acting for another user on every attempt' do
+      zammad.stub(:get, 'api/v1/groups/1', status: 503)
+      zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
+      client.on_behalf_of('agent@example.com').groups.find(1)
+
+      expect(zammad.requests.map(&:on_behalf_of)).to eq(%w[agent@example.com agent@example.com])
+    end
+  end
+
   describe 'a list endpoint stubbed once' do
     subject(:zammad) { described_class.new }
 

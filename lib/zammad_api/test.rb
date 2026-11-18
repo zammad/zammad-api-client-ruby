@@ -27,6 +27,11 @@ module ZammadAPI
   # @example An error path
   #   zammad.stub(:get, 'api/v1/tickets/9', status: 404, body: {error: 'not found'})
   #   # the code under test sees ZammadAPI::NotFoundError
+  #
+  # @example A read the client retries
+  #   zammad.stub(:get, 'api/v1/tickets/1', status: 503)
+  #   zammad.stub(:get, 'api/v1/tickets/1', body: {id: 1, title: 'Help'})
+  #   # the code under test sees the ticket, and zammad.requests holds both attempts
   class Test
     # Raised when the code under test reaches an endpoint that was not stubbed.
     #
@@ -131,6 +136,10 @@ module ZammadAPI
     # a scoped stub and a catch-all are two separate answers, each of which
     # keeps answering.
     #
+    # A +GET+ answered with a status the client retries - 429, 500, 502, 503
+    # or 504 - is asked again, as it is on the wire, and each attempt takes
+    # the next stub of the sequence: see {#answer}.
+    #
     # @param method [Symbol] +:get+, +:post+, +:put+ or +:delete+
     # @param path [String] path relative to the instance URL, leading slash
     #   optional
@@ -213,9 +222,28 @@ module ZammadAPI
     # This is the {Transport} interface, called by the client rather than by a
     # test.
     #
+    # A request the real transport would send again is sent again here: a
+    # +GET+ answered 429 or 5xx, as many times as {Config#retries} allows.
+    # The first such answer used to be raised. Stubbed 503 and then 200,
+    # `client.groups.find(1)` returns the group on the wire and raised
+    # ServerError here, and a single stubbed 503 was recorded as one request
+    # where the wire carries three - so a test of code that leans on the
+    # retry passed or failed the other way round from production.
+    #
+    # Each attempt is recorded and takes a stub of its own, which is what
+    # makes "fails once, then answers" two stubs in a row. There is no wait
+    # between them: the backoff is the one part of a retry a test has no use
+    # for. Whether a response is retried at all is {Transport.retried?}, the
+    # real transport's own rule, so a +Retry-After+ longer than the timeout
+    # ends the attempts here as it does there.
+    #
+    # The count is this stand-in's, read from the options it was built
+    # with: `ZammadAPI::Test.new(retries: 0)` raises for the first failure.
+    #
     # @api private
     # @return [Response]
-    # @raise [ResponseError] for a stubbed non-2xx status
+    # @raise [ResponseError] for a stubbed non-2xx status, once the retries
+    #   it is due are spent
     # @raise [UnstubbedRequestError] when no stub matches
     def answer(method, path, operation:, query: nil, body: nil, headers: nil, resource_class: nil, on_behalf_of: nil)
       relative = ::ZammadAPI::Transport.relative_path(path)
@@ -232,21 +260,36 @@ module ZammadAPI
       # too, before anything is recorded. What is recorded is the body as the
       # test wrote it, which is what a test asserts against.
       ::ZammadAPI::Transport.encode_body(body, operation: operation, resource_class: resource_class)
+      request  = Request.new(verb: method, path: relative, query: params, body: snapshot(body), headers: fields, on_behalf_of: on_behalf_of)
 
-      stub = @monitor.synchronize do
-        @requests << Request.new(verb: method, path: relative, query: params, body: snapshot(body), headers: fields, on_behalf_of: on_behalf_of)
-        take(method, relative, params)
+      response = attempt(request)
+      config.retries.times do
+        break if !::ZammadAPI::Transport.retried?(config, method, response)
+
+        response = attempt(request)
       end
-
-      raise UnstubbedRequestError, unstubbed_message(method, relative, params) if stub.nil?
-
-      response = response_for(stub, params)
       return response if response.success?
 
       raise ResponseError.build(response, operation: operation, resource_class: resource_class)
     end
 
     private
+
+    # One delivery of a request: recorded, and answered by the stub whose
+    # turn it is.
+    #
+    # @return [Response]
+    # @raise [UnstubbedRequestError] when no stub matches
+    def attempt(request)
+      stub = @monitor.synchronize do
+        @requests << request
+        take(request.verb, request.path, request.query)
+      end
+
+      raise UnstubbedRequestError, unstubbed_message(request.verb, request.path, request.query) if stub.nil?
+
+      response_for(stub, request.query)
+    end
 
     def key(method, path) = [method.to_sym, ::ZammadAPI::Transport.relative_path(path)]
 

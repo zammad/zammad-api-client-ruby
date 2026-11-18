@@ -1187,6 +1187,23 @@ the wire would refuse is refused here too. `headers` names only what the call as
 the ones the client sets from its configuration are not in it, and an `on_behalf_of` scope
 has a field of its own.
 
+A read that is answered 429 or 5xx is sent again, as it is on the wire: a `GET`, up to
+`retries` times, and never a write. Each attempt is in `requests` and takes the next stub
+of a sequence, so a read that fails once and then succeeds is two stubs:
+
+```ruby
+zammad.stub(:get, 'api/v1/tickets/1', status: 503)
+zammad.stub(:get, 'api/v1/tickets/1', body: {id: 1, title: 'Help'})
+
+zammad.client.tickets.find(1).title # => "Help"
+zammad.requests.size                # => 2
+```
+
+A single failing stub answers every attempt, so the error is raised once the retries are
+spent, with three requests recorded under the default of two retries. There is no wait
+between attempts. A `Retry-After` longer than `timeout` ends them at once, as it does
+against Zammad. `ZammadAPI::Test.new(retries: 0)` raises for the first failure.
+
 A request that was not stubbed raises `ZammadAPI::Test::UnstubbedRequestError`, listing
 what is stubbed, rather than answering with something empty. It is deliberately not a
 `ZammadAPI::Error`: a forgotten stub means the test is wrong, not that Zammad refused

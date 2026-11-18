@@ -51,6 +51,7 @@ module ZammadAPI
 
     private
 
+    def attempt: (Request request) -> Response
     def key: (Symbol method, String path) -> [Symbol, String]
     def raw_body_for: (untyped body) -> String
     def response_headers: (Hash[untyped, untyped] headers, untyped body) -> Hash[String, String]

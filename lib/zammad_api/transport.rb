@@ -738,6 +738,66 @@ module ZammadAPI
                    'attachment, and leave out a Float that is NaN or infinite.'
     end
 
+    # What the retry middleware is built with.
+    #
+    # +max_interval+ is what bounds a wait. The retry middleware sleeps for
+    # whatever a +Retry-After+ header says, and its own ceiling defaults to
+    # no ceiling at all: a maintenance page answering 503 with
+    # +Retry-After: 3600+ held the calling thread for an hour per retry,
+    # whatever +timeout+ and +retry_interval+ said, before raising the error
+    # it could have raised at once.
+    #
+    # +timeout+ is the bound, because it is already how long this client
+    # was told it may wait for an answer. A +Retry-After+ within it is
+    # honoured; a longer one is not waited out, and the response it came
+    # with is reported as the error it is, with the figure still readable
+    # from {RateLimitError#retry_after}.
+    #
+    # Public for {.retried?}, which {Test} asks.
+    #
+    # @api private
+    # @param config [Config]
+    # @return [Hash{Symbol => Object}]
+    def self.retry_options(config)
+      {
+        max:                 config.retries,
+        interval:            config.retry_interval,
+        max_interval:        config.timeout,
+        interval_randomness: 0.5,
+        backoff_factor:      2,
+        retry_statuses:      RETRIABLE_STATUSES,
+        methods:             RETRIABLE_METHODS,
+        exceptions:          RETRIABLE_EXCEPTIONS
+      }
+    end
+
+    # Whether a request answered with +response+ is one the retry middleware
+    # sends again, while it has attempts left.
+    #
+    # Public for {Test}, for the reason {.stringify_query} is: a stand-in
+    # that raised for the first 503 a +GET+ was answered with, where the
+    # wire asks again, made a test of code that leans on the retry pass or
+    # fail the other way round from production.
+    #
+    # The wait is asked of the middleware itself, built from the options
+    # above, and not worked out a second time here. It answers nil where a
+    # +Retry-After+ - or a +RateLimit-Reset+, or either as a date - asks
+    # for longer than it may wait, which is the one response with a
+    # retriable status that it does not send again. A copy of that reading
+    # is the kind that gets changed in one place.
+    #
+    # @api private
+    # @param config [Config]
+    # @param method [Symbol]
+    # @param response [Response]
+    # @return [Boolean]
+    def self.retried?(config, method, response)
+      options = retry_options(config)
+      return false if !options[:methods].include?(method) || !options[:retry_statuses].include?(response.status)
+
+      !Faraday::Retry::Middleware.new(nil, options).calculate_sleep_amount(1, { response_headers: Faraday::Utils::Headers.new(response.headers) }).nil?
+    end
+
     # @param config [Config]
     def initialize(config)
       @config       = config
@@ -885,7 +945,7 @@ module ZammadAPI
       ) do |faraday|
         apply_authentication(faraday)
         faraday.request :json
-        faraday.request :retry, retry_options
+        faraday.request :retry, Transport.retry_options(config)
         # Last in the stack, so a caller's middleware sees the request as this
         # gem finished building it and the response before anything else does.
         config.middleware&.call(faraday)
@@ -1000,31 +1060,6 @@ module ZammadAPI
       when :oauth2_token then faraday.request :authorization, 'Bearer', config.oauth2_token
       else                    faraday.request :authorization, :basic, config.user, config.password
       end
-    end
-
-    # +max_interval+ is what bounds a wait. The retry middleware sleeps for
-    # whatever a +Retry-After+ header says, and its own ceiling defaults to
-    # no ceiling at all: a maintenance page answering 503 with
-    # +Retry-After: 3600+ held the calling thread for an hour per retry,
-    # whatever +timeout+ and +retry_interval+ said, before raising the error
-    # it could have raised at once.
-    #
-    # +timeout+ is the bound, because it is already how long this client
-    # was told it may wait for an answer. A +Retry-After+ within it is
-    # honoured; a longer one is not waited out, and the response it came
-    # with is reported as the error it is, with the figure still readable
-    # from {RateLimitError#retry_after}.
-    def retry_options
-      {
-        max:                 config.retries,
-        interval:            config.retry_interval,
-        max_interval:        config.timeout,
-        interval_randomness: 0.5,
-        backoff_factor:      2,
-        retry_statuses:      RETRIABLE_STATUSES,
-        methods:             RETRIABLE_METHODS,
-        exceptions:          RETRIABLE_EXCEPTIONS
-      }
     end
 
     def decode(faraday_response)

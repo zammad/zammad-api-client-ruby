@@ -318,6 +318,62 @@ RSpec.describe ZammadAPI::Transport do
     end
   end
 
+  # The question the test kit asks, so that it sends again what the wire
+  # sends again.
+  describe '.retried?' do
+    let(:config) { ZammadAPI::Config.new(**unit_config(retries: 2, timeout: 60)) }
+
+    def response(status, headers = {})
+      ZammadAPI::Response.new(status: status, headers: headers, body: nil, raw_body: '', json: false)
+    end
+
+    described_class::RETRIABLE_STATUSES.each do |status|
+      it "is true for a GET answered #{status}" do
+        expect(described_class.retried?(config, :get, response(status))).to be(true)
+      end
+    end
+
+    [200, 404, 422].each do |status|
+      it "is false for a GET answered #{status}" do
+        expect(described_class.retried?(config, :get, response(status))).to be(false)
+      end
+    end
+
+    %i[post put delete].each do |verb|
+      it "is false for a #{verb.to_s.upcase}, which is never sent twice" do
+        expect(described_class.retried?(config, verb, response(503))).to be(false)
+      end
+    end
+
+    it 'is false where Retry-After asks for longer than the timeout' do
+      expect(described_class.retried?(config, :get, response(429, 'retry-after' => '61'))).to be(false)
+    end
+
+    it 'is true where Retry-After asks for no longer than the timeout' do
+      expect(described_class.retried?(config, :get, response(429, 'retry-after' => '60'))).to be(true)
+    end
+
+    it 'reads a Retry-After that is a date' do
+      expect(described_class.retried?(config, :get, response(503, 'retry-after' => (Time.now + 3600).utc.strftime('%a, %d %b %Y %H:%M:%S GMT')))).to be(false)
+    end
+
+    it 'reads a RateLimit-Reset the same way' do
+      expect(described_class.retried?(config, :get, response(429, 'ratelimit-reset' => '3600'))).to be(false)
+    end
+
+    # What makes this the transport's own answer and not a second reading of
+    # the same rules: a stack that was answered this way made one request.
+    it 'agrees with what a request does' do
+      stub_request(:get, url).to_return({ status: 429, headers: { 'Retry-After' => '3600' } }, json_response([]))
+      transport = unit_transport(retries: 2, retry_interval: 0.01, timeout: 2)
+
+      expect { transport.get('api/v1/groups', operation: 'test') }.to raise_error(ZammadAPI::RateLimitError) do |error|
+        expect(described_class.retried?(transport.config, :get, error.response)).to be(false)
+      end
+      expect(a_request(:get, url)).to have_been_made.once
+    end
+  end
+
   describe '.redact' do
     it 'blanks the value under a key that names a credential' do
       expect(described_class.redact({ login: 'x', password: 'hunter2' })).to eq({ login: 'x', password: '[REDACTED]' })
