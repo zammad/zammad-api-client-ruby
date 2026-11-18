@@ -229,6 +229,40 @@ RSpec.describe ZammadAPI::Collection do
       expect { collection.to_a }
         .to raise_error(ZammadAPI::PaginationError, /ignoring the page parameter/)
     end
+
+    # The walk ran inside Kernel#loop, which rescues StopIteration for an
+    # enumerator driven by hand inside it. The block here is the caller's, and
+    # one raised from it was taken for the end of the walk: the rest of the
+    # records were dropped and `map` answered with the ones before it.
+    context 'when the block raises StopIteration' do
+      let(:labels) { %w[x y].each }
+
+      before { stub_last_page(1, [{ id: 1 }, { id: 2 }, { id: 3 }]) }
+
+      it 'raises it, as the same block over an Array does' do
+        expect { collection.map { |group| [group.id, labels.next] } }.to raise_error(StopIteration)
+      end
+
+      it 'raises it from each, rather than ending the walk as if it were complete' do
+        seen = []
+        expect { collection.each { |group| seen << [group.id, labels.next] } }.to raise_error(StopIteration)
+
+        expect(seen).to eq([[1, 'x'], [2, 'y']])
+      end
+
+      it 'raises it from in_batches' do
+        expect { collection.in_batches { raise StopIteration } }.to raise_error(StopIteration)
+      end
+    end
+
+    # What Enumerable does with a walk it has had enough of is not an error,
+    # and still ends it there.
+    it 'still ends a walk that a break leaves early' do
+      stub_page(1, full_page)
+
+      expect(collection.each { |group| break group.id if group.id == 2 }).to eq(2)
+      expect(a_request(:get, url).with(query: hash_including({}))).to have_been_made.once
+    end
   end
 
   describe '#find_each' do

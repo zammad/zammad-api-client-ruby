@@ -672,6 +672,11 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   than were asked for, because the pages read are reckoned at the size asked for. The test
   kit pages a search stubbed as `{records: [...], total_count: n}` the way it pages an
   Array.
+- A `StopIteration` raised by the block a collection yields to is raised, not taken for the
+  end of the walk. The walk ran inside `Kernel#loop`, which rescues it, so a block calling
+  `next` on an enumerator of its own that ran out, as in `map { [it.id, labels.next] }`,
+  dropped the records and pages after that one and `map` answered with what it had. The
+  same block over an Array raises.
 - A repeated page is recognised by the records on it rather than by their payload. A job
   that writes to the records it is handed changes what they serialize as, so an endpoint
   that ignores `page` served the same records with a different payload each time: the

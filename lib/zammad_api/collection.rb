@@ -443,7 +443,15 @@ module ZammadAPI
       page      = @page || 1
       previous  = nil
       page_size = 0
-      loop do
+      # `while`, and not `loop`. Kernel#loop rescues StopIteration, which is
+      # there for an enumerator driven by hand inside it, and the block this
+      # yields to is the caller's: one that calls `next` on an enumerator of
+      # its own - `map { [it.id, labels.next] }` with fewer labels than
+      # records - raised it from in here, and the walk took it for its own
+      # end. The records and the pages after that were dropped and `map`
+      # answered with what it had, where the same block over an Array raises.
+      # Every way out of this loop is a `break` below.
+      while page
         records, digest, total = fetch(page, @per_page)
 
         # Counted before the block has the page, not after. The Array handed
