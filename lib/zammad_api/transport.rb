@@ -9,6 +9,7 @@ require 'timeout'
 
 require_relative 'duplicate_keys'
 require_relative 'errors'
+require_relative 'query_encoder'
 require_relative 'response'
 
 module ZammadAPI
@@ -193,8 +194,9 @@ module ZammadAPI
     # @api private
     # @param query [Hash]
     # @return [Hash{String => String, Array<String>, Hash}]
-    # @raise [ArgumentError] for a nil value, or for two keys that name the
-    #   same parameter, either of them at any depth
+    # @raise [ArgumentError] for a nil value, for two keys that name the
+    #   same parameter, or for a list a query string cannot carry, any of
+    #   them at any depth
     def self.stringify_query(query) = stringify_query_hash(query, nil)
 
     # Stringifies one level of a query, at whatever depth it sits.
@@ -221,28 +223,79 @@ module ZammadAPI
         .to_h { |name, value| [name, stringify_query_value(prefix ? "#{prefix}[#{name}]" : name, value)] }
     end
 
-    # Stringifies the scalars and leaves the structure to Faraday.
+    # Stringifies the scalars and leaves the structure to {QueryEncoder}.
     #
     # A nested value used to be rendered with to_s, so the `condition` that
     # Zammad's search endpoints read - and that {ResourceProxy#search} takes
     # as a keyword - went on the wire as a Ruby inspect string. Zammad could not parse that, dropped the parameter, and
     # answered with an unnarrowed search that nothing marked as unnarrowed.
-    # Faraday's default encoder renders a Hash as
-    # `condition[ticket.state_id][operator]=is`, which is the shape Rails reads
-    # back, so the structure is handed over intact.
+    # A Hash is written as `condition[ticket.state_id][operator]=is`, which
+    # is the shape Rails reads back.
     #
     # @api private
     # @param key [String] the parameter path, for the error message
     # @param value [Object]
     # @return [String, Array, Hash]
-    # @raise [ArgumentError] for a nil value
+    # @raise [ArgumentError] for a nil value, or a list a query string cannot
+    #   carry
     def self.stringify_query_value(key, value)
       case value
       when nil   then raise ArgumentError, "query parameter #{key} is nil, and Zammad has no way to read that: pass a value, or leave the parameter out"
       when Hash  then stringify_query_hash(value, key)
-      when Array then value.each_with_index.map { |inner, index| stringify_query_value("#{key}[#{index}]", inner) }
+      when Array then stringify_query_list(key, value)
       else value.to_s
       end
+    end
+
+    # Stringifies a list, and refuses one Rails could not read back as the
+    # list it was.
+    #
+    # A query string does not mark where an element of a list ends, so one
+    # Hash after another is a new element only once it is written with a
+    # value the one before has a place for too - see {QueryEncoder} - and two
+    # with none are read as one: `[{a: 1}, {b: 2}]` arrives as
+    # `[{a: 1, b: 2}]`. A Hash with nothing in it is not written at all, and
+    # the list arrives one element short. A list directly inside a list is
+    # written `[]` like the one around it, and `[[1, 2], [3]]` arrives as
+    # three lists of one.
+    #
+    # Refused, because the other answer is a request that carries something
+    # the caller did not write, to an endpoint that then narrows by it.
+    #
+    # @api private
+    # @param key [String] the parameter path, for the error message
+    # @param list [Array]
+    # @return [Array]
+    # @raise [ArgumentError]
+    def self.stringify_query_list(key, list)
+      elements = list.each_with_index.map { |inner, index| stringify_query_value("#{key}[#{index}]", inner) }
+
+      elements.each_with_index do |element, index|
+        reason = QueryEncoder.misread(element, index.zero? ? nil : elements[index - 1])
+        raise ArgumentError, misread_element_message("#{key}[#{index}]", reason) if reason
+      end
+
+      elements
+    end
+
+    # What a query string does to each kind of element {QueryEncoder.misread}
+    # names.
+    MISREAD_ELEMENTS = {
+      merged: 'has no plain value under a key the element before it has as well, and that is all a query string has to say ' \
+              'where one element of a list ends and the next begins: Rails would read the two as one. Every condition and ' \
+              'every group of conditions in a Zammad selector carries `operator`, which is such a key',
+      empty:  'is a Hash with no value in it, and a query string writes nothing for one: Rails would read the list one ' \
+              'element short',
+      list:   'is a list directly inside a list, and a query string writes both as `[]`: Rails would read each value of ' \
+              'the inner list as a list of its own'
+    }.freeze
+    private_constant :MISREAD_ELEMENTS
+
+    # @api private
+    # @return [String]
+    def self.misread_element_message(path, reason)
+      "query parameter #{path} #{MISREAD_ELEMENTS.fetch(reason)}. To send a structure a query string cannot carry, " \
+        'put it in the JSON body of a raw request, such as client.post, which carries it as it is.'
     end
 
     # Header names this class sets from the configuration, and will not take
@@ -564,7 +617,9 @@ module ZammadAPI
         url:     config.url,
         proxy:   config.proxy,
         ssl:     { verify: config.ssl_verify },
-        request: { timeout: config.timeout, open_timeout: config.open_timeout },
+        # The encoder is this gem's own: see {QueryEncoder} for the one
+        # structure Faraday's writes so that Rails reads another.
+        request: { timeout: config.timeout, open_timeout: config.open_timeout, params_encoder: QueryEncoder },
         headers: { 'User-Agent' => config.user_agent, 'Accept' => 'application/json' }
       ) do |faraday|
         apply_authentication(faraday)

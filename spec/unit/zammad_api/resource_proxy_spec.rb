@@ -943,6 +943,20 @@ RSpec.describe ZammadAPI::ResourceProxy do
           .to raise_error(ArgumentError, /parameter condition\[state_id\] was given twice/)
       end
 
+      # A group of conditions and a condition share `operator`, which is what
+      # lets a query string keep them apart. Two elements that share nothing
+      # would reach Zammad as one, so the search says so here.
+      it 'refuses a list of conditions a query string cannot keep apart' do
+        expect { client.tickets.search('x', condition: { conditions: [{ name: 'ticket.state_id' }, { operator: 'AND' }] }) }
+          .to raise_error(ArgumentError, /query parameter condition\[conditions\]\[1\] has no plain value under a key the element before it has/)
+      end
+
+      it 'takes a condition that holds a group of conditions' do
+        nested = { operator: 'OR', conditions: [{ name: 'ticket.state_id', operator: 'is', value: [2] }, { operator: 'AND', conditions: [{ name: 'ticket.group_id', operator: 'is', value: [1] }] }] }
+
+        expect(client.tickets.search('x', condition: nested)).to be_a(ZammadAPI::Collection)
+      end
+
       it 'still accepts a condition whose keys only look alike' do
         expect(client.tickets.search('x', condition: { 'ticket.state_id' => { operator: 'is' }, 'ticket.group_id' => { operator: 'is' } }))
           .to be_a(ZammadAPI::Collection)

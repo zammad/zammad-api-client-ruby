@@ -399,6 +399,17 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `condition=%7B%22ticket.state_id%22…`; Zammad could not parse it, dropped it, and
   answered with an unnarrowed search. A `nil` is now refused at any depth, and the message
   names the path to it.
+- A `condition` that nests groups of conditions reaches Zammad as it was written. A list of
+  Hashes goes out as `list[][key]=value` pairs, and Rails begins a new element only at a
+  key the element before it has too. Faraday writes the keys of each Hash in alphabetical
+  order, so a group, `{operator: 'AND', conditions: [...]}`, after a condition went out
+  `conditions` first and was read into the condition before it, leaving a second element
+  that held only an operator. Zammad was handed a selector nobody wrote: it answered that
+  one with a 500, and the same two elements the other way round with every ticket. The
+  client writes the query itself now, and begins such an element with a key the two share.
+  A list no order can carry raises `ArgumentError`: one whose elements share no such key,
+  a list directly inside a list, and an empty Hash inside a list. Every other query is
+  written as it was.
 - Bare socket failures are retried. `Errno::ECONNRESET` and the rest were mapped to
   `ConnectionError` but were missing from the retriable list, so a transient failure
   through an adapter that wraps it (net_http) was retried while the same failure through

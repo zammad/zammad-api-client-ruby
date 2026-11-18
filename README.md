@@ -774,6 +774,27 @@ client.tickets.search('printer', condition: {'ticket.state_id' => {operator: 'is
 client.tickets.search('printer', condition: {'ticket.group_id' => {operator: 'is', value: [2]}})
 ```
 
+A `condition` may nest groups of conditions, the form Zammad calls expert mode:
+
+```ruby
+client.tickets.search('printer', condition: {
+  operator:   'OR',
+  conditions: [
+    {name: 'ticket.state_id', operator: 'is', value: [2]},
+    {operator: 'AND', conditions: [
+      {name: 'ticket.group_id', operator: 'is', value: [1]},
+      {name: 'ticket.priority_id', operator: 'is', value: [3]}
+    ]}
+  ]
+})
+```
+
+A query string does not mark where one element of a list ends, and Rails begins a new one
+only at a key the element before it has too. The elements above all carry `operator`, and
+the client writes that first, so they arrive as written. A list whose elements share no
+such key, a list directly inside a list and an empty Hash inside a list cannot be carried
+at all and raise `ArgumentError`; the JSON body of `client.post` takes any structure.
+
 `group_ids:` narrows to the agents with access to a group, and its two forms ask for
 different access. A list of ids names no access, and Zammad reads that as `full`:
 `group_ids: [1]` leaves out an agent who may only read group 1. A Hash names the access

@@ -24,6 +24,7 @@ module ZammadAPI
     SSL_ERRORS: Array[untyped]
     # private_constant in the source; RBS has no way to say so.
     REFUSED_MIDDLEWARE: Hash[String, [String, String]]
+    MISREAD_ELEMENTS: Hash[Symbol, String]
     SENSITIVE_KEY_PATTERN: Regexp
     REDACTED: String
     UNRESERVED_IN_PATH: Regexp
@@ -39,6 +40,8 @@ module ZammadAPI
     def self.stringify_query: (Hash[untyped, untyped]) -> Hash[String, untyped]
     def self.stringify_query_hash: (Hash[untyped, untyped], String?) -> Hash[String, untyped]
     def self.stringify_query_value: (String, untyped) -> untyped
+    def self.stringify_query_list: (String, Array[untyped]) -> Array[untyped]
+    def self.misread_element_message: (String, Symbol) -> String
     def self.stringify_headers: (Hash[untyped, untyped]) -> Hash[String, String]
     def self.stringify_on_behalf_of: ((String | Integer)? identifier) -> String?
     def self.stringify_header_value: (String, untyped) -> String

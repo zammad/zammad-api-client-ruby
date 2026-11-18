@@ -124,6 +124,15 @@ RSpec.describe ZammadAPI::Test do
       expect(zammad.requests).to be_empty
     end
 
+    # And for a query a query string could not carry as it was written.
+    it 'refuses a list of Hashes Rails would read as one, the way the real transport does' do
+      zammad.stub(:get, 'api/v1/roles', body: [])
+
+      expect { client.get('api/v1/roles', query: { list: [{ a: 1 }, { b: 2 }] }) }
+        .to raise_error(ArgumentError, /Rails would read the two as one/)
+      expect(zammad.requests).to be_empty
+    end
+
     it 'raises the mapped error class for a non-2xx status' do
       zammad.stub(:get, 'api/v1/groups/1', status: 404, body: { error: 'not found' })
 

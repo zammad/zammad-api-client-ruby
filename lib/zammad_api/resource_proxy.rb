@@ -456,7 +456,8 @@ module ZammadAPI
     # @return [Collection]
     # @raise [ArgumentError] when +term+ is not a non-empty string, or for a
     #   keyword the search endpoint does not read, a nil value, a keyword
-    #   with nothing in it, or two spellings of one key
+    #   with nothing in it, two spellings of one key, or a list a query
+    #   string cannot carry: see {Transport.stringify_query_list}
     # @raise [Error] when Zammad routes no search endpoint for this resource
     def search(term, **filters)
       searchable!
@@ -498,13 +499,14 @@ module ZammadAPI
 
     # The keywords of a search, checked at the call that wrote them.
     #
-    # Through {Transport.stringify_query} for the two refusals it makes at
-    # any depth - a nil value, and two spellings of one key inside a
-    # +condition+ - because left to the request they would be reported when
-    # the collection is first enumerated, some lines away from the search
-    # that wrote them. What it returns is discarded: the collection sends the
-    # values as they were given - a copy of them, see {#search} - and the
-    # transport stringifies them then.
+    # Through {Transport.stringify_query} for the refusals it makes at any
+    # depth - a nil value, two spellings of one key inside a +condition+,
+    # and a list of conditions a query string cannot keep apart - because
+    # left to the request they would be reported when the collection is
+    # first enumerated, some lines away from the search that wrote them.
+    # What it returns is discarded: the collection sends the values as they
+    # were given - a copy of them, see {#search} - and the transport
+    # stringifies them then.
     #
     # @return [Hash{Symbol => Object}]
     # @raise [ArgumentError]

@@ -148,6 +148,74 @@ RSpec.describe ZammadAPI::Transport do
         .to raise_error(ArgumentError)
       expect(stub).not_to have_been_requested
     end
+
+    # A query string does not mark where an element of a list ends. Rails
+    # begins a new one where a pair names a place the element it is filling
+    # has taken already, so a list is refused where it would not be read
+    # back as the list it was: the request would carry something the caller
+    # did not write, to an endpoint that narrows by it.
+    describe 'a list a query string cannot carry' do
+      it 'refuses a Hash that shares no key with the one before it, which Rails would read into it' do
+        expect { described_class.stringify_query(condition: { conditions: [{ a: 1 }, { b: 2 }] }) }
+          .to raise_error(ArgumentError, /query parameter condition\[conditions\]\[1\] has no plain value under a key the element before it has as well/)
+      end
+
+      it 'refuses one that shares a key holding only a list' do
+        expect { described_class.stringify_query(list: [{ value: [1] }, { value: [2] }]) }
+          .to raise_error(ArgumentError, /Rails would read the two as one/)
+      end
+
+      it 'refuses a Hash with nothing in it, which is not written at all' do
+        expect { described_class.stringify_query(list: [{ a: 1 }, {}]) }
+          .to raise_error(ArgumentError, /query parameter list\[1\] is a Hash with no value in it.*one element short/)
+      end
+
+      it 'refuses a list directly inside a list' do
+        expect { described_class.stringify_query(list: [[1, 2], [3]]) }
+          .to raise_error(ArgumentError, /query parameter list\[0\] is a list directly inside a list/)
+      end
+
+      it 'says where such a structure can be sent as it is' do
+        expect { described_class.stringify_query(list: [{ a: 1 }, { b: 2 }]) }
+          .to raise_error(ArgumentError, /put it in the JSON body of a raw request, such as client\.post/)
+      end
+
+      it 'takes a group of conditions beside a condition, which share an operator' do
+        conditions = [{ name: 'ticket.state_id', operator: 'is', value: [2] }, { operator: 'AND', conditions: [{ name: 'a', operator: 'is', value: 1 }] }]
+
+        expect(described_class.stringify_query(condition: { operator: 'OR', conditions: conditions }).dig('condition', 'conditions', 1, 'operator')).to eq('AND')
+      end
+
+      it 'takes Hashes among plain values, each of which begins an element of its own' do
+        expect(described_class.stringify_query(list: [{ a: 1 }, 2, { b: 3 }])).to eq('list' => [{ 'a' => '1' }, '2', { 'b' => '3' }])
+      end
+
+      it 'makes no request for one' do
+        stub = stub_request(:get, url).with(query: hash_including({})).to_return(json_response([]))
+
+        expect { unit_transport.get('api/v1/groups', operation: 'test', query: { list: [{ a: 1 }, { b: 2 }] }) }.to raise_error(ArgumentError)
+        expect(stub).not_to have_been_requested
+      end
+    end
+
+    # Read off the URL Faraday built, in the order it was written: WebMock
+    # sorts a query before it compares one, and the order is the point. See
+    # the QueryEncoder specs for why this is the order Rails needs.
+    it 'writes the query with the encoder that keeps a list of Hashes apart' do
+      sent     = nil
+      recorder = Class.new(Faraday::Middleware) do
+        define_method(:on_request) { |env| sent = URI.decode_www_form(env.url.query).map(&:first) }
+      end
+      stub_request(:get, "#{url}/search").with(query: hash_including({})).to_return(json_response([]))
+
+      unit_transport(middleware: ->(builder) { builder.use(recorder) }).get(
+        'api/v1/groups/search',
+        operation: 'test',
+        query:     { condition: { conditions: [{ name: 'a', operator: 'is', value: 1 }, { operator: 'AND', conditions: [{ name: 'b', operator: 'is', value: 2 }] }] } }
+      )
+
+      expect(sent.drop(3).first(2)).to eq(['condition[conditions][][operator]', 'condition[conditions][][conditions][][name]'])
+    end
   end
 
   describe '.escape_path_segment' do
