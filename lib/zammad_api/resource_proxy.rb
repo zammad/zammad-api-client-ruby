@@ -53,6 +53,11 @@ module ZammadAPI
     # {Resources::Base.search_filters}.
     SEARCH_FILTER_KEYS = %i[condition ids].freeze
 
+    # Why a search term with nothing in it is refused, and what to write
+    # for the answer Zammad would have given it: see {#search}.
+    BLANK_TERM_MESSAGE = 'search needs a non-empty query string: Zammad reads a blank one as no term at all and answers with ' \
+                         "every record. Search for '*' to ask for every record."
+
     # Said at the end of the error for sorting an index endpoint that is
     # always served in id order, on a resource that can be searched.
     SEARCHABLE_UNSORTABLE_HINT = 'A search does sort: search(term).order(...). Or sort what this collection yields, with sort_by { ... }.'
@@ -447,7 +452,14 @@ module ZammadAPI
     #   client.tickets.search('printer', condition: {'ticket.state_id' => {operator: 'is', value: [1, 2]}})
     #   client.tickets.search('state.name:open').order(created_at: :desc)
     #
-    # @param term [String] the Zammad search term
+    # A term with nothing in it is refused: Zammad reads it as no term, and
+    # answers with every record the filters and the account allow, which is
+    # what a search for a blank +params[:q]+ ought not to come back with.
+    # Nothing is what Rails calls blank, Unicode spaces included. `'*'`
+    # asks for that answer in so many words, which is how Zammad's own
+    # interface lists every user or organization, and is sent.
+    #
+    # @param term [String] the Zammad search term, `'*'` for every record
     # @param filters [Hash] +condition:+ and +ids:+ on every search, and on
     #   users +role_ids:+, +permissions:+ and +group_ids:+ - the last as a
     #   list of group ids, for agents with full access to them, or as a Hash
@@ -461,7 +473,7 @@ module ZammadAPI
     # @raise [Error] when Zammad routes no search endpoint for this resource
     def search(term, **filters)
       searchable!
-      raise ArgumentError, 'search needs a non-empty query string' if !term.is_a?(String) || term.strip.empty?
+      raise ArgumentError, BLANK_TERM_MESSAGE if !term.is_a?(String) || Transport::BLANK.match?(Transport.wire_text(term, 'the search term'))
 
       collection(
         "#{path}/search",

@@ -7,6 +7,7 @@ module ZammadAPI
 
     SEARCH_MAX_PER_PAGE: Integer
     SEARCH_FILTER_KEYS: Array[Symbol]
+    BLANK_TERM_MESSAGE: String
     SEARCHABLE_UNSORTABLE_HINT: String
     UNSORTABLE_HINT: String
 

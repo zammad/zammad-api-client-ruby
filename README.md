@@ -851,6 +851,11 @@ client.organizations.search('zammad').each do |organization|
 end
 ```
 
+A term with nothing in it, Unicode spaces included, raises `ArgumentError`: Zammad reads it
+as no term at all and answers with every record, which a search for an empty form field
+should not come back with. `search('*')` asks for every record in so many words, and is
+sent; it is how Zammad's own interface lists users, and the keywords above still narrow it.
+
 ### Explicit pages
 
 ```ruby

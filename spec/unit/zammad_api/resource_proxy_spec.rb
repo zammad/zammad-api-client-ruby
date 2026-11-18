@@ -1016,6 +1016,26 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect { proxy.search('  ') }.to raise_error(ArgumentError, /non-empty query string/)
     end
 
+    # Zammad asks `blank?`, which counts Unicode spaces, and answers a blank
+    # term with every record.
+    ["\u00A0", "\u3000", "\u3000".encode('UTF-16LE')].each do |blank|
+      it "rejects #{blank.inspect}, which Zammad reads as no term" do
+        expect { proxy.search(blank) }.to raise_error(ArgumentError, /non-empty query string/)
+      end
+    end
+
+    it "says that '*' asks for every record" do
+      expect { proxy.search('') }.to raise_error(ArgumentError, /Search for '\*' to ask for every record/)
+    end
+
+    # How Zammad's own interface lists every user or organization.
+    it "sends '*', which asks for every record in so many words" do
+      stub = stub_request(:get, "#{url}/search").with(query: hash_including('query' => '*')).to_return(json_response([]))
+
+      proxy.search('*').to_a
+      expect(stub).to have_been_requested
+    end
+
     it 'rejects a term that is not a string' do
       expect { proxy.search(42) }.to raise_error(ArgumentError, /non-empty query string/)
     end
