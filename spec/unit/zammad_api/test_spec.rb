@@ -812,6 +812,28 @@ RSpec.describe ZammadAPI::Test do
     end
   end
 
+  describe 'a list endpoint whose resource says it does not page' do
+    let(:resource) do
+      Class.new(ZammadAPI::Resources::Base) do
+        def self.name = 'ObjectAttribute'
+
+        path 'api/v1/object_manager_attributes'
+        paginated false
+      end
+    end
+
+    before { zammad.stub(:get, 'api/v1/object_manager_attributes', body: [{ id: 1, name: 'a' }]) }
+
+    it 'is read from the one stub' do
+      expect(client.resource(resource).map(&:name)).to eq(['a'])
+    end
+
+    it 'is recorded as the one request it is, naming no page' do
+      client.resource(resource).to_a
+      expect(zammad.requests.map(&:query)).to eq([{ 'expand' => 'true' }])
+    end
+  end
+
   describe 'a list endpoint stubbed once' do
     subject(:zammad) { described_class.new }
 

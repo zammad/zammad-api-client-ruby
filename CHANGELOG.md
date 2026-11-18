@@ -822,6 +822,17 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   transport's own rule, so a write is not repeated and a `Retry-After` longer than
   `timeout` ends the attempts. `ZammadAPI::Test.new(retries: 0)` raises for the first
   failure, as before.
+- A resource can declare that its index endpoint does not page, with `paginated false`,
+  and is then read in one request. A walk asks for the page after a full one, and an
+  endpoint that serves every record in one response and reads no `page` —
+  `api/v1/object_manager_attributes` is one — answers that with the same list. The guard
+  against an endpoint that ignores `page` raised `PaginationError` for it, so a resource
+  declared for such an endpoint could not be read at all: `to_a` raised with every record
+  in hand, and a `find_by` that missed raised instead of answering `nil`, which broke
+  `find_by(...) || create(...)`. Nothing in the responses tells such an endpoint from one
+  that serves only its first page, so it is declared rather than inferred, and the error
+  for an index that repeats its first page now says what to declare. `page` refuses a
+  resource declared this way. Whether its index sorts is still what `sortable` says.
 
 ### Changed
 

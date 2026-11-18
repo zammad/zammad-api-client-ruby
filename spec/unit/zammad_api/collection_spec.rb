@@ -951,6 +951,154 @@ RSpec.describe ZammadAPI::Collection do
     end
   end
 
+  # ObjectManagerAttributesController#index renders every attribute in one
+  # response and reads no parameter. Walked like a paged index, it was asked
+  # for page two, answered with the same list, and the guard against an
+  # endpoint that ignores `page` raised with every record already in hand.
+  describe 'an index that serves every record in one response' do
+    subject(:collection) { client.resource(resource).all }
+
+    let(:resource) do
+      Class.new(ZammadAPI::Resources::Base) do
+        def self.name = 'ObjectAttribute'
+
+        path 'api/v1/object_manager_attributes'
+        paginated false
+      end
+    end
+    let(:url) { "#{ClientHelper::BASE_URL}api/v1/object_manager_attributes" }
+    let(:records) { [{ id: 1, name: 'c' }, { id: 2, name: 'a' }, { id: 3, name: 'b' }] }
+
+    # The same list whatever it is asked, which is what such an endpoint does.
+    before { stub_request(:get, url).with(query: hash_including({})).to_return(json_response(records)) }
+
+    it 'reads every record' do
+      expect(collection.map(&:id)).to eq([1, 2, 3])
+    end
+
+    it 'spends one request on it' do
+      collection.to_a
+      expect(a_request(:get, url).with(query: hash_including({}))).to have_been_made.once
+    end
+
+    it 'names no page in that request' do
+      collection.to_a
+      expect(a_request(:get, url).with(query: { 'expand' => 'true' })).to have_been_made.once
+    end
+
+    context 'without the declaration' do
+      let(:resource) do
+        Class.new(ZammadAPI::Resources::Base) do
+          def self.name = 'ObjectAttribute'
+
+          path 'api/v1/object_manager_attributes'
+        end
+      end
+
+      it 'raises PaginationError, as for any endpoint that repeats a page' do
+        expect { collection.to_a }.to raise_error(ZammadAPI::PaginationError, /page 2 repeated page 1/)
+      end
+
+      it 'says what to declare where the endpoint does serve every record' do
+        expect { collection.to_a }.to raise_error(ZammadAPI::PaginationError, /declare `paginated false` on the resource/)
+      end
+    end
+
+    it 'hands the list over as one batch' do
+      expect(collection.in_batches.map { |batch| batch.map(&:id) }).to eq([[1, 2, 3]])
+    end
+
+    it 'slices the list where a batch size is asked for' do
+      expect(collection.in_batches(of: 2).map { |batch| batch.map(&:id) }).to eq([[1, 2], [3]])
+    end
+
+    it 'still spends one request where a batch size is asked for' do
+      collection.find_each(batch_size: 1).to_a
+      expect(a_request(:get, url).with(query: { 'expand' => 'true' })).to have_been_made.once
+    end
+
+    it 'yields no batch for a list with nothing on it' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([]))
+
+      expect(collection.in_batches.to_a).to eq([])
+    end
+
+    it 'reads the first record off the one response' do
+      expect(collection.first.id).to eq(1)
+      expect(a_request(:get, url).with(query: { 'expand' => 'true' })).to have_been_made.once
+    end
+
+    it 'reads the first few' do
+      expect(collection.first(2).map(&:id)).to eq([1, 2])
+    end
+
+    it 'counts the records' do
+      expect(collection.count).to eq(3)
+    end
+
+    it 'says whether there are any' do
+      expect(collection).not_to be_empty
+    end
+
+    it 'finds a record by what it carries' do
+      expect(collection.detect { it.name == 'b' }.id).to eq(3)
+    end
+
+    # Every number would name the same records.
+    it 'refuses a page' do
+      expect { collection.page(2) }.to raise_error(ArgumentError, /serves every record in one response and reads no page parameter/)
+    end
+
+    it 'still refuses a page that is not a number first' do
+      expect { collection.page(0) }.to raise_error(ArgumentError, /positive integer/)
+    end
+
+    # Whether an index sorts is a declaration of its own, and sorts unless
+    # the resource says otherwise, as it does for an index that pages.
+    it 'sends a sort, and still no page' do
+      collection.order(:name).to_a
+
+      expect(a_request(:get, url).with(query: { 'expand' => 'true', 'sort_by' => 'name', 'order_by' => 'asc' })).to have_been_made.once
+    end
+
+    context 'when the resource says the endpoint does not sort either' do
+      let(:resource) do
+        Class.new(ZammadAPI::Resources::Base) do
+          def self.name = 'ObjectAttribute'
+
+          path 'api/v1/object_manager_attributes'
+          paginated false
+          sortable false
+        end
+      end
+
+      it 'refuses a sort, which such an endpoint drops' do
+        expect { collection.order(:name) }.to raise_error(ArgumentError, /ignores sort_by/)
+      end
+    end
+
+    it 'says so in inspect' do
+      expect(collection.inspect).to end_with('paginated=false>')
+    end
+  end
+
+  describe ZammadAPI::PaginationError do
+    def message(**) = described_class.build(operation: 'get .all of object', **).message
+
+    it 'says what to declare for an index that repeats its first page' do
+      expect(message(page: 2, index: true)).to include('declare `paginated false` on the resource')
+    end
+
+    # An endpoint that served two different pages reads `page`.
+    it 'does not say so for a page further on' do
+      expect(message(page: 3, index: true)).not_to include('paginated false')
+    end
+
+    it 'does not say so for a search, which always pages' do
+      expect(message(page: 2)).not_to include('paginated false')
+    end
+  end
+
   # A walk stops on what the endpoint served, and the size it serves is
   # learned from the first page rather than taken from `max_per_page`. Where
   # the server's cap is lower than the request - a cap the gem's declaration
@@ -1008,6 +1156,13 @@ RSpec.describe ZammadAPI::Collection do
       stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response(hits(1..3)))
 
       expect { search.to_a }.to raise_error(ZammadAPI::PaginationError, /ignoring the page parameter/)
+    end
+
+    # `paginated false` is a declaration about an index. Every search pages.
+    it 'does not suggest declaring the resource as not paginated' do
+      stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response(hits(1..3)))
+
+      expect { search.to_a }.to raise_error(ZammadAPI::PaginationError) { |error| expect(error.message).not_to include('paginated false') }
     end
 
     it 'still reads only the one page a search was limited to' do

@@ -21,6 +21,7 @@ module ZammadAPI
     @page: Integer?
     @search: bool
     @widens: bool
+    @paginated: bool
 
     def initialize: (
       transport: Transport,
@@ -34,7 +35,8 @@ module ZammadAPI
       ?per_page: Integer?,
       ?page: Integer?,
       ?search: bool,
-      ?widens: bool
+      ?widens: bool,
+      ?paginated: bool
     ) -> void
 
     def each: () { (R) -> void } -> Collection[R]
@@ -69,6 +71,7 @@ module ZammadAPI
     def positive_integer!: (untyped, String) -> Integer
     def page_size!: (untyped, String) -> Integer
     def walk: () { (Array[R]) -> void } -> void
+    def read_whole: () { (Array[R]) -> void } -> void
     def page_after: (Integer page, Integer per_page, Integer received, Integer? total) -> [ Integer, Integer ]
     def widened: (Integer covered, Integer? total) -> [ Integer, Integer ]
     def each_distinct: () { (Resources::Base) -> void } -> void

@@ -46,7 +46,7 @@ module ZammadAPI
 
     private
 
-    def collection: (String, String, ?query: Hash[Symbol, untyped], ?max_per_page: Integer, ?sortable: bool, ?search: bool) -> Collection[R]
+    def collection: (String, String, ?query: Hash[Symbol, untyped], ?max_per_page: Integer, ?sortable: bool, ?paginated: bool, ?search: bool) -> Collection[R]
     def search_filters: (Hash[untyped, untyped] filters) -> Hash[Symbol, untyped]
     def search_filter_keys: () -> Array[Symbol]
     def unknown_search_filter_message: (Array[Symbol] unknown) -> String

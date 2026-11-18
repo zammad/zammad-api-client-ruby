@@ -23,7 +23,9 @@ module ZammadAPI
   end
 
   class PaginationError < Error
-    def self.build: (operation: String, page: Integer, ?resource_class: Class?) -> PaginationError
+    UNPAGINATED_ADVICE: String
+
+    def self.build: (operation: String, page: Integer, ?resource_class: Class?, ?index: bool) -> PaginationError
   end
 
   class ResponseError < Error

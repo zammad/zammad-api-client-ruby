@@ -299,12 +299,35 @@ Say what else is true of the endpoint, where it differs from the defaults:
 | `search_filters :role_ids` | none | What that search narrows by besides the term, `condition:` and `ids:`. `search` refuses any other keyword. |
 | `max_per_page 100` | `1000`  | The largest page the index endpoint serves.                          |
 | `sortable false`   | `true`  | The index endpoint is always served in the same order, so `order` refuses it. |
+| `paginated false`  | `true`  | The index endpoint serves every record in one response and reads no `page`. It is read in one request, and `page` refuses it. |
 | `belongs_to :role, class_name: 'Role'` | — | A foreign key, read as a record through `record.related.role`. |
 | `has_many :members, class_name: 'User', path: ->(id) { "…/#{id}" }` | — | A list served whole by an endpoint of its own. |
 
 `class_name` is a resource of this gem by its own name, `'User'`, or a class of yours by its
 full name, `'Acme::Role'`. A subclass of a modelled resource works too, and inherits what
 its parent declares: `class MyTicket < ZammadAPI::Resources::Ticket`.
+
+Most of Zammad's index endpoints page, and a collection walks them a page at a time. One
+that does not — `api/v1/object_manager_attributes` serves every attribute in one response,
+whatever it is asked — answers the request for a second page with the first again, which
+a walk reports as `ZammadAPI::PaginationError` rather than read as the end. Declare such a
+resource `paginated false`:
+
+```ruby
+class ObjectAttribute < ZammadAPI::Resources::Base
+  path 'api/v1/object_manager_attributes'
+  paginated false
+  sortable false
+end
+
+client.resource(ObjectAttribute).find_by(name: 'priority_id')   # one request
+```
+
+Declare it only where the endpoint does serve every record. One that ignores `page` and
+caps what it serves would be read as far as its cap, with nothing to say that there is
+more. Whether the endpoint sorts is a declaration of its own: this one reads no parameter
+at all, so it says `sortable false` as well. A search always pages, whatever the index
+beside it does.
 
 Use raw requests for an endpoint that is not shaped like that — an action, a report, a
 setting.

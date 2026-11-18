@@ -442,6 +442,62 @@ RSpec.describe ZammadAPI::ResourceProxy do
     end
   end
 
+  # An index that serves its whole list and reads no page was walked into the
+  # guard against an endpoint that ignores `page`, so a lookup that missed on
+  # the first page raised instead of answering nil.
+  describe 'a resource whose index does not page' do
+    subject(:proxy) { client.resource(resource) }
+
+    let(:resource) do
+      Class.new(ZammadAPI::Resources::Base) do
+        def self.name = 'ObjectAttribute'
+
+        path 'api/v1/object_manager_attributes'
+        paginated false
+      end
+    end
+    let(:url) { "#{ClientHelper::BASE_URL}api/v1/object_manager_attributes" }
+
+    before do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([{ id: 1, name: 'a' }, { id: 2, name: 'b' }]))
+    end
+
+    it 'finds a record by an attribute' do
+      expect(proxy.find_by(name: 'b').id).to eq(2)
+    end
+
+    it 'answers nil for a lookup that matches nothing' do
+      expect(proxy.find_by(name: 'missing')).to be_nil
+    end
+
+    it 'spends one request on a miss' do
+      proxy.find_by(name: 'missing')
+      expect(a_request(:get, url).with(query: { 'expand' => 'true' })).to have_been_made.once
+    end
+
+    it 'lets a miss go on to create the record' do
+      created = stub_request(:post, url).with(query: hash_including({})).to_return(json_response({ id: 3, name: 'missing' }, status: 201))
+
+      expect((proxy.find_by(name: 'missing') || proxy.create(name: 'missing')).id).to eq(3)
+      expect(created).to have_been_requested
+    end
+
+    it 'reads every record straight off the proxy' do
+      expect(proxy.map(&:name)).to eq(%w[a b])
+    end
+
+    # The declaration is about the index. A search endpoint always pages.
+    it 'still pages a search' do
+      resource.searchable true
+      search = stub_request(:get, "#{url}/search")
+        .with(query: hash_including('page' => '1', 'per_page' => described_class::SEARCH_MAX_PER_PAGE.to_s))
+        .to_return(json_response({ records: [], total_count: 0 }))
+
+      proxy.search('a').to_a
+      expect(search).to have_been_requested
+    end
+  end
+
   describe '#exists?' do
     it 'is true when the record is there' do
       stub_request(:get, "#{url}/1").with(query: hash_including({})).to_return(json_response({ id: 1 }))

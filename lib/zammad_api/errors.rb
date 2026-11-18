@@ -51,12 +51,25 @@ module ZammadAPI
   # Raised when the server answers a page request with the page before it,
   # which means it is ignoring +page+ and a collection walk would never end.
   class PaginationError < Error
+    # What to do about an index that repeats its first page, which is what
+    # one that serves every record in a single response does. Said as a
+    # condition, because the same two pages come from an endpoint that
+    # serves only the first of many and ignores +page+, and that one is not
+    # to be read as whole.
+    UNPAGINATED_ADVICE = 'If this endpoint serves every record in one response, declare `paginated false` on the resource, ' \
+                         'and it is read in one request.'
+
     # @param operation [String]
     # @param page [Integer] the page that repeated its predecessor
     # @param resource_class [Class, nil]
+    # @param index [Boolean] whether an index endpoint was being walked,
+    #   which is the kind a resource may declare as not paginated. A search
+    #   always pages.
     # @return [PaginationError]
-    def self.build(operation:, page:, resource_class: nil)
-      new("Can't #{subject_for(operation, resource_class)}: page #{page} repeated page #{page - 1}, so the endpoint is ignoring the page parameter")
+    def self.build(operation:, page:, resource_class: nil, index: false)
+      message = "Can't #{subject_for(operation, resource_class)}: page #{page} repeated page #{page - 1}, so the endpoint is ignoring the page parameter"
+
+      new(index && page == 2 ? "#{message}. #{UNPAGINATED_ADVICE}" : message)
     end
   end
 
