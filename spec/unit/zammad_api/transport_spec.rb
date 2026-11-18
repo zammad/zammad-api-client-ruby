@@ -702,6 +702,32 @@ RSpec.describe ZammadAPI::Transport do
         .to raise_error(ZammadAPI::ConfigurationError, /NameError: boom/)
     end
 
+    # The backtrace into the caller's own code is the one thing the message
+    # cannot carry, so the cause stays wherever it gives nothing away.
+    it 'keeps the error a middleware raised as the cause' do
+      failure = NameError.new('boom')
+
+      expect { unit_transport(middleware: ->(_) { raise failure }) }
+        .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.cause).to be(failure) }
+    end
+
+    # The middleware is on a line of its own on purpose. A NameError's report
+    # quotes the source line it was raised on, so with the proxy written on
+    # that line the report would carry the password after all - and the cause
+    # would be dropped, rightly.
+    it 'keeps it beside a proxy that carries credentials, where the report does not quote them' do
+      failure = NameError.new('boom')
+      raising = ->(_) { raise failure }
+
+      expect { unit_transport(proxy: 'http://user:s3cret@proxyhost:3128', middleware: raising) }
+        .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.cause).to be(failure) }
+    end
+
+    it 'keeps the cause of an unregistered adapter' do
+      expect { unit_transport(adapter: :nonsense) }
+        .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.cause).to be_a(Faraday::Error) }
+    end
+
     it 'does not relabel an error this gem raised itself' do
       failure = ZammadAPI::NotFoundError.new(operation: 'test', resource_class: nil, detail: 'gone')
 
@@ -1017,6 +1043,48 @@ RSpec.describe ZammadAPI::Transport do
         .to raise_error(ZammadAPI::ConfigurationError, %r{http://\[REDACTED\]@proxyhost:3128})
     end
 
+    # The message is not what a log or an error tracker prints. They print
+    # the report, and Ruby had attached the error being rescued as the cause:
+    # the redacted message went out with the original, password and all,
+    # right behind it.
+    it 'keeps the proxy password out of the whole report, not just the message' do
+      expect { unit_transport(proxy: proxy) }
+        .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.full_message(highlight: false)).not_to include('pa ss') }
+    end
+
+    it 'does not carry the error that quotes the password along as its cause' do
+      expect { unit_transport(proxy: proxy) }
+        .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.cause).to be_nil }
+    end
+
+    it 'still names the class of the error it replaced' do
+      expect { unit_transport(proxy: proxy) }.to raise_error(ZammadAPI::ConfigurationError, /URI::InvalidURIError/)
+    end
+
+    # The error being replaced may be clean itself and still have the
+    # password one level down, and a report prints every level.
+    context 'when the error quotes the proxy only further down its own chain' do
+      let(:proxy) { 'http://user:s3cret@proxyhost:3128' }
+
+      let(:wrapping) do
+        lambda do |_|
+          raise URI::InvalidURIError, "bad URI: #{proxy}"
+        rescue URI::InvalidURIError
+          raise ArgumentError, 'the proxy could not be used'
+        end
+      end
+
+      it 'has nothing to redact in the message' do
+        expect { unit_transport(proxy: proxy, middleware: wrapping) }
+          .to raise_error(ZammadAPI::ConfigurationError, /ArgumentError: the proxy could not be used/)
+      end
+
+      it 'keeps the password out of the whole report all the same' do
+        expect { unit_transport(proxy: proxy, middleware: wrapping) }
+          .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.full_message(highlight: false)).not_to include('s3cret') }
+      end
+    end
+
     # A # ends the authority early, so the redaction found no credential in
     # what was left of it and the message quoted the password in full.
     context 'when the password carries a character that ends the authority' do
@@ -1030,6 +1098,11 @@ RSpec.describe ZammadAPI::Transport do
       it 'still says which value was rejected' do
         expect { unit_transport(proxy: proxy) }
           .to raise_error(ZammadAPI::ConfigurationError, %r{http://\[REDACTED\]@proxyhost:3128})
+      end
+
+      it 'keeps the password out of the whole report' do
+        expect { unit_transport(proxy: proxy) }
+          .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.full_message(highlight: false)).not_to match(/pa#ss|s3cret/) }
       end
     end
 

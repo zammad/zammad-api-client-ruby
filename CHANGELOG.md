@@ -678,6 +678,13 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   String, so a login buffer reused after `client.on_behalf_of(login)` changed who every
   later request from that client was performed for. The scope is copied and frozen, in the
   test kit's transport as well.
+- A proxy password no longer reaches an exception report through `cause`. The
+  `ConfigurationError` for a connection that cannot be built had its message redacted, but
+  Ruby attached the error it replaced as the cause, and a report prints the whole chain:
+  `full_message`, a log formatter and an error tracker all showed `URI::InvalidURIError`
+  quoting the proxy URL in full. The cause is dropped where its report would print a
+  configured value that redaction changes, and kept everywhere else, so a `middleware:`
+  callable that raises still shows the backtrace into the caller's code.
 
 ### Changed
 

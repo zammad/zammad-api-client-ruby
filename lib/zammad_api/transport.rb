@@ -584,7 +584,29 @@ module ZammadAPI
       # `rescue ZammadAPI::ConfigurationError` that building a client is
       # documented to need. The class is named in the message because
       # "bad URI (is not URI?)" on its own says nothing about where to look.
-      raise ConfigurationError, "config could not be used to build a connection: #{e.class}: #{redact_config_values(e.message)}"
+      raise ConfigurationError, "config could not be used to build a connection: #{e.class}: #{redact_config_values(e.message)}", cause: reportable_cause(e)
+    end
+
+    # The error to keep as the cause of the ConfigurationError above, where
+    # it can be kept.
+    #
+    # Ruby attaches the error being rescued to the one raised in its place,
+    # and a report prints the whole chain: `full_message`, a logger's
+    # formatter, an error tracker. So the message above was scrubbed and the
+    # original went out right behind it, `caused by URI::InvalidURIError: bad
+    # URI (is not URI?): "http://user:pa ss@host:3128"`, password and all.
+    #
+    # Dropped only where that is what would happen. The whole report is
+    # asked, causes of its own included, because the whole report is what
+    # gets printed, and it is asked the question the message was: whether it
+    # quotes a configured value that redaction changes. Every other failure
+    # keeps its cause. A `middleware:` callable that raises is a bug in the
+    # caller's own code, and the backtrace into it is the one thing the
+    # message cannot carry.
+    def reportable_cause(error)
+      report = error.full_message(highlight: false)
+
+      redact_config_values(report) == report ? error : nil
     end
 
     # The underlying error quotes the value it rejected, and for a proxy that
