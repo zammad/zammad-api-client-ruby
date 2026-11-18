@@ -43,18 +43,6 @@ module ZammadAPI
       users:             Resources::User
     }.freeze
 
-    # The names the readers had in 1.x, mapped to the ones they have now.
-    # Each still works, as a deprecated alias - see {#resource}.
-    DEPRECATED_RESOURCES = {
-      group:           :groups,
-      organization:    :organizations,
-      ticket:          :tickets,
-      ticket_article:  :ticket_articles,
-      ticket_priority: :ticket_priorities,
-      ticket_state:    :ticket_states,
-      user:            :users
-    }.freeze
-
     # Methods Ruby calls implicitly for type coercion. They must keep raising
     # NoMethodError so that this object behaves normally in core operations.
     CONVERSION_METHODS = %i[to_ary to_a to_hash to_str to_io to_proc coerce].freeze
@@ -79,51 +67,6 @@ module ZammadAPI
     #   @return [ResourceProxy] proxy for {Resources::User}
     RESOURCES.each do |name, resource_class|
       define_method(name) { @resources.fetch(resource_class) }
-    end
-
-    # @!method group
-    #   @deprecated Use {#groups}.
-    #   @return [ResourceProxy]
-    # @!method organization
-    #   @deprecated Use {#organizations}.
-    #   @return [ResourceProxy]
-    # @!method ticket
-    #   @deprecated Use {#tickets}.
-    #   @return [ResourceProxy]
-    # @!method ticket_article
-    #   @deprecated Use {#ticket_articles}.
-    #   @return [ResourceProxy]
-    # @!method ticket_priority
-    #   @deprecated Use {#ticket_priorities}.
-    #   @return [ResourceProxy]
-    # @!method ticket_state
-    #   @deprecated Use {#ticket_states}.
-    #   @return [ResourceProxy]
-    # @!method user
-    #   @deprecated Use {#users}.
-    #   @return [ResourceProxy]
-    DEPRECATED_RESOURCES.each do |old_name, name|
-      define_method(old_name) do
-        Client.warn_deprecated_resource(old_name, name)
-        @resources.fetch(RESOURCES.fetch(name))
-      end
-    end
-
-    # Says that a reader was called by the name it had in 1.x.
-    #
-    # In Ruby's own +deprecated+ category, so it is silent unless the
-    # application asks for deprecation warnings - +ruby -W:deprecated+, or
-    # +Warning[:deprecated] = true+, which is what a test suite turns on -
-    # and a script that has not been migrated yet does not print a line per
-    # request in production. +uplevel+ names the line that made the call,
-    # past the two frames of this class in between.
-    #
-    # @api private
-    # @param old_name [Symbol]
-    # @param name [Symbol]
-    # @return [void]
-    def self.warn_deprecated_resource(old_name, name)
-      warn("ZammadAPI::Client##{old_name} is deprecated and will be removed in 3.0: use ##{name} instead", uplevel: 2, category: :deprecated)
     end
 
     # Environment variables {.from_env} reads, mapped to the options they set.
@@ -205,9 +148,6 @@ module ZammadAPI
 
     # The proxy for a resource, by name or by class.
     #
-    # A name from 1.x - +:ticket+ for +:tickets+ - is still answered, with
-    # a deprecation warning.
-    #
     # A class is the way to the parts of the API this gem does not model.
     # {Resources::Base} is built to be subclassed - a path, and whatever the
     # endpoint needs said about it - and a proxy for such a class gives its
@@ -234,15 +174,9 @@ module ZammadAPI
     def resource(name)
       return proxy_for(name) if name.is_a?(Class)
 
-      key = name.to_sym
+      resource_class = RESOURCES.fetch(name.to_sym) { raise UnknownResourceError, unknown_resource_message(name) }
 
-      if !RESOURCES.key?(key)
-        current = DEPRECATED_RESOURCES.fetch(key) { raise UnknownResourceError, unknown_resource_message(name) }
-        Client.warn_deprecated_resource(key, current)
-        key = current
-      end
-
-      @resources.fetch(RESOURCES.fetch(key))
+      @resources.fetch(resource_class)
     end
 
     # @return [Array<Symbol>] every resource name this client supports

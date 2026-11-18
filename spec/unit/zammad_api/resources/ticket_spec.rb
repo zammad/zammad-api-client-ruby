@@ -162,55 +162,32 @@ RSpec.describe ZammadAPI::Resources::Ticket do
     end
   end
 
-  # The name the method had in 1.x: a noun that sends a POST, one letter away
-  # from the reader beside it.
+  # The name add_article had in 1.x: a noun that sends a POST, one letter away
+  # from the reader beside it. It is gone, which leaves `article` what it is
+  # everywhere else on a record - an attribute.
   describe '#article' do
-    around do |example|
-      enabled = Warning[:deprecated]
-      Warning[:deprecated] = true
-      example.run
-    ensure
-      Warning[:deprecated] = enabled
+    it 'is not a method of a ticket' do
+      expect(described_class.method_defined?(:article)).to be(false)
     end
 
-    before do
-      stub_request(:post, article_url).with(query: hash_including({}))
-        .to_return(json_response({ id: 9, body: 'hello', ticket_id: 42 }, status: 201))
+    it 'raises NoMethodError for the call 1.x made' do
+      expect { ticket.article(body: 'hello') }.to raise_error(NoMethodError)
     end
 
-    it 'still adds the article' do
-      added = nil
+    it 'sends nothing for the call 1.x made' do
+      begin
+        ticket.article(body: 'hello')
+      rescue NoMethodError
+        nil
+      end
 
-      expect { added = ticket.article(body: 'hello') }.to output.to_stderr
-      expect(added.id).to eq(9)
+      expect(a_request(:post, article_url).with(query: hash_including({}))).not_to have_been_made
     end
 
-    it 'warns, naming the replacement' do
-      expect { ticket.article(body: 'hello') }
-        .to output(/ZammadAPI::Resources::Ticket#article is deprecated and will be removed in 3\.0: use #add_article instead/).to_stderr
-    end
-
-    it 'names the line that made the call' do
-      expect { ticket.article(body: 'hello') }.to output(/#{Regexp.escape(__FILE__)}:#{__LINE__}: warning: /).to_stderr
-    end
-
-    it 'says nothing unless deprecation warnings are on' do
-      Warning[:deprecated] = false
-      expect { ticket.article(body: 'hello') }.not_to output.to_stderr
-    end
-
-    it 'does not warn for add_article' do
-      expect { ticket.add_article(body: 'hello') }.not_to output.to_stderr
-    end
-
-    # It reads like the attribute a ticket is created with, and with a
-    # default it sent a POST naming nothing but the ticket. 1.x required the
-    # attributes.
-    it 'requires the attributes, as 1.x did, and sends nothing without them' do
+    it 'reads the article staged for the next save' do
       ticket.article = { body: 'reply' }
 
-      expect { ticket.article }.to raise_error(ArgumentError, /wrong number of arguments/)
-      expect(a_request(:post, article_url).with(query: hash_including({}))).not_to have_been_made
+      expect(ticket.article).to eq(body: 'reply')
     end
   end
 end

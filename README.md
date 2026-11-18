@@ -223,8 +223,8 @@ inherits.
 
 The names are plural because what each one hands back stands for every record of its kind:
 `client.tickets.each` walks them all, and `client.tickets.find(1)` picks one out. The
-singular names from 1.x — `client.ticket` and the rest — still work as deprecated aliases;
-see [Migrating from 1.x](#the-client).
+singular names from 1.x — `client.ticket` and the rest — are gone and raise
+`UnknownResourceError`; see [Migrating from 1.x](#the-client).
 
 Anything not in that list is reachable by [declaring a resource](#resources-this-gem-does-not-model)
 for it, or with [raw requests](#raw-requests).
@@ -1394,8 +1394,9 @@ test against a specific Zammad ref.
 ## Migrating from 1.x
 
 Version 2.0 fixes long-standing behaviour that could not change without breaking
-compatibility. Most calling code needs no edits, and almost everything that does raises
-at the call site. Start with the handful of changes that do not.
+compatibility. Most calling code needs one rename and no more — the resource readers are
+plural, so `client.ticket` is `client.tickets` — and almost everything else that needs an
+edit raises at the call site. Start with the handful of changes that do not.
 
 If this is not the time to move, [1.x stays available](#staying-on-1x).
 
@@ -1423,11 +1424,12 @@ If this is not the time to move, [1.x stays available](#staying-on-1x).
   `ZammadAPI::ValidationError` as `save` used to. `update` and `update!` are the same pair.
 
 - **`collection.each`** walks every page, where 1.x read one and stopped:
-  `client.ticket.all.each { ... }`, as 1.x spelled it, touched the first 100 tickets. It
-  still runs in 2.0, through the deprecated singular reader (`client.tickets` is the new
-  name), and now touches every ticket the client can read, at a request per page. A loop written to handle the first
-  page, or one that writes to each record it is handed, does that to all of them now.
-  Limit it explicitly with `first(n)` or `page(1, per_page: n)`.
+  `client.ticket.all.each { ... }`, as 1.x spelled it, touched the first 100 tickets. That
+  line raises in 2.0, because the reader is `client.tickets` now, and renaming it is all it
+  takes to run again — after which it touches every ticket the client can read, at a request
+  per page. A loop written to handle the first page, or one that writes to each record it is
+  handed, does that to all of them now. Limit it explicitly with `first(n)` or
+  `page(1, per_page: n)`.
 
 - **`rescue Faraday::ConnectionFailed`** (and any other Faraday exception) no longer
   matches. Transport failures are wrapped, so rescue `ZammadAPI::ConnectionError`,
@@ -1440,7 +1442,7 @@ If this is not the time to move, [1.x stays available](#staying-on-1x).
 | `Client.new(config_hash)`              | `Client.new(**config_hash)`                      | Options are keyword arguments now, so a Hash has to be splatted      |
 | an unknown option was ignored          | raises `ArgumentError: unknown keyword`          | A typo'd option used to be dropped without a word                    |
 | `logger: true`                         | `logger: Logger.new($stderr)`                    | The flag became an object, so you choose the device and level. Anything that answers `debug` is accepted; `true` raises `ConfigurationError` |
-| `client.ticket`, `client.user`, …      | `client.tickets`, `client.users`, …              | A resource is `Enumerable` over every record now, so `client.ticket.each` read as if it acted on one ticket. The singular names still work and warn in Ruby's `deprecated` category; run with `RUBYOPT=-W:deprecated` to find them. They go in 3.0 |
+| `client.ticket`, `client.user`, …      | `client.tickets`, `client.users`, …              | A resource is `Enumerable` over every record now, so `client.ticket.each` read as if it acted on one ticket. The singular names raise `UnknownResourceError`, which lists the plural ones, and so does `client.resource(:ticket)` |
 | `client.on_behalf_of = 'login'`        | `client.on_behalf_of('login')` → new client      | The setter mutated the client and leaked across threads              |
 | `client.perform_on_behalf_of('x') { }` | `client.on_behalf_of('x') { \|scoped\| ... }`    | The old block form left the header set if the block raised           |
 | `ZammadAPI::Resources::Role < Base` reached by `client.role` | `client.resource(Role)`, for a `Role < ZammadAPI::Resources::Base` of your own | The named readers are a fixed list, and a class is handed over rather than looked up by name. [Raw requests](#raw-requests) reach whatever is not a resource |
@@ -1473,7 +1475,7 @@ If this is not the time to move, [1.x stays available](#staying-on-1x).
 | `record.unknown_attribute` → `nil`  | raises `NoMethodError`; use `record[:x]`, `fetch(:x, nil)` or `key?(:x)` | A typo read as `nil` and flowed on into whatever was written with it. Zammad also serves a reduced object where the user may not see the whole record, and that is worth being told about |
 | `client.x.new(id: 5)`               | `client.x.find(5)`                                   | The constructor was the one door that did not refuse a staged id — and the only one whose value reached Zammad, since a new record is sent in full |
 | `client.users.find(ticket.customer_id)` | `ticket.related.customer`                         | Following a foreign key needed the client threaded through           |
-| `ticket.article(body: '…')`         | `ticket.add_article(body: '…')`                      | A noun that sends a `POST`, one letter away from `ticket.articles`, which only reads. `article` still works and warns in Ruby's `deprecated` category; it goes in 3.0 |
+| `ticket.article(body: '…')`         | `ticket.add_article(body: '…')`                      | A noun that sends a `POST`, one letter away from `ticket.articles`, which only reads. The method is gone: `article` is an attribute reader like any other, and raises `NoMethodError` on a ticket that has no article staged |
 
 ### Errors
 
@@ -1514,8 +1516,8 @@ a `POST`, `PUT` or `DELETE` is never retried. Both are options — see
 
 `find`, `all`, `create` and `new` on a resource, `record.destroy`, attribute readers and
 writers, `ticket.articles` and `attachment.download`. The resources themselves are reached
-by their plural names now — `client.tickets` — and adding an article is
-`ticket.add_article`; the old names still answer, with a deprecation warning.
+by their plural names — `client.tickets` — and adding an article is `ticket.add_article`;
+those two are renames, and the old names raise.
 
 `record.save`, `record.changes` and `record.attributes` still exist and still mean what
 they meant; the tables above only change how they behave at the edges.

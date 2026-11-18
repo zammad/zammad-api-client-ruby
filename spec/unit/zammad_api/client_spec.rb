@@ -230,52 +230,17 @@ RSpec.describe ZammadAPI::Client do
 
   # A proxy is Enumerable over every record of its kind, so the readers are
   # plural. The singular names are what they were called in 1.x, when a proxy
-  # was only a dispatcher for find and create.
+  # was only a dispatcher for find and create, and they are gone.
   describe 'the singular names the readers had in 1.x' do
-    around do |example|
-      enabled = Warning[:deprecated]
-      Warning[:deprecated] = true
-      example.run
-    ensure
-      Warning[:deprecated] = enabled
-    end
-
-    ZammadAPI::Client::DEPRECATED_RESOURCES.each do |old_name, name|
-      it "still answers ##{old_name} with what ##{name} answers" do
-        client = unit_client
-        proxy  = nil
-
-        expect { proxy = client.public_send(old_name) }.to output.to_stderr
-        expect(proxy).to be(client.public_send(name))
+    %i[group organization ticket ticket_article ticket_priority ticket_state user].each do |old_name|
+      it "does not answer ##{old_name}" do
+        expect { unit_client.public_send(old_name) }
+          .to raise_error(ZammadAPI::UnknownResourceError, /Unknown resource #{old_name}, available resources are: groups, /)
       end
     end
 
-    it 'covers every reader' do
-      expect(ZammadAPI::Client::DEPRECATED_RESOURCES.values).to eq(ZammadAPI::Client::RESOURCES.keys)
-    end
-
-    it 'warns, naming the replacement' do
-      expect { unit_client.ticket }
-        .to output(/ZammadAPI::Client#ticket is deprecated and will be removed in 3\.0: use #tickets instead/).to_stderr
-    end
-
-    it 'names the line that made the call, not one inside the gem' do
-      expect { unit_client.ticket }.to output(/#{Regexp.escape(__FILE__)}:#{__LINE__}: warning: /).to_stderr
-    end
-
-    it 'does not warn for the plural name' do
-      expect { unit_client.tickets }.not_to output.to_stderr
-    end
-
-    # Ruby's own category for this, so an application decides whether to hear
-    # it: a script that has not been migrated does not print a line per call.
-    it 'says nothing unless deprecation warnings are on' do
-      Warning[:deprecated] = false
-      expect { unit_client.ticket }.not_to output.to_stderr
-    end
-
-    it 'is not listed among the resource names' do
-      expect(unit_client.resource_names).not_to include(:ticket)
+    it 'does not claim to respond to one' do
+      expect(unit_client).not_to respond_to(:ticket)
     end
   end
 
@@ -388,27 +353,9 @@ RSpec.describe ZammadAPI::Client do
       end
     end
 
-    context 'with a name from 1.x' do
-      around do |example|
-        enabled = Warning[:deprecated]
-        Warning[:deprecated] = true
-        example.run
-      ensure
-        Warning[:deprecated] = enabled
-      end
-
-      it 'still answers, with the proxy the plural answers with' do
-        client = unit_client
-        proxy  = nil
-
-        expect { proxy = client.resource(:ticket) }.to output.to_stderr
-        expect(proxy).to be(client.tickets)
-      end
-
-      it 'warns, naming the line that made the call' do
-        expect { unit_client.resource('ticket') }
-          .to output(/#{Regexp.escape(__FILE__)}:#{__LINE__ - 1}: warning: ZammadAPI::Client#ticket is deprecated/).to_stderr
-      end
+    it 'raises for a singular name from 1.x' do
+      expect { unit_client.resource(:ticket) }
+        .to raise_error(ZammadAPI::UnknownResourceError, /Unknown resource ticket, available resources are: groups, /)
     end
   end
 

@@ -107,11 +107,9 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `client.ticket_priorities` and `client.ticket_states`. A resource is `Enumerable` over
   every record of its kind, so `client.ticket.each` and `client.ticket.first(5)` read as if
   they acted on one ticket; the singular dates from 1.x, when a resource was only a
-  dispatcher for `find` and `create`. The singular names still work, as deprecated aliases
-  that warn in Ruby's `deprecated` category — silent unless the application asks for
-  deprecation warnings, with `ruby -W:deprecated` or `Warning[:deprecated] = true` — and
-  will be removed in 3.0. `client.resource(:ticket)` is answered the same way, and
-  `client.resource_names` lists the plural names.
+  dispatcher for `find` and `create`. The singular names are gone: `client.ticket` raises
+  `UnknownResourceError`, which lists the plural names, and so does
+  `client.resource(:ticket)`. `client.resource_names` lists the plural names.
 - The resource readers a client has are a fixed list. 1.x resolved `client.<name>` to
   `ZammadAPI::Resources::<Name>` through `const_get`, so a subclass of `Base` defined in
   application code could be reached that way. `client.role` now raises
@@ -174,10 +172,9 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   credentials an override replaces, so switching schemes through either still works, and an
   environment that itself sets two schemes is refused until an argument says which is meant.
 - `ticket.article(…)` is `ticket.add_article(…)`. A noun that sends a `POST` sat one letter
-  away from `ticket.articles`, which only reads. `article` still works, as a deprecated
-  alias that warns in Ruby's `deprecated` category the way the singular resource readers do,
-  and will be removed in 3.0. It requires its attributes, as it did in 1.x, so a bare
-  `ticket.article` raises `ArgumentError` rather than sending an article with no body.
+  away from `ticket.articles`, which only reads. The old method is gone, which leaves
+  `article` an attribute reader like any other: it raises `NoMethodError` on a ticket that
+  has no article staged, and sends nothing.
 
 ### Added
 
