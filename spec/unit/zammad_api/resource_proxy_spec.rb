@@ -908,6 +908,11 @@ RSpec.describe ZammadAPI::ResourceProxy do
         expect { client.users.search('smith', ids: ' ') }.to raise_error(ArgumentError, /search was given ids: " "/)
       end
 
+      # `present?` is false for it, so Zammad skips the filter.
+      it 'refuses one that holds only a Unicode space' do
+        expect { client.users.search('smith', permissions: "\u3000") }.to raise_error(ArgumentError, /search was given permissions:/)
+      end
+
       it 'says what the search would have come back with' do
         expect { client.users.search('smith', ids: []) }
           .to raise_error(ArgumentError, /everything matching the term, not narrowed to nothing/)

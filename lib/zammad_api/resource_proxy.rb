@@ -528,9 +528,12 @@ module ZammadAPI
     # Asked of the keyword's own value and not of what is nested in it - a
     # +condition+ naming an attribute with an empty +value+ is a selector,
     # and what that selects is Zammad's to say.
+    #
+    # Blank as Rails reads it, Unicode spaces included: see
+    # {Transport::BLANK}.
     def empty_search_filter?(value)
       case value
-      when String      then value.strip.empty?
+      when String      then Transport::BLANK.match?(value)
       when Array, Hash then value.empty?
       else false
       end
