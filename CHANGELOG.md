@@ -691,6 +691,10 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   answered 503 was not retried and left as `Faraday::ServerError`, a 404 left as
   `Faraday::ResourceNotFound`, which `exists?` does not rescue, and a 422 as an error
   `save` does not turn into `false`. None of them is a `ZammadAPI::Error`.
+- A `Cookie` header is redacted in the debug log, and so is `Proxy-Authorization`. A raw
+  request takes headers of its own and the request line prints them, and neither name
+  matched the words that mark a credential, so `client.get(path, headers: {'Cookie' =>
+  ...})` wrote the session out in full.
 
 ### Changed
 

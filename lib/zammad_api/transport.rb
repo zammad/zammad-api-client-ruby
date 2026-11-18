@@ -120,7 +120,8 @@ module ZammadAPI
       *CONNECTION_ERRORS
     ].freeze
 
-    # Substrings that mark a request payload key as carrying a credential.
+    # Substrings that mark a key of what a request carries - its payload, its
+    # query, its headers - as holding a credential.
     # Matching on a substring rather than the whole key covers the variants
     # Zammad and OAuth actually send - password_confirm, access_token,
     # refresh_token, client_secret - which an exact-match list silently let
@@ -133,7 +134,15 @@ module ZammadAPI
     # rather than as a substring, so `ssh_key` and `key` are covered while
     # `keyboard` and `monkey_id` are not; `apikey` is spelled out because
     # nothing separates the word there.
-    SENSITIVE_KEY_PATTERN = /password|passwd|pwd|token|secret|credential|api_?key|(?<![a-z])keys?(?![a-z])/i
+    #
+    # `cookie` and `authorization` are here for the headers. A raw request
+    # takes headers of its own, and the log prints them: `Cookie` carries a
+    # session and matched nothing above, so `client.get(path, headers:
+    # {'Cookie' => ...})` wrote it out in full at debug level, and
+    # `Proxy-Authorization` went the same way. `Authorization` itself never
+    # gets this far - {RESERVED_HEADERS} refuses it - but every header named
+    # after it carries what it carries.
+    SENSITIVE_KEY_PATTERN = /password|passwd|pwd|token|secret|credential|cookie|authorization|api_?key|(?<![a-z])keys?(?![a-z])/i
 
     REDACTED = '[REDACTED]'
 

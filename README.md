@@ -997,8 +997,9 @@ client = ZammadAPI::Client.new(
 )
 ```
 
-Requests, response statuses and durations are logged at `debug` level. Payload keys that
-look like credentials (`password`, `token`, `secret`, ...) are redacted.
+Requests, response statuses and durations are logged at `debug` level. Payload keys, query
+parameters and headers that look like credentials (`password`, `token`, `secret`, `cookie`,
+...) are redacted.
 
 ## Testing code that uses this client
 

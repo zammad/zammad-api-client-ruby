@@ -1023,6 +1023,54 @@ RSpec.describe ZammadAPI::Transport do
         expect(log).to include('login: "jane"')
       end
     end
+
+    # A raw request takes headers of its own and the request line prints
+    # them. `Cookie` carries a session and matched none of the credential
+    # words, so it was written out in full.
+    context 'with credential-bearing headers' do
+      subject(:log) { log_device.string }
+
+      let(:log_device) { StringIO.new }
+
+      before do
+        stub_request(:get, url).to_return(json_response([]))
+        unit_transport(logger: Logger.new(log_device, level: Logger::DEBUG)).get(
+          'api/v1/groups',
+          operation: 'test',
+          headers:   {
+            'Cookie'              => '_zammad_session=cookie-s3cret',
+            'Proxy-Authorization' => 'Basic proxy-s3cret',
+            'X-CSRF-Token'        => 'csrf-s3cret',
+            'X-Request-Id'        => 'request-123'
+          }
+        )
+      end
+
+      it 'redacts a Cookie' do
+        expect(log).not_to include('cookie-s3cret')
+      end
+
+      it 'marks the redacted header, under the name it is sent as' do
+        expect(log).to include('"cookie" => "[REDACTED]"')
+      end
+
+      it 'redacts a Proxy-Authorization' do
+        expect(log).not_to include('proxy-s3cret')
+      end
+
+      it 'redacts a token header' do
+        expect(log).not_to include('csrf-s3cret')
+      end
+
+      it 'keeps a header that carries no credential' do
+        expect(log).to include('"x-request-id" => "request-123"')
+      end
+
+      it 'still sends the headers as they were given' do
+        expect(a_request(:get, url).with(headers: { 'Cookie' => '_zammad_session=cookie-s3cret', 'Proxy-Authorization' => 'Basic proxy-s3cret' }))
+          .to have_been_made
+      end
+    end
   end
 
   # `request` documents that every failure leaves it as a ZammadAPI::Error.
