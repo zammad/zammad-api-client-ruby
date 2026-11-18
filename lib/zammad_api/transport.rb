@@ -654,7 +654,7 @@ module ZammadAPI
         # message it had just been taken out of, and one carrying `\1` cut
         # the replacement short instead.
         #
-        # Both spellings of the value, because the error being quoted may
+        # Every spelling of the value, because the error being quoted may
         # have inspected it rather than interpolated it: URI::InvalidURIError
         # does, and inspect escapes exactly the backslashes, quotes and
         # control characters that make a URL invalid in the first place. The
@@ -662,12 +662,21 @@ module ZammadAPI
         # matched nothing and left the password standing in full - the case
         # this method exists for, reached through the quoting rather than
         # the value.
-        inspected = value.inspect
-        quoted    = inspected[1...-1] || inspected
-
-        text.gsub(value) { redacted }.gsub(quoted) { redacted }
+        quoted_spellings(value).inject(text) { |scrubbed, spelling| scrubbed.gsub(spelling) { redacted } }
       end
     end
+
+    # The value as an error may have quoted it: as it is, as +inspect+
+    # writes it, and as +dump+ does.
+    #
+    # The last two part ways at the first character outside ASCII, which
+    # +inspect+ leaves standing and +dump+ writes as an escape, and URI
+    # rejects a URL holding one with the +dump+ spelling: "URI must be ascii
+    # only" and the value with every such character as `\u00E4`. A password
+    # with an umlaut in it therefore matched neither of the two spellings
+    # that were looked for, and stayed in the message - and in the cause,
+    # which is kept wherever redaction finds nothing to change.
+    def quoted_spellings(value) = [value, value.inspect[1...-1], value.dump[1...-1]].compact.uniq
 
     def apply_authentication(faraday)
       case config.authentication_scheme

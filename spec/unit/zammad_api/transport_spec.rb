@@ -1279,6 +1279,39 @@ RSpec.describe ZammadAPI::Transport do
       end
     end
 
+    # URI turns away a URL holding a character outside ASCII, and quotes it
+    # through `dump`, which writes that character as an escape where
+    # `inspect` leaves it standing. Neither spelling that was looked for
+    # matched, so the password stayed in the message and in the cause.
+    context 'when the password carries a character outside ASCII, which dump escapes' do
+      let(:proxy) { 'http://user:pässwörd@proxyhost:3128' }
+
+      it 'keeps the password out of the message' do
+        expect { unit_transport(proxy: proxy) }
+          .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.message).not_to match(/ssw|user:/) }
+      end
+
+      it 'still says which value was rejected' do
+        expect { unit_transport(proxy: proxy) }
+          .to raise_error(ZammadAPI::ConfigurationError, %r{URI must be ascii only "http://\[REDACTED\]@proxyhost:3128"})
+      end
+
+      it 'keeps the password out of the whole report' do
+        expect { unit_transport(proxy: proxy) }
+          .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.full_message(highlight: false)).not_to match(/ssw|user:/) }
+      end
+
+      it 'does not carry the error that quotes the password along as its cause' do
+        expect { unit_transport(proxy: proxy) }
+          .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.cause).to be_nil }
+      end
+
+      it 'keeps it out of the message where the instance url carries it' do
+        expect { unit_transport(url: 'https://admin:pässwörd@zammad.test/') }
+          .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.full_message(highlight: false)).not_to match(/ssw|admin:/) }
+      end
+    end
+
     # `\0` in a gsub replacement String expands to the matched text, which is
     # the unredacted value.
     context 'when the value carries a sequence a gsub replacement would expand' do

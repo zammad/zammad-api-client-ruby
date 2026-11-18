@@ -362,7 +362,9 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   while building the connection redacts the configured url and proxy out of the underlying
   message too, including where that message quoted the value through `inspect` rather than
   interpolating it — which is what `URI::InvalidURIError` does, for exactly the characters
-  that make a URL invalid.
+  that make a URL invalid — or through `dump`, which is how it quotes a URL holding a
+  character outside ASCII: a proxy password with an umlaut in it stayed in the message, and
+  in the error kept as its cause.
 - `on_behalf_of` no longer leaks: the old `perform_on_behalf_of` used `tap` without an
   `ensure`, so an exception inside the block left the `From` header set on every later
   request.
