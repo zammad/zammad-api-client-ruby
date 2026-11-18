@@ -420,6 +420,15 @@ module ZammadAPI
     # here to check the hits against. +role_ids:+ with at least one id
     # narrows on both paths.
     #
+    # +role_ids:+ is no access check either. Both paths ask who holds the
+    # role - the SQL one joins the roles a user has, the Elasticsearch one
+    # matches the role ids a user is indexed with - and neither asks whether
+    # the role is active, which is what Zammad asks before it grants
+    # anything through one: Role.with_permissions leaves a disabled role
+    # out. Neither asks whether the user is active. So a user matches a role
+    # that grants nothing any more, and the hits are who to look at, not who
+    # may.
+    #
     # @example
     #   client.users.search('smith')
     #   client.users.search('smith', role_ids: [2])

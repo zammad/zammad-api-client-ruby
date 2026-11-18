@@ -788,8 +788,15 @@ of the roles, not one with both. And where the instance searches through Elastic
 permission that no active role grants resolves to no role at all, and Zammad then leaves
 the filter out: `permissions: ['ticket.agnet']`, or a permission nobody has been given,
 comes back with every user matching the term. Without Elasticsearch the same search is
-empty. Nothing in the response says which of the two answered, so where the result
-decides what someone may do, name the roles with `role_ids:`, which narrows on both.
+empty, and nothing in the response says which of the two answered. `role_ids:` narrows
+on both.
+
+`role_ids:` is not an access check either. It asks who holds a role, and Zammad does not
+ask whether the role still grants anything: a user matches a role that has been disabled,
+and a user who has been deactivated matches as well, though neither can do what the role
+allowed. So the hits are candidates. Where the result decides what someone may do, check
+each one: the user's `active`, and the `active` and the permissions of the roles in
+their `role_ids`, which `client.resource` reaches at `api/v1/roles`.
 
 Any other keyword raises `ArgumentError`. Zammad drops a parameter it does not know, so
 `search('smith', active: true)` would come back unnarrowed with nothing to say so; an

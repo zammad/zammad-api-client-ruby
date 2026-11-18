@@ -232,7 +232,8 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   to them, or a Hash of group id to access, `group_ids: {2 => ['read']}`, for any other:
   Zammad reads a group named without an access as `full`. `permissions:` is not an access
   check: where Zammad searches through Elasticsearch, a permission no active role grants
-  leaves the search unnarrowed, and the README says what to use instead.
+  leaves the search unnarrowed. `role_ids:` narrows on both paths and is not one either: it
+  matches a user holding a role that has been disabled. The README says what to check.
 - There is no `where`. During the development of 2.0 there was one, which took `sort_by`
   and `order_by` on a generic index, nothing at all on tickets and users, and the search
   parameters on a search, and raised for everything else — an attribute filter above all,
