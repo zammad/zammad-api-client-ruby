@@ -333,6 +333,35 @@ RSpec.describe ZammadAPI::Associations::Proxy do
       end
     end
 
+    # The write clears the memo, and the lookup that was already out then
+    # filled it again, with the record behind the value from before. A logger
+    # or a middleware of the caller's that reaches the record is enough, on
+    # one thread; so is a second thread.
+    context 'when the foreign key is written while a lookup is on the wire' do
+      before do
+        stub_request(:get, "#{users_url}/7").with(query: hash_including({})).to_return do
+          ticket.customer_id = 9
+          json_response({ id: 7 })
+        end
+      end
+
+      it 'answers that lookup with the record it asked for' do
+        expect(related.customer.id).to eq(7)
+      end
+
+      it 'does not keep that answer for the record the key now names' do
+        related.customer
+
+        expect(related.customer.id).to eq(9)
+      end
+
+      it 'memoizes the lookup made after it' do
+        3.times { related.customer }
+
+        expect(a_request(:get, "#{users_url}/9").with(query: hash_including({}))).to have_been_made.once
+      end
+    end
+
     it 'leaves the proxy of a copy to the copy' do
       related.customer
       copy = ticket.dup

@@ -658,7 +658,10 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   and `ticket.customer_id = 9`, `related.customer` went on answering with the user it had
   resolved before, and the same after a reload. A record keeps one proxy now and empties
   it. A kept one also refuses a destroyed record, as `related` does, where it used to
-  answer from its memo and request the articles of a ticket that is gone.
+  answer from its memo and request the articles of a ticket that is gone. A lookup that is
+  still on the wire when the foreign key is written, by a logger or a middleware that
+  reaches the record or by another thread, no longer leaves the record it fetched behind as
+  the answer for the new key.
 - Records of two Zammad instances are no longer equal for sharing a class and an id. An id
   is only unique within one installation, so a script reading two of them, such as a
   migration or a sync, held ticket 1 of each as one record: `uniq` dropped one of the two,

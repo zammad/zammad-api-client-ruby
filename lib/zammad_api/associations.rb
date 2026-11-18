@@ -41,9 +41,19 @@ module ZammadAPI
       # and an unmemoized reader would turn a loop over tickets into a request
       # per ticket per mention. The record empties the memo through
       # {#forget_targets} when what it was resolved from may no longer hold.
+      #
+      # What is resolved goes into the memo this call began with, not the one
+      # that is current once the request is back. They differ where the
+      # record was written to while the request was out - by a logger or a
+      # middleware of the caller's that reaches the record, or by another
+      # thread - and {#forget_targets} has swapped the memo for an empty one.
+      # Written to the current memo, the user fetched for `customer_id` 7
+      # became the memoized answer for a record that by then says 9, and
+      # stayed it until the next write.
       def belongs_to_target(name, class_name, foreign_key)
         refuse_destroyed!(name)
-        return @cache[name] if @cache.key?(name)
+        memo = @cache
+        return memo[name] if memo.key?(name)
 
         id = @record[foreign_key]
         # {Resources::Base.fetch_one} rather than a ResourceProxy built for the
@@ -53,7 +63,7 @@ module ZammadAPI
         # reading two associations each into twenty thousand objects that exist
         # for a single method call. It is the read {ResourceProxy#find} makes
         # too, so there is one of it rather than one here and one there.
-        @cache[name] = id.nil? ? nil : resolve(class_name).fetch_one(@record.transport, id)
+        memo[name] = id.nil? ? nil : resolve(class_name).fetch_one(@record.transport, id)
       end
 
       # Deliberately not memoized: a list can grow while the record is held,
@@ -93,8 +103,12 @@ module ZammadAPI
       # after `ticket.customer_id = 9` or a reload `related.customer` went on
       # answering with the user it had resolved before. A memo can only be
       # emptied where it is held, so it is emptied here.
+      #
+      # Replaced rather than cleared, so that a lookup still on the wire has
+      # nowhere to put what it resolved from the value before: see
+      # {#belongs_to_target}.
       def forget_targets
-        @cache.clear
+        @cache = {}
       end
 
       # Refuses to read through a record that was destroyed.
