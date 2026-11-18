@@ -367,6 +367,14 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   that make a URL invalid — or through `dump`, which is how it quotes a URL holding a
   character outside ASCII: a proxy password with an umlaut in it stayed in the message, and
   in the error kept as its cause.
+- The debug log redacts a body handed over as a String and a query string written into the
+  path. Redaction went by key, on a Hash or a list, so
+  `client.post(path, body: '{"password":"..."}')` was logged as it stood, and
+  `client.get('api/v1/users/password_reset_verify?token=...')` printed the token in the
+  request line and the response line. A String body is read for its keys where it is JSON
+  and replaced by its size where it is not. The path is redacted by parameter name, also
+  in the message of a timeout and in the operation a raw request is named by in every
+  error it raises.
 - `on_behalf_of` no longer leaks: the old `perform_on_behalf_of` used `tap` without an
   `ensure`, so an exception inside the block left the `From` header set on every later
   request.

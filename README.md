@@ -1109,7 +1109,9 @@ client = ZammadAPI::Client.new(
 
 Requests, response statuses and durations are logged at `debug` level. Payload keys, query
 parameters and headers that look like credentials (`password`, `token`, `secret`, `cookie`,
-...) are redacted.
+...) are redacted. That holds for a query string written into the path of a raw request,
+in the log and in the message of an error the request raises, and for a body handed over
+as a String where it is JSON. A String body that is not JSON is not logged, only its size.
 
 ## Testing code that uses this client
 

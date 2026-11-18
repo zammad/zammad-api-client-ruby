@@ -623,6 +623,15 @@ RSpec.describe ZammadAPI::Client do
           .to raise_error(ZammadAPI::ServerError, "Can't GET api/v1/roles: HTTP 500")
       end
 
+      # The path names the request in every error it raises, and a query
+      # written into it went along: a token in an exception report.
+      it 'names it without a credential in a query written into the path' do
+        stub_request(:get, roles_url).with(query: hash_including({})).to_return(json_response({}, status: 500))
+
+        expect { client.get('api/v1/roles?token=path-s3cret&page=2') }
+          .to raise_error(ZammadAPI::ServerError, "Can't GET api/v1/roles?token=[REDACTED]&page=2: HTTP 500")
+      end
+
       it 'hands back a non-JSON body untouched' do
         stub_request(:get, roles_url).to_return(status: 200, body: 'plain', headers: { 'Content-Type' => 'text/plain' })
 

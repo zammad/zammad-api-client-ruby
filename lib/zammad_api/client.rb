@@ -444,7 +444,10 @@ module ZammadAPI
       @transport.request(
         method,
         relative,
-        operation: "#{method.to_s.upcase} #{relative}",
+        # Named by the path as it may be printed. The operation is in the
+        # message of every error the request raises, and a query string
+        # written into the path may carry a token.
+        operation: "#{method.to_s.upcase} #{Transport.redact_path(relative)}",
         query:     query,
         body:      body,
         headers:   headers

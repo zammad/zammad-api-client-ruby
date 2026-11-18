@@ -37,6 +37,8 @@ module ZammadAPI
 
     @connection: untyped
 
+    def self.redact_path: (untyped path) -> String
+    def self.redact_query_pair: (String pair) -> String
     def self.stringify_query: (Hash[untyped, untyped]) -> Hash[String, untyped]
     def self.stringify_query_hash: (Hash[untyped, untyped], String?) -> Hash[String, untyped]
     def self.stringify_query_value: (String, untyped) -> untyped
@@ -71,6 +73,8 @@ module ZammadAPI
     def log_request: (Symbol, String, Hash[Symbol, untyped]?, untyped, Hash[String, String]?) -> void
     def log_response: (Symbol, String, Response, Float) -> void
     def redact: (untyped) -> untyped
+    def loggable_body: (untyped body) -> untyped
+    def unlogged_body: (String body) -> String
     def reportable_cause: (StandardError error) -> StandardError?
     def redact_config_values: (untyped message) -> String
     def quoted_spellings: (String value) -> Array[String]

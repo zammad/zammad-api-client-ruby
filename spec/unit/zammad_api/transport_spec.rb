@@ -218,6 +218,39 @@ RSpec.describe ZammadAPI::Transport do
     end
   end
 
+  # The path is printed in the log, in the message of a timeout and in the
+  # operation a raw request is named by, and a raw request may carry its
+  # query in it.
+  describe '.redact_path' do
+    it 'leaves a path without a query as it is' do
+      expect(described_class.redact_path('api/v1/tickets/1')).to eq('api/v1/tickets/1')
+    end
+
+    it 'blanks the value of a parameter named like a credential' do
+      expect(described_class.redact_path('api/v1/x?token=s3cret')).to eq('api/v1/x?token=[REDACTED]')
+    end
+
+    it 'keeps every other parameter as it was written' do
+      expect(described_class.redact_path('api/v1/x?page=2&password=s3cret&q=a%20b')).to eq('api/v1/x?page=2&password=[REDACTED]&q=a%20b')
+    end
+
+    it 'reads a name that was percent-encoded' do
+      expect(described_class.redact_path('api/v1/x?user%5Bpassword%5D=s3cret')).to eq('api/v1/x?user%5Bpassword%5D=[REDACTED]')
+    end
+
+    it 'blanks a value whose name cannot be read' do
+      expect(described_class.redact_path('api/v1/x?%zz=s3cret')).to eq('api/v1/x?%zz=[REDACTED]')
+    end
+
+    it 'keeps a parameter with no value' do
+      expect(described_class.redact_path('api/v1/x?expand&token=s3cret')).to eq('api/v1/x?expand&token=[REDACTED]')
+    end
+
+    it 'blanks a value that holds a = of its own' do
+      expect(described_class.redact_path('api/v1/x?token=a=b')).to eq('api/v1/x?token=[REDACTED]')
+    end
+  end
+
   describe '.escape_path_segment' do
     it 'leaves an ordinary id alone' do
       expect(described_class.escape_path_segment(42)).to eq('42')
@@ -388,6 +421,12 @@ RSpec.describe ZammadAPI::Transport do
       stub_request(:get, url).to_raise(Net::ReadTimeout)
       expect { unit_transport.get('api/v1/groups', operation: 'find object') }
         .to raise_error(ZammadAPI::TimeoutError, %r{Can't find object: request to api/v1/groups timed out})
+    end
+
+    it 'keeps a credential in a query written into the path out of the message' do
+      stub_request(:get, url).with(query: hash_including({})).to_raise(Net::ReadTimeout)
+      expect { unit_transport.get('api/v1/groups?token=path-s3cret', operation: 'find object') }
+        .to raise_error(ZammadAPI::TimeoutError, %r{request to api/v1/groups\?token=\[REDACTED\] timed out})
     end
 
     # Net::HTTP raises Net::OpenTimeout for it, and the default adapter wraps
@@ -1159,6 +1198,92 @@ RSpec.describe ZammadAPI::Transport do
 
       it 'still keeps a non-sensitive value' do
         expect(log).to include('login: "jane"')
+      end
+    end
+
+    # A body handed over as a String is the caller's own encoding. Redaction
+    # goes by key and found none in a String, so the payload line printed it
+    # as it stood.
+    context 'with a body handed over as a String' do
+      subject(:log) { log_device.string }
+
+      let(:log_device) { StringIO.new }
+      let(:transport)  { unit_transport(logger: Logger.new(log_device, level: Logger::DEBUG)) }
+
+      before { stub_request(:post, url).to_return(json_response({ id: 1 }, status: 201)) }
+
+      it 'redacts a credential in one that is JSON' do
+        transport.post('api/v1/groups', operation: 'test', body: '{"login":"jane","password":"string-s3cret"}')
+
+        expect(log).not_to include('string-s3cret')
+      end
+
+      it 'keeps what is not a credential readable, redacted by key like a Hash' do
+        transport.post('api/v1/groups', operation: 'test', body: '{"login":"jane","password":"string-s3cret"}')
+
+        expect(log).to include('Zammad API payload: {"login" => "jane", "password" => "[REDACTED]"}')
+      end
+
+      it 'redacts one nested in a JSON list' do
+        transport.post('api/v1/groups', operation: 'test', body: '[{"user":{"api_key":"string-s3cret"}}]')
+
+        expect(log).not_to include('string-s3cret')
+      end
+
+      it 'does not log one that is not JSON, and says how much was left out' do
+        transport.post('api/v1/groups', operation: 'test', body: 'login=jane&password=string-s3cret')
+
+        expect(log).not_to include('string-s3cret')
+        expect(log).to include('Zammad API payload: "[33 bytes that are not a JSON object or array, not logged]"')
+      end
+
+      it 'does not log a JSON value with no keys to go by' do
+        transport.post('api/v1/groups', operation: 'test', body: '"string-s3cret"')
+
+        expect(log).not_to include('string-s3cret')
+      end
+
+      it 'does not raise for bytes that are not text' do
+        expect { transport.post('api/v1/groups', operation: 'test', body: "\xFF\xFEstring-s3cret".b) }.not_to raise_error
+        expect(log).not_to include('string-s3cret')
+      end
+
+      it 'still sends the body as it was given' do
+        transport.post('api/v1/groups', operation: 'test', body: '{"login":"jane","password":"string-s3cret"}')
+
+        expect(a_request(:post, url).with(body: '{"login":"jane","password":"string-s3cret"}')).to have_been_made
+      end
+    end
+
+    # A raw request may carry its query in the path. The `query:` Hash is
+    # redacted by key, and the same parameter written into the path was
+    # printed in full, in the request line and in the response line.
+    context 'with a query string written into the path' do
+      subject(:log) { log_device.string }
+
+      let(:log_device) { StringIO.new }
+      let(:verify)     { 'api/v1/users/password_reset_verify?token=path-s3cret&locale=de' }
+
+      before do
+        stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/users/password_reset_verify").with(query: hash_including({})).to_return(json_response({}))
+        unit_transport(logger: Logger.new(log_device, level: Logger::DEBUG)).get(verify, operation: 'test')
+      end
+
+      it 'redacts a credential in it' do
+        expect(log).not_to include('path-s3cret')
+      end
+
+      it 'marks it in the request line, and keeps the other parameters' do
+        expect(log).to include('Zammad API request: GET api/v1/users/password_reset_verify?token=[REDACTED]&locale=de')
+      end
+
+      it 'marks it in the response line' do
+        expect(log).to include('Zammad API response: GET api/v1/users/password_reset_verify?token=[REDACTED]&locale=de -> 200')
+      end
+
+      it 'still sends the query as it was given' do
+        expect(a_request(:get, "#{ClientHelper::BASE_URL}api/v1/users/password_reset_verify").with(query: { 'token' => 'path-s3cret', 'locale' => 'de' }))
+          .to have_been_made
       end
     end
 

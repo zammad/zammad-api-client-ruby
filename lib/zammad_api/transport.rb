@@ -442,6 +442,49 @@ module ZammadAPI
                            "this client's credentials to another host. Pass the path alone, such as 'api/v1/tickets'."
     end
 
+    # A request path as it may be printed: with the credentials of a query
+    # string written into it blanked.
+    #
+    # A raw request may carry its query in the path -
+    # `client.get('api/v1/users/password_reset_verify?token=...')` is how the
+    # Zammad documentation spells that endpoint - and the path is printed in
+    # three places: the two log lines for a request, the message of a
+    # timeout, and the operation a raw request is named by in every error it
+    # raises. The `query:` Hash is redacted by key before it is logged, and
+    # the same parameter written into the path went out in full in all
+    # three.
+    #
+    # Redacted by name, as the Hash is, and written back as it was given
+    # otherwise. A name that cannot be decoded cannot be read, so its value
+    # is blanked rather than assumed to be harmless.
+    #
+    # Public for {Client}, which names a raw request by its path.
+    #
+    # @api private
+    # @param path [Object]
+    # @return [String]
+    def self.redact_path(path)
+      base, mark, query = path.to_s.partition('?')
+      return base if mark.empty?
+
+      "#{base}?#{query.split('&', -1).map { redact_query_pair(it) }.join('&')}"
+    end
+
+    # @api private
+    # @return [String]
+    def self.redact_query_pair(pair)
+      name, mark, = pair.partition('=')
+      return pair if mark.empty?
+
+      decoded = begin
+        URI.decode_www_form_component(name)
+      rescue ArgumentError
+        nil
+      end
+
+      decoded && !SENSITIVE_KEY_PATTERN.match?(decoded) ? pair : "#{name}=#{REDACTED}"
+    end
+
     # The bytes a request body goes out as.
     #
     # Encoded here rather than left to Faraday's JSON middleware, because a
@@ -561,7 +604,7 @@ module ZammadAPI
 
       raise ResponseError.build(response, operation: operation, resource_class: resource_class)
     rescue Faraday::TimeoutError, *TIMEOUT_ERRORS => e
-      raise TimeoutError, "Can't #{operation}: request to #{path} timed out (#{e.message})"
+      raise TimeoutError, "Can't #{operation}: request to #{Transport.redact_path(path)} timed out (#{e.message})"
     rescue Faraday::SSLError, *SSL_ERRORS => e
       raise ConnectionError, "Can't #{operation}: TLS handshake with #{config.redacted_url} failed (#{e.message})"
     rescue Faraday::ConnectionFailed, *CONNECTION_ERRORS => e
@@ -879,14 +922,36 @@ module ZammadAPI
     end
 
     def log_request(method, path, query, body, headers)
-      logger.debug { "Zammad API request: #{method.to_s.upcase} #{path}#{" query=#{redact(query).inspect}" if query}#{" headers=#{redact(headers).inspect}" if headers}" }
-      logger.debug { "Zammad API payload: #{redact(body).inspect}" } if body
+      logger.debug do
+        "Zammad API request: #{method.to_s.upcase} #{Transport.redact_path(path)}#{" query=#{redact(query).inspect}" if query}#{" headers=#{redact(headers).inspect}" if headers}"
+      end
+      logger.debug { "Zammad API payload: #{loggable_body(body).inspect}" } if body
     end
 
     def log_response(method, path, response, started)
       duration = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round
-      logger.debug { "Zammad API response: #{method.to_s.upcase} #{path} -> #{response.status} in #{duration}ms" }
+      logger.debug { "Zammad API response: #{method.to_s.upcase} #{Transport.redact_path(path)} -> #{response.status} in #{duration}ms" }
     end
+
+    # What the log prints for a request body.
+    #
+    # A body handed over as a String is the caller's own encoding, and
+    # {#redact} works by key: it had no keys to go by, so
+    # `client.post(path, body: '{"login":"a","password":"hunter2"}')` was
+    # written to the log as it stood. Where the String is JSON it is read
+    # for its keys and redacted like the structure it spells. Where it is
+    # not - a form body, a file - nothing in it can be told from a
+    # credential, and its size is logged in its place.
+    def loggable_body(body)
+      return redact(body) if !body.is_a?(String)
+
+      decoded = JSON.parse(body)
+      decoded.is_a?(Hash) || decoded.is_a?(Array) ? redact(decoded) : unlogged_body(body)
+    rescue JSON::JSONError, EncodingError
+      unlogged_body(body)
+    end
+
+    def unlogged_body(body) = "[#{body.bytesize} bytes that are not a JSON object or array, not logged]"
 
     def redact(value)
       case value
