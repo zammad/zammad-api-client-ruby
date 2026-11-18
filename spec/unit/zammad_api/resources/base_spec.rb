@@ -809,6 +809,52 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(group).not_to eq(user)
     end
 
+    # An id is only unique within one installation. A script that reads two
+    # of them holds a group 1 from each, and they are two records.
+    context 'with records of two Zammad instances' do
+      let(:here)  { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1) }
+      let(:there) { ZammadAPI::Resources::Group.from_response(unit_transport(url: 'http://other.test/'), id: 1) }
+
+      it 'tells the same id apart' do
+        expect(here).not_to eq(there)
+      end
+
+      it 'keeps both through uniq' do
+        expect([here, there].uniq.size).to eq(2)
+      end
+
+      it 'keeps both as members of a Set' do
+        expect(Set[here, there].size).to eq(2)
+      end
+
+      it 'does not answer for one with the value stored under the other' do
+        expect({ here => :handled }[there]).to be_nil
+      end
+    end
+
+    context 'with a record read through two clients for one instance' do
+      let(:record) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1) }
+
+      it 'is the same record through a client with other options' do
+        other = ZammadAPI::Resources::Group.from_response(unit_transport(timeout: 5, http_token: 'another'), id: 1)
+
+        expect(record).to eq(other)
+        expect(record.hash).to eq(other.hash)
+      end
+
+      it 'is the same record through an on_behalf_of scope' do
+        scoped = ZammadAPI::Resources::Group.from_response(unit_transport.with_on_behalf_of('agent@example.com'), id: 1)
+
+        expect([record, scoped].uniq.size).to eq(1)
+      end
+
+      it 'is the same record whether or not the url was written with its trailing slash' do
+        other = ZammadAPI::Resources::Group.from_response(unit_transport(url: ClientHelper::BASE_URL.chomp('/')), id: 1)
+
+        expect(record).to eq(other)
+      end
+    end
+
     it 'identifies a record by its id once its first save assigns one' do
       stub_request(:post, url).with(query: hash_including({})).to_return(json_response({ id: 7, name: 'Support' }))
       group = client.groups.new(name: 'Support')

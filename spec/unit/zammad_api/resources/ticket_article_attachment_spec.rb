@@ -20,6 +20,19 @@ RSpec.describe ZammadAPI::Resources::TicketArticleAttachment do
       expect(attachment.id).to eq(3)
     end
 
+    it 'is the same attachment as another read of it' do
+      expect(attachment).to eq(article.attachments.first)
+    end
+
+    it 'is not the attachment with that id on another Zammad instance' do
+      elsewhere = ZammadAPI::Resources::TicketArticle
+        .from_response(unit_transport(url: 'http://other.test/'), article.to_h)
+        .attachments.first
+
+      expect(attachment).not_to eq(elsewhere)
+      expect([attachment, elsewhere].uniq.size).to eq(2)
+    end
+
     it 'carries the filename' do
       expect(attachment.filename).to eq('note.txt')
     end

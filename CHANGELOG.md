@@ -650,6 +650,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   resolved before, and the same after a reload. A record keeps one proxy now and empties
   it. A kept one also refuses a destroyed record, as `related` does, where it used to
   answer from its memo and request the articles of a ticket that is gone.
+- Records of two Zammad instances are no longer equal for sharing a class and an id. An id
+  is only unique within one installation, so a script reading two of them, such as a
+  migration or a sync, held ticket 1 of each as one record: `uniq` dropped one of the two,
+  and a Hash keyed by record answered for one instance with the other's value. `==`,
+  `eql?` and `hash` take in the `url` the record's client was configured with. Two clients
+  for one URL, and a client and its `on_behalf_of` scope, still hold the same record.
 
 ### Changed
 

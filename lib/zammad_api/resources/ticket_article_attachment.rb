@@ -40,6 +40,11 @@ module ZammadAPI
       def inspect
         "#<#{self.class.name} id=#{id.inspect} filename=#{self[:filename].inspect} size=#{self[:size].inspect}>"
       end
+
+      protected
+
+      # @see AttributeAccess#installation
+      def installation = @transport.config.url
     end
   end
 end

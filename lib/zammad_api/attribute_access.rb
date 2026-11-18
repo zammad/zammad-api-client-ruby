@@ -14,7 +14,8 @@ module ZammadAPI
   # are the readers for an attribute that may be absent.
   #
   # This also carries the object protocols a record is expected to answer:
-  # {#==} and {#hash} identify a record by its id, {#deconstruct_keys} makes
+  # {#==} and {#hash} identify a record by its id and the Zammad it came
+  # from, {#deconstruct_keys} makes
   # one matchable with +case/in+, and {#to_json} serializes its attributes.
   module AttributeAccess
     # Suffixes that mark a method call as a predicate or bang method rather
@@ -126,7 +127,15 @@ module ZammadAPI
     def deconstruct_keys(keys) = keys.nil? ? attributes : attributes.slice(*keys)
 
     # Whether +other+ is the same Zammad record: the same class, carrying the
-    # same id.
+    # same id, read from the same Zammad.
+    #
+    # The last of those is the URL the client was configured with. An id is
+    # only unique within one installation, and a script that reads two of
+    # them - a migration, a sync - holds ticket 1 of each: compared by class
+    # and id alone they were one record, so `uniq` dropped one of the two and
+    # a Hash keyed by record handed back the other instance's value. Two
+    # clients for one URL, or one client and its {Client#on_behalf_of} scope,
+    # still read the same record.
     #
     # A record with no id is equal only to itself, because two unsaved records
     # are two records waiting to be created however alike their attributes
@@ -143,7 +152,9 @@ module ZammadAPI
       return true  if equal?(other)
       return false if !other.instance_of?(self.class)
 
-      !id.nil? && other.id == id
+      # The steep:ignore is for `installation`, which is protected: RBS has
+      # no word for that, so the signature declares it private.
+      !id.nil? && other.id == id && other.installation == installation # steep:ignore NoMethod
     end
     alias eql? ==
 
@@ -151,11 +162,12 @@ module ZammadAPI
     # collected in a +Set+ and used as Hash keys.
     #
     # The class is part of the digest because an id is only unique within one
-    # kind of record: ticket 1 and user 1 are different records.
+    # kind of record: ticket 1 and user 1 are different records. The
+    # installation is part of it for the same reason one level up.
     #
     # @return [Integer]
     def hash
-      id.nil? ? super : [self.class, id].hash
+      id.nil? ? super : [self.class, installation, id].hash
     end
 
     # The attributes, for a JSON encoder.
@@ -233,6 +245,21 @@ module ZammadAPI
 
       attributes.key?(name) || super
     end
+
+    protected
+
+    # Which Zammad this record was read from, for {#==} and {#hash}.
+    #
+    # Overridden by the records that hold a transport, with the URL it is
+    # configured for. That is the URL as it was written, not the host it
+    # resolves to, so two spellings of one instance count as two: nothing
+    # here can know better, and telling one installation apart from itself
+    # only costs a duplicate, where taking two for one loses a record.
+    #
+    # Protected, because it is asked of the other record and of nobody else.
+    #
+    # @return [String, nil] nil for a record that has no transport
+    def installation = nil
 
     private
 

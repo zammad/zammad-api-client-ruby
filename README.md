@@ -586,8 +586,8 @@ a variable follows the record too: after `related = ticket.related` and
 ### Comparing and serializing
 
 A record is the Zammad record it came from, not the object that happens to hold it, so two
-records of the same kind carrying the same id are equal. That makes `uniq`, `Set`, `include?`
-and records-as-Hash-keys behave:
+records of the same kind carrying the same id, read from the same Zammad, are equal. That
+makes `uniq`, `Set`, `include?` and records-as-Hash-keys behave:
 
 ```ruby
 client.tickets.find(1) == client.tickets.find(1)  # => true
@@ -602,6 +602,11 @@ A record with no id is equal only to itself, because two unsaved records are two
 waiting to be created however alike their attributes are. One consequence: a record's first
 save assigns its id and so changes its hash, and a record used as a Hash key before that
 save has to be rehashed after it.
+
+Which Zammad a record came from is the `url` its client was configured with. A script that
+reads two instances, such as a migration or a sync, therefore keeps ticket 1 of each apart,
+while two clients for one URL, or a client and its `on_behalf_of` scope, hold the same
+record.
 
 `to_json` renders the attributes, so a record can be cached, queued or logged as it stands,
 and nests inside a structure being generated:

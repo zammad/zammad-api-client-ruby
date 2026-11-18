@@ -583,6 +583,11 @@ module ZammadAPI
 
       def inspect = "#<#{self.class.name} id=#{id.inspect} new_record=#{new_record?}#{' destroyed=true' if destroyed?} attributes=#{attributes.inspect}>"
 
+      protected
+
+      # @see AttributeAccess#installation
+      def installation = transport.config.url
+
       private
 
       # Everything a record is, in the one place both ways of building one go

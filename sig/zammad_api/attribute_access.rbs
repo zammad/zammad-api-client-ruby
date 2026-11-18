@@ -26,6 +26,9 @@ module ZammadAPI
 
     private
 
+    # Protected in the source, which RBS has no way to say: it is asked of
+    # the other record in `==`, and of nobody else.
+    def installation: () -> String?
     def unknown_attribute_message: (Symbol name) -> String
     def writable_attributes?: () -> bool
     def attribute_writable?: (Symbol key) -> bool
