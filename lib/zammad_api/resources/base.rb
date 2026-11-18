@@ -392,6 +392,9 @@ module ZammadAPI
         # is worth asserting: the spec that covered this compared proxy
         # identity, so it passed throughout.
         raise_if_destroyed!('read related records from')
+        # One proxy for as long as the record lives. What a save, a reload or
+        # a write to a foreign key invalidates is what the proxy has resolved,
+        # and {#forget_related_targets} empties that where it is held.
         @related ||= self.class.related_class.new(self)
       end
 
@@ -680,7 +683,20 @@ module ZammadAPI
       def reset_pending_state!
         @changes = {}
         @error   = nil
-        @related = nil
+        forget_related_targets
+      end
+
+      # Empties the association proxy, rather than dropping it.
+      #
+      # Dropping it was the earlier answer: `@related = nil`, and the next
+      # call to {#related} built a fresh one. That reached every caller who
+      # asked again and none who had kept what they were handed, so after
+      # `related = ticket.related` a reload, a save or `ticket.customer_id = 9`
+      # left `related.customer` answering with the record it had resolved
+      # before - the stale read these calls exist to prevent, one variable
+      # away from where it was fixed.
+      def forget_related_targets
+        @related&.send(:forget_targets)
       end
 
       # The baseline is the value this record was loaded with, not the value
@@ -721,13 +737,13 @@ module ZammadAPI
         # every reader that hands it out.
         @attributes = @attributes.merge(key => staged).freeze
         # A resolved association is only correct for the id it was resolved
-        # from. `replace_attributes!` drops the proxy on save and reload, but
+        # from. `replace_attributes!` forgets them on save and reload, but
         # the write that actually changes a foreign key did not, so
         # `ticket.customer_id = 9` left `ticket.related.customer` answering
-        # with user 3 and no request to show for it. The whole proxy goes:
-        # evicting one reader means reaching into its cache for a saving that
-        # is one request at most.
-        @related = nil if self.class.belongs_to_foreign_keys.include?(key)
+        # with user 3 and no request to show for it. Every target goes:
+        # evicting one reader means reaching into the cache by name for a
+        # saving that is one request at most.
+        forget_related_targets if self.class.belongs_to_foreign_keys.include?(key)
         staged
       end
 

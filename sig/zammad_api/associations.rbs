@@ -29,6 +29,8 @@ module ZammadAPI
 
       def belongs_to_target: (Symbol name, String class_name, Symbol foreign_key) -> untyped
       def has_many_target: (Symbol name, String class_name, ^(String) -> String path) -> Array[untyped]
+      def forget_targets: () -> void
+      def refuse_destroyed!: (Symbol name) -> void
       def resolve: (String class_name) -> untyped
     end
   end

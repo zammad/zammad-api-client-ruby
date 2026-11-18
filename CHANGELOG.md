@@ -643,6 +643,13 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `search('printer', ids: ids)` followed by `ids << 7` searched for something the call was
   never given, after the filters had been checked. `search` keeps a copy of its own, which
   `page` and `order` carry on.
+- A `related` kept in a variable follows its record. A save, a reload and a write to a
+  foreign key dropped the record's association proxy and built another on the next call, so
+  only a caller who asked the record again saw the change: after `related = ticket.related`
+  and `ticket.customer_id = 9`, `related.customer` went on answering with the user it had
+  resolved before, and the same after a reload. A record keeps one proxy now and empties
+  it. A kept one also refuses a destroyed record, as `related` does, where it used to
+  answer from its memo and request the articles of a ticket that is gone.
 
 ### Changed
 

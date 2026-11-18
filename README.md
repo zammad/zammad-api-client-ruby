@@ -576,8 +576,11 @@ ticket.add_article(body: 'Reset link sent.', type: 'note')  # => the created Tic
 
 The readers live under `related` rather than on the record so that `ticket.customer` keeps
 returning the name it always did — an attribute read that silently became an HTTP request
-would be a poor trade. `belongs_to` targets are memoized, and `reload` or a save drops the
-memo; `has_many` lists are fetched each call, so an article added in between shows up.
+would be a poor trade. `belongs_to` targets are memoized, and `reload`, a save or a write
+to the foreign key drops the memo; `has_many` lists are fetched each call, so an article
+added in between shows up. A record hands out the same `related` every time, so one kept in
+a variable follows the record too: after `related = ticket.related` and
+`ticket.customer_id = 9`, `related.customer` is user 9.
 `Ticket.associations` lists what a resource declares.
 
 ### Comparing and serializing

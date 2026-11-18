@@ -247,6 +247,102 @@ RSpec.describe ZammadAPI::Associations::Proxy do
     end
   end
 
+  # `related = ticket.related` is the natural thing to write before reading
+  # two associations. The record used to drop its proxy and build another, so
+  # everything under 'the memo' above held for a caller who asked the record
+  # again and for nobody who had kept what they were handed.
+  describe 'a proxy the caller kept' do
+    let(:related) { ticket.related }
+
+    before do
+      stub_request(:get, "#{users_url}/7").with(query: hash_including({})).to_return(json_response({ id: 7 }))
+      stub_request(:get, "#{users_url}/9").with(query: hash_including({})).to_return(json_response({ id: 9 }))
+    end
+
+    it 'is the one the record goes on handing out' do
+      related.customer
+      ticket.customer_id = 9
+
+      expect(ticket.related).to be(related)
+    end
+
+    it 'follows a foreign key that was written' do
+      expect(related.customer.id).to eq(7)
+
+      ticket.customer_id = 9
+
+      expect(related.customer.id).to eq(9)
+    end
+
+    it 'follows a foreign key that assign_attributes wrote' do
+      related.customer
+      ticket.assign_attributes(title: 'Renamed', customer_id: 9)
+
+      expect(related.customer.id).to eq(9)
+    end
+
+    it 'follows a foreign key that a reload moved' do
+      related.customer
+      stub_request(:get, ticket_url).with(query: hash_including({})).to_return(json_response(ticket_attributes.merge(customer_id: 9)))
+      ticket.reload
+
+      expect(related.customer.id).to eq(9)
+    end
+
+    it 'fetches the target again after a reload that left the foreign key alone' do
+      related.customer
+      ticket.reload
+      related.customer
+
+      expect(a_request(:get, "#{users_url}/7").with(query: hash_including({}))).to have_been_made.twice
+    end
+
+    it 'fetches the target again after a save' do
+      stub_request(:put, ticket_url).with(query: hash_including({})).to_return(json_response(ticket_attributes))
+
+      related.customer
+      ticket.update!(title: 'Renamed')
+      related.customer
+
+      expect(a_request(:get, "#{users_url}/7").with(query: hash_including({}))).to have_been_made.twice
+    end
+
+    it 'keeps its memo across a write no association resolves through' do
+      related.customer
+      ticket.title = 'Renamed'
+      related.customer
+
+      expect(a_request(:get, "#{users_url}/7").with(query: hash_including({}))).to have_been_made.once
+    end
+
+    context 'when the record was destroyed' do
+      before do
+        stub_request(:delete, ticket_url).to_return(json_response({}))
+        related.customer
+        ticket.destroy
+      end
+
+      it 'refuses a target it had already resolved' do
+        expect { related.customer }
+          .to raise_error(ZammadAPI::Error, 'ZammadAPI::Resources::Ticket 42 was destroyed, there is nothing to read customer from')
+      end
+
+      it 'refuses a list, rather than requesting it for a record that is gone' do
+        expect { related.articles }.to raise_error(ZammadAPI::Error, /was destroyed/)
+        expect(a_request(:get, %r{ticket_articles/by_ticket})).not_to have_been_made
+      end
+    end
+
+    it 'leaves the proxy of a copy to the copy' do
+      related.customer
+      copy = ticket.dup
+      copy.customer_id = 9
+
+      expect(related.customer.id).to eq(7)
+      expect(copy.related.customer.id).to eq(9)
+    end
+  end
+
   describe '.belongs_to_foreign_keys' do
     it 'lists the keys a resource resolves associations through' do
       expect(ZammadAPI::Resources::Ticket.belongs_to_foreign_keys)

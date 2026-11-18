@@ -39,8 +39,10 @@ module ZammadAPI
 
       # Memoized: the record an id points at does not change under the caller,
       # and an unmemoized reader would turn a loop over tickets into a request
-      # per ticket per mention. {Resources::Base#reload} drops the memo.
+      # per ticket per mention. The record empties the memo through
+      # {#forget_targets} when what it was resolved from may no longer hold.
       def belongs_to_target(name, class_name, foreign_key)
+        refuse_destroyed!(name)
         return @cache[name] if @cache.key?(name)
 
         id = @record[foreign_key]
@@ -64,6 +66,7 @@ module ZammadAPI
       # users endpoint, the same way an unescaped {Resources::Base#member_path}
       # used to - and a proc is exactly where that is easy to forget.
       def has_many_target(name, class_name, path)
+        refuse_destroyed!(name)
         raise Error, "#{@record.class.name} has no id, so it has no #{name} to read; save it first" if @record.id.nil?
 
         target_class = resolve(class_name)
@@ -77,6 +80,33 @@ module ZammadAPI
         )
         records = response.decoded(:array, operation: operation, resource_class: target_class)
         records.map { target_class.from_response(@record.transport, it) }
+      end
+
+      # Drops every resolved target, so that the next read fetches it again.
+      #
+      # Called by the record, which keeps one proxy for as long as it lives
+      # and empties it on a save, a reload, a destroy and a write to a foreign
+      # key. It used to drop the proxy and build another on the next call to
+      # {Resources::Base#related}, which reached only the callers that asked
+      # again: `related = ticket.related`, the natural thing to write before
+      # reading two associations, kept the proxy that had been dropped, and
+      # after `ticket.customer_id = 9` or a reload `related.customer` went on
+      # answering with the user it had resolved before. A memo can only be
+      # emptied where it is held, so it is emptied here.
+      def forget_targets
+        @cache.clear
+      end
+
+      # Refuses to read through a record that was destroyed.
+      #
+      # {Resources::Base#related} asks the same question, but a proxy handed
+      # out before the destroy is already past that door: it answered from
+      # its memo, and `articles` requested the articles of a ticket that is
+      # gone.
+      def refuse_destroyed!(name)
+        return if !@record.destroyed?
+
+        raise Error, "#{@record.class.name} #{@record.id} was destroyed, there is nothing to read #{name} from"
       end
 
       # The target is named rather than referenced so that resources may point
