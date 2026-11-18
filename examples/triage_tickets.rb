@@ -30,7 +30,13 @@ client.tickets.search('state.name:open').first(200).each do |ticket|
     puts "stale: ##{ticket.number} #{ticket.title}"
 
     ticket.priority = '3 high'
-    ticket.save # sends the one changed attribute, nothing else
+    # Sends the one changed attribute, nothing else. A rejection comes back as
+    # false rather than raising, so it is checked: an unchecked save carries
+    # on as if the priority had been raised.
+    if !ticket.save
+      warn "  could not raise the priority of ##{ticket.number}: #{ticket.error.message}"
+      next
+    end
 
     ticket.add_article(
       subject:  'Automated follow-up',

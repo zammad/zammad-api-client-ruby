@@ -1354,6 +1354,23 @@ If this is not the time to move, [1.x stays available](#staying-on-1x).
 
   Use `assign_attributes(name: 'Support')`, or `update` to assign and save.
 
+- **`record.save`** returns `false` when Zammad rejects the attributes, where 1.x raised.
+  Code that relied on the exception carries on after a rejected save:
+
+  ```ruby
+  ticket.state = 'closed'
+  ticket.save # false on a 422 in 2.0; nothing raises, and the ticket is still open
+  ```
+
+  Check what `save` returns and read `record.error`, or call `save!`, which raises
+  `ZammadAPI::ValidationError` as `save` used to. `update` and `update!` are the same pair.
+
+- **`collection.each`** walks every page, where 1.x read one and stopped:
+  `client.tickets.all.each { ... }` touched the first 100 tickets and now touches every
+  ticket the client can read, at a request per page. A loop written to handle the first
+  page, or one that writes to each record it is handed, does that to all of them now.
+  Limit it explicitly with `first(n)` or `page(1, per_page: n)`.
+
 - **`rescue Faraday::ConnectionFailed`** (and any other Faraday exception) no longer
   matches. Transport failures are wrapped, so rescue `ZammadAPI::ConnectionError`,
   `ZammadAPI::TimeoutError`, or `ZammadAPI::TransportError` for both.

@@ -36,10 +36,11 @@ puts "state #{ticket.state}, priority #{ticket.priority}, group #{ticket.group}"
 ticket.add_article(subject: 'Update', body: 'Reset link sent.', type: 'note')
 puts "#{ticket.articles.size} article(s)"
 
-# Assignments are staged, and `save` sends only what changed.
+# Assignments are staged, and `save` sends only what changed. It answers
+# false, with the reason in `error`, where Zammad rejects the change.
 ticket.priority = '3 high'
 puts "sending #{ticket.changes.inspect}"
-ticket.save
+abort "Zammad rejected the change: #{ticket.error.message}" if !ticket.save
 
 # Collections paginate themselves, and `first` stops as soon as it has enough.
 client.tickets.search('state.name:open').first(5).each do |open_ticket|
