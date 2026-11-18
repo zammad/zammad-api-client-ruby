@@ -684,6 +684,25 @@ module ZammadAPI
       decoded && !SENSITIVE_KEY_PATTERN.match?(decoded) ? pair : "#{name}=#{REDACTED}"
     end
 
+    # A structure as it may be printed: with the value under every key that
+    # names a credential blanked, at any depth. See {SENSITIVE_KEY_PATTERN}
+    # for which keys those are.
+    #
+    # Public for {Resources::Base#inspect}. This was the log's own rule, and
+    # a record printed the same attributes with nothing applied to them.
+    #
+    # @api private
+    # @param value [Object]
+    # @return [Object] a copy where anything was blanked, or holds a Hash or
+    #   an Array
+    def self.redact(value)
+      case value
+      when Hash  then value.to_h { |key, nested| [key, SENSITIVE_KEY_PATTERN.match?(key.to_s) ? REDACTED : redact(nested)] }
+      when Array then value.map { redact(it) }
+      else value
+      end
+    end
+
     # The bytes a request body goes out as.
     #
     # Encoded here rather than left to Faraday's JSON middleware, because a
@@ -1122,7 +1141,7 @@ module ZammadAPI
 
     def log_request(method, path, query, body, headers)
       logger.debug do
-        "Zammad API request: #{method.to_s.upcase} #{Transport.redact_path(path)}#{" query=#{redact(query).inspect}" if query}#{" headers=#{redact(headers).inspect}" if headers}"
+        "Zammad API request: #{method.to_s.upcase} #{Transport.redact_path(path)}#{" query=#{Transport.redact(query).inspect}" if query}#{" headers=#{Transport.redact(headers).inspect}" if headers}"
       end
       logger.debug { "Zammad API payload: #{loggable_body(body).inspect}" } if body
     end
@@ -1142,23 +1161,15 @@ module ZammadAPI
     # not - a form body, a file - nothing in it can be told from a
     # credential, and its size is logged in its place.
     def loggable_body(body)
-      return redact(body) if !body.is_a?(String)
+      return Transport.redact(body) if !body.is_a?(String)
 
       decoded = JSON.parse(body)
-      decoded.is_a?(Hash) || decoded.is_a?(Array) ? redact(decoded) : unlogged_body(body)
+      decoded.is_a?(Hash) || decoded.is_a?(Array) ? Transport.redact(decoded) : unlogged_body(body)
     rescue JSON::JSONError, EncodingError
       unlogged_body(body)
     end
 
     def unlogged_body(body) = "[#{body.bytesize} bytes that are not a JSON object or array, not logged]"
-
-    def redact(value)
-      case value
-      when Hash  then value.to_h { |key, nested| [key, SENSITIVE_KEY_PATTERN.match?(key.to_s) ? REDACTED : redact(nested)] }
-      when Array then value.map { redact(it) }
-      else value
-      end
-    end
 
     def logger = config.logger
   end

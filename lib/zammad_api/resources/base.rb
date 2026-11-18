@@ -648,7 +648,23 @@ module ZammadAPI
         true
       end
 
-      def inspect = "#<#{self.class.name} id=#{id.inspect} new_record=#{new_record?}#{' destroyed=true' if destroyed?} attributes=#{attributes.inspect}>"
+      # Says which record this is and what it holds, with the value of an
+      # attribute that names a credential blanked.
+      #
+      # The attributes were printed as they stood, and a record can hold a
+      # credential: `client.users.new(login: 'x', password: 'hunter2')` is
+      # how a user is given one. Its `inspect` is what IRB and `pp` show,
+      # what an RSpec failure diffs and what an exception report prints for
+      # a record it interpolates, so the password staged for one request
+      # was written wherever any of those went. The log has blanked the same
+      # key in the same request all along, by {Transport.redact}, which is
+      # the rule applied here.
+      #
+      # Only what is printed. {#attributes}, {#to_h} and {#to_json} hand over
+      # the values, because sending them is what a record is for.
+      #
+      # @return [String]
+      def inspect = "#<#{self.class.name} id=#{id.inspect} new_record=#{new_record?}#{' destroyed=true' if destroyed?} attributes=#{Transport.redact(attributes).inspect}>"
 
       protected
 

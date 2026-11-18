@@ -916,6 +916,42 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(group.inspect)
         .to eq('#<ZammadAPI::Resources::Group id=1 new_record=false attributes={id: 1, name: "Users"}>')
     end
+
+    # A record is printed by IRB, by pp, in an RSpec failure and in an
+    # exception report, and a user is given a password by staging one.
+    context 'with an attribute that names a credential' do
+      let(:user) { client.users.new(login: 'x', password: 'hunter2', preferences: { tokens: [{ access_token: 's3cret' }], locale: 'de' }) }
+
+      it 'blanks a staged password' do
+        expect(user.inspect).to include('password: "[REDACTED]"').and include('login: "x"')
+      end
+
+      it 'does not print the password anywhere' do
+        expect(user.inspect).not_to include('hunter2')
+      end
+
+      it 'blanks a credential nested in another attribute' do
+        expect(user.inspect).not_to include('s3cret')
+      end
+
+      it 'leaves what sits beside a nested credential readable' do
+        expect(user.inspect).to include('locale: "de"')
+      end
+
+      it 'is what pp prints as well' do
+        expect(PP.pp(user, +'')).not_to include('hunter2')
+      end
+
+      it 'blanks one that was written after the record was built' do
+        user.password = 'correct horse'
+        expect(user.inspect).not_to include('correct horse')
+      end
+
+      it 'still hands the value over to what sends it' do
+        expect(user.attributes[:password]).to eq('hunter2')
+        expect(user.to_h[:password]).to eq('hunter2')
+      end
+    end
   end
 
   describe '.from_response' do
