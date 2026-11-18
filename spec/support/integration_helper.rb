@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'securerandom'
+require_relative '../../script/live_target'
 
 # Helpers for integration specs, which need a reachable Zammad instance.
 class Helper
@@ -16,11 +17,11 @@ class Helper
   # commonest way to run the suite wrote test records into whatever was
   # there. Where to write is for whoever runs them to say.
   #
+  # Asked of {LiveTarget}, which rake and script/check_connection.rb ask
+  # as well, so that the three agree on whether a target was named.
+  #
   # @return [String, nil] nil when TEST_URL is not set
-  def self.target
-    url = ENV['TEST_URL'].to_s.strip
-    url.empty? ? nil : url
-  end
+  def self.target = LiveTarget.url
 
   # Where no TEST_URL is set, a URL nothing answers at stands in for it. The
   # spec files build their client while they are loaded, which is before

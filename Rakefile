@@ -4,6 +4,7 @@ require 'bundler/gem_tasks'
 require 'fileutils'
 require 'rspec/core/rake_task'
 require 'rubocop/rake_task'
+require_relative 'script/live_target'
 
 namespace :spec do
   desc 'Run the unit specs (no Zammad instance required)'
@@ -26,10 +27,7 @@ task spec: [:live_target, 'spec:unit', 'spec:integration']
 # not rather than passing over specs that were left out.
 desc 'Check that TEST_URL names the Zammad to run the live checks against'
 task :live_target do
-  next if !ENV['TEST_URL'].to_s.strip.empty?
-
-  abort 'TEST_URL is not set. This task creates and deletes records in the Zammad it runs against, so name one: ' \
-        'TEST_URL=http://localhost:3000/ TEST_USER=admin@example.com TEST_PASSWORD=test'
+  abort LiveTarget.unset_message('This task') if LiveTarget.url.nil?
 end
 
 desc 'Drive the Zammad that TEST_URL names end to end with this gem'

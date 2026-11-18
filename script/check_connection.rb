@@ -8,7 +8,7 @@
 # after booting Zammad and before the integration specs, so a broken
 # gem-to-Zammad link fails fast with a readable transcript.
 #
-#   TEST_URL=http://localhost:3000/ \
+#   TEST_URL=https://zammad.example/ \
 #   TEST_USER=admin@example.com \
 #   TEST_PASSWORD=test \
 #     bundle exec ruby script/check_connection.rb
@@ -19,11 +19,11 @@ require 'zammad_api'
 require 'faraday'
 require 'json'
 require 'securerandom'
+require_relative 'live_target'
 
 # No default for the URL. This script creates and deletes records, and
 # `http://localhost:3000/` is where a Zammad under development listens.
-URL = ENV['TEST_URL'].to_s.strip
-abort 'TEST_URL is not set. This script creates and deletes records in the Zammad it drives, so name one: TEST_URL=http://localhost:3000/' if URL.empty?
+URL = LiveTarget.url || abort(LiveTarget.unset_message('This script'))
 
 LOGIN    = ENV['TEST_USER']     || 'admin@example.com'
 PASSWORD = ENV['TEST_PASSWORD'] || 'test'

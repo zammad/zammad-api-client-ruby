@@ -1329,7 +1329,7 @@ says the integration specs were left out, and `rake spec:integration`, `rake spe
 `rake check_connection` stop before running anything.
 
 ```sh
-export TEST_URL=http://localhost:3000/
+export TEST_URL=https://zammad.example/   # a disposable Zammad, never one you keep data in
 export TEST_USER=admin@example.com
 export TEST_PASSWORD=test
 
