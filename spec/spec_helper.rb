@@ -51,6 +51,14 @@ RSpec.configure do |config|
   # The notice goes out when the first of them is loaded rather than before
   # the suite: RSpec runs no suite hook for a run that selected nothing,
   # which is what `rspec spec/integration` is without a TEST_URL.
+  #
+  # A run that selected nothing but them fails, though: `rspec
+  # spec/integration` without a TEST_URL left every example out and passed
+  # with `0 examples, 0 failures`, so a CI job that lost its TEST_URL went
+  # green having run nothing. A bare `rspec` still runs the unit specs, so
+  # this fires only where everything selected was left out.
+  config.fail_if_no_examples = true
+
   if Helper.target.nil?
     config.filter_run_excluding :integration
     config.when_first_matching_example_defined(:integration) do
