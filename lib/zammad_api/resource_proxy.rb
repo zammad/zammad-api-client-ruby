@@ -406,6 +406,16 @@ module ZammadAPI
     # counts as having it: +group_ids: {2 => ['read']}+ is every agent with
     # read or full access to group 2.
     #
+    # A keyword with nothing in it is refused as well: an empty list, an
+    # empty Hash, a blank String. Zammad reads each of those as the keyword
+    # not having been given, the way it reads one it does not know. CanSearch
+    # narrows by +ids+ only where +params[:ids].present?+, so
+    # +search('smith', ids: allowed_ids)+ with no id allowed came back with
+    # every user matching the term, where the caller had asked for none of
+    # them. +role_ids+, +group_ids+ and +permissions+ are skipped the same
+    # way where the search runs through Elasticsearch, and an empty
+    # +condition+ does not reach the request at all.
+    #
     # +permissions:+ is not an access check, and is sent as it is given all
     # the same, because what it does is Zammad's to decide. User::Search
     # resolves it to the roles granting one of the permissions and adds them
@@ -445,8 +455,8 @@ module ZammadAPI
     #   or several
     # @return [Collection]
     # @raise [ArgumentError] when +term+ is not a non-empty string, or for a
-    #   keyword the search endpoint does not read, a nil value, or two
-    #   spellings of one key
+    #   keyword the search endpoint does not read, a nil value, a keyword
+    #   with nothing in it, or two spellings of one key
     # @raise [Error] when Zammad routes no search endpoint for this resource
     def search(term, **filters)
       searchable!
@@ -504,7 +514,32 @@ module ZammadAPI
       raise ArgumentError, unknown_search_filter_message(unknown) if !unknown.empty?
 
       Transport.stringify_query(normalized)
+
+      empty = normalized.select { |_, value| empty_search_filter?(value) }
+      raise ArgumentError, empty_search_filter_message(empty) if !empty.empty?
+
       normalized
+    end
+
+    # Whether Zammad would read a keyword's value as the keyword not having
+    # been given: what Rails calls blank, for the types a filter comes in.
+    # Asked of the keyword's own value and not of what is nested in it - a
+    # +condition+ naming an attribute with an empty +value+ is a selector,
+    # and what that selects is Zammad's to say.
+    def empty_search_filter?(value)
+      case value
+      when String      then value.strip.empty?
+      when Array, Hash then value.empty?
+      else false
+      end
+    end
+
+    def empty_search_filter_message(empty)
+      given = empty.map { |name, value| "#{name}: #{value.inspect}" }.join(', ')
+
+      "search was given #{given} on #{path}, and Zammad reads a keyword with nothing in it as one that was not given: " \
+        'the search would come back with everything matching the term, not narrowed to nothing. ' \
+        'Leave the keyword out to search without it, and skip the search where there is nothing it may find.'
     end
 
     # What the search endpoint of this resource narrows by besides the term.

@@ -227,7 +227,9 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   would come back unnarrowed with nothing to say so. That includes a user keyword on
   another resource: `tickets.search('printer', group_ids: [2])` was sent as written and
   answered with tickets from every group, where a `condition` on `ticket.group_id` is what
-  narrows them. A resource of your own declares what its search reads with
+  narrows them. A keyword with nothing in it raises too, an empty list, an empty Hash or a
+  blank String: Zammad reads it as not given, so `search('smith', ids: [])` came back with
+  every user matching the term rather than none. A resource of your own declares what its search reads with
   `search_filters`. `group_ids:` is a list of group ids, for the agents with `full` access
   to them, or a Hash of group id to access, `group_ids: {2 => ['read']}`, for any other:
   Zammad reads a group named without an access as `full`. `permissions:` is not an access

@@ -804,7 +804,9 @@ attribute value goes in the term, a sort in `order`, and paging in `page`, `in_b
 `find_each`. A user keyword on another resource raises for the same reason: Zammad takes
 `group_ids` on a ticket search and drops it, so tickets are narrowed by group with the
 condition above. A `nil` value raises too: there is no query string that means "this field
-is null".
+is null". So does a keyword with nothing in it, such as `ids: []` or `condition: {}`. Zammad
+reads that as the keyword not having been given, so `search('smith', ids: allowed_ids)`
+with no id allowed would come back with every user matching the term rather than none.
 
 Zammad routes a search endpoint per model, not for every model. `users`, `organizations`,
 `tickets` and `groups` have one; `ticket_states`, `ticket_priorities` and `ticket_articles`

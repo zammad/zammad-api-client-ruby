@@ -888,6 +888,51 @@ RSpec.describe ZammadAPI::ResourceProxy do
         expect { client.users.search('x', ids: nil) }.to raise_error(ArgumentError, /query parameter ids is nil/)
       end
 
+      # Zammad narrows by a keyword only where it is `present?`, so each of
+      # these was sent and answered with everything matching the term - for
+      # `ids: allowed_ids` with nothing allowed, where none was asked for.
+      {
+        ids:         [],
+        role_ids:    [],
+        permissions: [],
+        group_ids:   {},
+        condition:   {}
+      }.each do |name, value|
+        it "refuses #{name}: #{value.inspect}, which Zammad reads as no #{name} at all" do
+          expect { client.users.search('smith', name => value) }
+            .to raise_error(ArgumentError, %r{search was given #{name}: #{Regexp.escape(value.inspect)} on api/v1/users})
+        end
+      end
+
+      it 'refuses a keyword given as a blank String' do
+        expect { client.users.search('smith', ids: ' ') }.to raise_error(ArgumentError, /search was given ids: " "/)
+      end
+
+      it 'says what the search would have come back with' do
+        expect { client.users.search('smith', ids: []) }
+          .to raise_error(ArgumentError, /everything matching the term, not narrowed to nothing/)
+      end
+
+      it 'names every empty keyword at once' do
+        expect { client.users.search('smith', ids: [], role_ids: []) }.to raise_error(ArgumentError, /search was given ids: \[\], role_ids: \[\] on/)
+      end
+
+      it 'makes no request for one' do
+        stub = stub_request(:get, /search/).with(query: hash_including({}))
+
+        expect { client.users.search('smith', ids: []).to_a }.to raise_error(ArgumentError)
+        expect(stub).not_to have_been_requested
+      end
+
+      # What is nested in a condition is a selector, and Zammad's to read.
+      it 'still takes a condition whose value is empty' do
+        expect(client.tickets.search('x', condition: { 'ticket.tags' => { operator: 'contains all', value: [] } })).to be_a(ZammadAPI::Collection)
+      end
+
+      it 'still takes a value that is not empty for being false or zero' do
+        expect(client.users.search('smith', ids: [0])).to be_a(ZammadAPI::Collection)
+      end
+
       it 'refuses two spellings of one keyword rather than dropping a value' do
         expect { client.users.search('x', 'ids' => [1], :ids => [2]) }
           .to raise_error(ArgumentError, /ids was given twice, as "ids" and as :ids/)
