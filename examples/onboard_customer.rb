@@ -22,21 +22,33 @@ abort "usage: #{$PROGRAM_NAME} COMPANY EMAIL FIRSTNAME LASTNAME" if [company, em
 # attribute, or nil - never an unrelated one.
 #
 # What the search surfaces is Zammad's business, so a value it has not indexed
-# is a record this will not find, and the `|| create` below would then make a
+# is a record this will not find, and the `||= create` below would then make a
 # second organization. Searching by hand has the same gap.
-organization = client.organizations.find_by(name: company) ||
-               client.organizations.create(name: company)
+organization = client.organizations.find_by(name: company)
+user         = client.users.find_by(email: email)
+
+# An address Zammad already knows is only this customer's if it sits in this
+# organization. Reused regardless, a jane@acme.test who belongs to Contoso
+# got Acme's welcome ticket and a report that all was well, with nothing
+# having put that user in Acme. Moving a user is not this script's call
+# either, so it stops, before anything is created. `[]` rather than a reader,
+# because a user with no organization may not carry the attribute at all.
+if user && (organization.nil? || user[:organization_id] != organization.id)
+  abort "#{email} is already a user (id=#{user.id}) of #{user[:organization] || 'no organization'}, not of #{company}. " \
+        'Nothing was created or changed. Move the user in Zammad first, if that is what is meant.'
+end
+
+organization ||= client.organizations.create(name: company)
 
 puts "organization: #{organization.name} (id=#{organization.id})"
 
-user = client.users.find_by(email: email) ||
-       client.users.create(
-         firstname:       firstname,
-         lastname:        lastname,
-         email:           email,
-         organization_id: organization.id,
-         roles:           ['Customer']
-       )
+user ||= client.users.create(
+  firstname:       firstname,
+  lastname:        lastname,
+  email:           email,
+  organization_id: organization.id,
+  roles:           ['Customer']
+)
 
 puts "user:         #{user.firstname} #{user.lastname} <#{user.email}> (id=#{user.id})"
 
