@@ -71,6 +71,7 @@ module ZammadAPI
     def walk: () { (Array[R]) -> void } -> void
     def page_after: (Integer page, Integer per_page, Integer received, Integer? total) -> [ Integer, Integer ]
     def widened: (Integer covered, Integer? total) -> [ Integer, Integer ]
+    def each_distinct: () { (Resources::Base) -> void } -> void
     def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped], ?widens: bool) -> Collection[R]
     def hits_past?: (Integer covered, Integer? total) -> bool
     def fetch: (Integer, Integer) -> [ Array[R], Integer, Integer? ]

@@ -1176,6 +1176,14 @@ RSpec.describe ZammadAPI::Collection do
         expect(search.first.id).to eq(280)
       end
 
+      # Larger pages served by a smaller size start at other positions than
+      # the ones asked for, behind hits already read: hit 100 came back twice.
+      it 'hands back no record twice where the endpoint pages smaller than it is asked' do
+        stub_search_over(1..1000, stale: (1..1000).to_a - [100, 160], serves: 50)
+
+        expect(search.first(2).map(&:id)).to eq([100, 160])
+      end
+
       it 'reads past five thousand stale hits in tens of requests, not thousands' do
         asked = stub_search_over(1..5000, stale: 1..5000)
 

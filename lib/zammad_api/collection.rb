@@ -248,16 +248,24 @@ module ZammadAPI
     # and a read that stayed this small then paid a request for every one
     # of them: see {#widened}.
     #
+    # A read that sizes its own request leaves out a record it has already
+    # handed over. The larger pages it asks for past an empty one are where
+    # an endpoint that pages smaller than it is asked hands a hit back twice,
+    # and a caller acting on the records - `first(5).each { notify(it) }` -
+    # would act on that one twice. It holds no more ids than records wanted,
+    # and asks for nothing more to do it: the read goes on to the next
+    # record, as it does past a stale hit.
+    #
     # @param count [Integer, nil] how many records to read
     # @return [Resources::Base, Array<Resources::Base>, nil] one record, or an
     #   array of them when +count+ was given
     def first(count = nil)
-      wanted = count || 1
-      sized  = own_request_for_first?(wanted) ? with(per_page: wanted, widens: true) : self
-      # Through the enumerator rather than `super`, so that the sized
+      wanted  = count || 1
+      # Through an enumerator rather than `super`, so that the sized
       # collection does the reading and this method is not asked to be both
       # the caller and the callee of Enumerable#first.
-      count.nil? ? sized.each.first : sized.each.first(count)
+      records = own_request_for_first?(wanted) ? with(per_page: wanted, widens: true).to_enum(:each_distinct) : each
+      count.nil? ? records.first : records.first(count)
     end
 
     # The first +count+ records, read the way {#first} reads them.
@@ -358,6 +366,19 @@ module ZammadAPI
     end
 
     private
+
+    # Yields each record whose id has not been yielded already. A record
+    # without an id is yielded, there being nothing to tell it by.
+    def each_distinct
+      seen = {}
+      each do |record|
+        id = record.id
+        next if !id.nil? && seen.key?(id)
+
+        seen[id] = true if !id.nil?
+        yield record
+      end
+    end
 
     # Whether a read of this many records is worth sizing the request for.
     #
@@ -608,11 +629,12 @@ module ZammadAPI
     # It takes the endpoint to serve the size it is asked for, up to
     # +max_per_page+, which is what #hits_past? takes as well. One that
     # serves less pages by its own size, so page 3 of 192 served as 100 is
-    # hits 201 to 300: hits are passed over, or handed back twice, and the
-    # pages read cover less than the walk takes them to. A page of one, which
-    # every endpoint serves, could not go wrong that way. Zammad serves a
-    # search the 200 this asks for at most, so it takes an instance whose
-    # cap was lowered, and the README says so beside the walk's own limits.
+    # hits 201 to 300: hits are passed over, and the pages read cover less
+    # than the walk takes them to. A hit served twice is left out by
+    # {#first}. A page of one, which every endpoint serves, could not go
+    # wrong that way. Zammad serves a search the 200 this asks for at most,
+    # so it takes an instance whose cap was lowered, and the README says so
+    # beside the walk's own limits.
     #
     # Not for a size a caller chose. `in_batches(of: 10)` says how many
     # records a batch may hold, and a page of 160 is not one of those.
