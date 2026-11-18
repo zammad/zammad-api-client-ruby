@@ -11,8 +11,9 @@ require 'zammad_api'
 require 'fileutils'
 require 'tmpdir'
 
-PER_PAGE = 50
-CURSOR   = File.join(Dir.tmpdir, 'zammad_batch_cursor')
+PER_PAGE    = 50
+CURSOR      = File.join(Dir.tmpdir, 'zammad_batch_cursor')
+NEXT_CURSOR = "#{CURSOR}.next".freeze
 
 client  = ZammadAPI::Client.from_env
 tickets = client.tickets.all
@@ -64,7 +65,15 @@ end
 
 puts '3. resumable page loop'
 
-page = File.exist?(CURSOR) ? Integer(File.read(CURSOR)) : 1
+page = 1
+
+if File.exist?(CURSOR)
+  # A checkpoint holds a page number or it holds nothing this loop can use.
+  # Said here, rather than left to `Integer` or to `page` to raise about.
+  page = Integer(File.read(CURSOR), exception: false)
+  abort "   #{CURSOR} does not hold a page number. Remove it to start from page 1." if page.nil? || !page.positive?
+end
+
 puts "   starting at page #{page}"
 
 loop do
@@ -76,13 +85,19 @@ loop do
   # Checkpoint once the batch is safely handled, so an interrupted run
   # repeats a batch rather than skipping one - on a set nothing is deleted
   # from, see above.
-  File.write(CURSOR, page + 1)
+  #
+  # Written beside the checkpoint and renamed over it, which replaces it in
+  # one step. `File.write` on the checkpoint itself empties the file before
+  # it fills it, and a run stopped in between leaves a checkpoint with
+  # nothing in it, where the page before was still worth having.
+  File.write(NEXT_CURSOR, page + 1)
+  File.rename(NEXT_CURSOR, CURSOR)
   break if batch.size < PER_PAGE
 
   page += 1
 end
 
-FileUtils.rm_f(CURSOR)
+FileUtils.rm_f([CURSOR, NEXT_CURSOR])
 
 puts <<~NOTE
 
