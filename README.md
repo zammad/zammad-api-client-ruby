@@ -209,7 +209,8 @@ back as the file from `attachment.download`, so a stack that has already consume
 leaves nothing faithful to return. The other is `connection.response :raise_error`, which
 raises a Faraday error for a 4xx or 5xx before this gem sees the response: nothing would be
 retried, and a missing record would arrive as `Faraday::ResourceNotFound` rather than the
-`ZammadAPI::NotFoundError` your code rescues.
+`ZammadAPI::NotFoundError` your code rescues. A subclass of either is refused for what it
+inherits.
 
 ## Available resources
 

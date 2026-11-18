@@ -707,7 +707,8 @@ module ZammadAPI
 
     # Middleware this gem cannot do its own work behind, each with what it
     # takes away and how it is usually spelled. Matched by name so that naming
-    # one does not require it to be loaded.
+    # one does not require it to be loaded, and looked for among the ancestors
+    # of what is in the stack: see {#refused_middleware}.
     #
     # The first reads the body before this gem can. The second raises for a
     # 4xx or 5xx before this gem sees the response, and it sits below the
@@ -718,13 +719,13 @@ module ZammadAPI
     # None of them is a {ZammadAPI::Error}, which is what every failure is
     # documented to leave as.
     REFUSED_MIDDLEWARE = {
-      'Faraday::Response::Json'       => 'which decodes the response body before this gem can. This gem parses JSON itself, and hands ' \
-                                         'the undecoded bytes to attachment downloads, so it needs the body as it arrives: ' \
-                                         'drop `c.response :json` from the `middleware:` callable.',
-      'Faraday::Response::RaiseError' => 'which raises a Faraday error for a 4xx or 5xx response before this gem sees it. This gem ' \
-                                         'raises its own error for each status, and retries a read that was answered 429 or 5xx, ' \
-                                         'and behind this middleware it does neither: ' \
-                                         'drop `c.response :raise_error` from the `middleware:` callable.'
+      'Faraday::Response::Json'       => ['which decodes the response body before this gem can. This gem parses JSON itself, and hands ' \
+                                          'the undecoded bytes to attachment downloads, so it needs the body as it arrives',
+                                          'c.response :json'].freeze,
+      'Faraday::Response::RaiseError' => ['which raises a Faraday error for a 4xx or 5xx response before this gem sees it. This gem ' \
+                                          'raises its own error for each status, and retries a read that was answered 429 or 5xx, ' \
+                                          'and behind this middleware it does neither',
+                                          'c.response :raise_error'].freeze
     }.freeze
     private_constant :REFUSED_MIDDLEWARE
 
@@ -739,10 +740,34 @@ module ZammadAPI
     # visible here, where the unregistered adapter and the unusable proxy are
     # already refused before anything is sent.
     def refuse_unusable_middleware!(connection)
-      offender = connection.builder.handlers.find { REFUSED_MIDDLEWARE.key?(it.klass.name) }
-      return if offender.nil?
+      connection.builder.handlers.each do |handler|
+        refused = refused_middleware(handler.klass)
+        raise ConfigurationError, refused_middleware_message(handler.klass, refused) if refused
+      end
+    end
 
-      raise ConfigurationError, "the configured middleware includes #{offender.klass.name}, #{REFUSED_MIDDLEWARE.fetch(offender.klass.name)}"
+    # Which refused middleware a class in the stack is, if it is one: itself,
+    # or the one it inherits from.
+    #
+    # Only the class's own name used to be asked, and a subclass has another.
+    # `class QuietRaiseError < Faraday::Response::RaiseError`, the usual way
+    # to adjust what that middleware raises, went through `c.use` unrefused,
+    # and its inherited handler then raised Faraday::ResourceNotFound for a
+    # 404 before this gem saw the response - everything the refusal is there
+    # to prevent, one `<` away from it.
+    #
+    # @return [String, nil] the name it is refused under
+    def refused_middleware(klass) = klass.ancestors.filter_map(&:name).find { REFUSED_MIDDLEWARE.key?(it) }
+
+    # A subclass is named along with what it inherits from, because the
+    # reason describes the parent - and it is told to drop "it", because the
+    # line that added a subclass is not the one the parent is usually spelled
+    # with.
+    def refused_middleware_message(klass, refused)
+      reason, spelling = REFUSED_MIDDLEWARE.fetch(refused)
+      found, drop      = klass.name == refused ? [refused, "`#{spelling}`"] : ["#{klass.name || 'an anonymous class'}, a subclass of #{refused}", 'it']
+
+      "the configured middleware includes #{found}, #{reason}: drop #{drop} from the `middleware:` callable."
     end
 
     # The body as it came off the wire.

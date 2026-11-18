@@ -673,6 +673,46 @@ RSpec.describe ZammadAPI::Transport do
       end
     end
 
+    # A subclass has a name of its own, and only the name was asked. It is how
+    # a caller adjusts what `raise_error` raises, and what it inherits is the
+    # handler that raises before this gem sees the response.
+    context 'with a subclass of a middleware it refuses' do
+      let(:subclass) { stub_const('QuietRaiseError', Class.new(Faraday::Response::RaiseError)) }
+
+      it 'refuses it for what it inherits' do
+        expect { unit_transport(middleware: ->(builder) { builder.use(subclass) }) }
+          .to raise_error(ZammadAPI::ConfigurationError, /raises a Faraday error for a 4xx or 5xx response before this gem sees it/)
+      end
+
+      it 'names the subclass and the middleware it inherits from' do
+        expect { unit_transport(middleware: ->(builder) { builder.use(subclass) }) }
+          .to raise_error(ZammadAPI::ConfigurationError, /includes QuietRaiseError, a subclass of Faraday::Response::RaiseError, which raises/)
+      end
+
+      # `c.response :raise_error` is not the line that added it.
+      it 'says to drop the subclass rather than the spelling its parent has' do
+        expect { unit_transport(middleware: ->(builder) { builder.use(subclass) }) }
+          .to raise_error(ZammadAPI::ConfigurationError, /it does neither: drop it from the `middleware:` callable\./)
+      end
+
+      it 'refuses one that was never given a name' do
+        expect { unit_transport(middleware: ->(builder) { builder.use(Class.new(Faraday::Response::RaiseError)) }) }
+          .to raise_error(ZammadAPI::ConfigurationError, /includes an anonymous class, a subclass of Faraday::Response::RaiseError,/)
+      end
+
+      it 'refuses a subclass of the decoding middleware too' do
+        expect { unit_transport(middleware: ->(builder) { builder.use(Class.new(Faraday::Response::Json)) }) }
+          .to raise_error(ZammadAPI::ConfigurationError, /decodes the response body before this gem can/)
+      end
+
+      it 'sends nothing before refusing' do
+        stub = stub_request(:get, url).with(query: hash_including({}))
+
+        expect { unit_client(middleware: ->(builder) { builder.use(subclass) }).groups.find(1) }.to raise_error(ZammadAPI::ConfigurationError)
+        expect(stub).not_to have_been_requested
+      end
+    end
+
     # The build-time check knows the two above by name; anything
     # else that consumes the body is caught only once a response is in hand.
     context 'with a decoder the build-time check does not know by name' do
