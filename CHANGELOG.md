@@ -368,6 +368,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - `on_behalf_of` no longer leaks: the old `perform_on_behalf_of` used `tap` without an
   `ensure`, so an exception inside the block left the `From` header set on every later
   request.
+- `on_behalf_of` refuses an identifier that is `nil`, empty or blank with `ArgumentError`.
+  Zammad reads a `From` header with nothing in it as no header at all, and a `nil` sent
+  none, so `client.on_behalf_of(user&.login)` with no user handed back a client that
+  performed every request as the account it authenticates as, and read everything that
+  account can see, with no error. `Client#inspect` shows the scope of a client that has
+  one, where it printed as the client it was derived from.
 - Zammad installations served from a sub-path (`https://example.com/zammad/`) now work.
   Request paths are relative, so the prefix is no longer stripped.
 - Query parameters are encoded by the HTTP layer, including arrays and characters that

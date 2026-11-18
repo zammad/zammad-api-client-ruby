@@ -763,6 +763,36 @@ RSpec.describe ZammadAPI::Client do
         .to have_been_made.twice
     end
 
+    # Zammad skips a From header with nothing in it, and a nil sent none, so
+    # each of these handed back a client that ran every request as the
+    # account it authenticates as - with no error to say the scope was gone.
+    describe 'an identifier that names nobody' do
+      [nil, '', '   ', "\t\n"].each do |blank|
+        it "refuses #{blank.inspect}" do
+          expect { unit_client.on_behalf_of(blank) }
+            .to raise_error(ArgumentError, /on_behalf_of needs the login, email address or id of a user, and was given #{Regexp.escape(blank.inspect)}/)
+        end
+      end
+
+      it 'says what the request would have run as' do
+        expect { unit_client.on_behalf_of(nil) }.to raise_error(ArgumentError, /performed as the account this client authenticates as/)
+      end
+
+      it 'refuses it before the block is run' do
+        ran = false
+        expect { unit_client.on_behalf_of('') { ran = true } }.to raise_error(ArgumentError)
+
+        expect(ran).to be(false)
+      end
+
+      it 'still takes a user id' do
+        stub = stub_request(:get, url).with(query: hash_including({}), headers: { 'From' => '7' }).to_return(json_response({ id: 1 }))
+        unit_client.on_behalf_of(7).users.find(1)
+
+        expect(stub).to have_been_requested
+      end
+    end
+
     describe 'block form' do
       it 'yields a scoped client' do
         unit_client.on_behalf_of('agent@example.com') { |scoped| scoped.users.find(1) }
@@ -916,6 +946,13 @@ RSpec.describe ZammadAPI::Client do
 
     it 'does not leak the token' do
       expect(unit_client(http_token: 'super-secret').inspect).not_to include('super-secret')
+    end
+
+    # A scoped client printed as the one it was derived from, so nothing in a
+    # log told the two apart.
+    it 'shows the user a scoped client acts for' do
+      expect(unit_client.on_behalf_of('agent@example.com').inspect)
+        .to eq('#<ZammadAPI::Client url="http://zammad.test/" auth=http_token on_behalf_of="agent@example.com">')
     end
 
     # They used to be sent in place of the configured token, while this went

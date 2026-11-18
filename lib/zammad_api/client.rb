@@ -399,17 +399,34 @@ module ZammadAPI
     #     scoped.tickets.find(1)
     #   end
     #
+    # An identifier that names nobody is refused. Zammad skips a +From+
+    # header with nothing in it, and a nil sent none at all, so
+    # +client.on_behalf_of(current_user&.login)+ with nobody signed in
+    # handed back a client that looked scoped and was not: every request
+    # ran with the rights of the account the client authenticates as, and
+    # a list read through it held everything that account can see. No
+    # request failed, so nothing said the scope was missing.
+    #
     # @param identifier [String, Integer] login, email address or user id
     # @yieldparam scoped [Client]
     # @return [Client] when no block is given, otherwise the block's value
+    # @raise [ArgumentError] for an identifier that is nil, empty or blank
     def on_behalf_of(identifier)
+      raise ArgumentError, blank_on_behalf_of_message(identifier) if identifier.nil? || identifier.to_s.strip.empty?
+
       scoped = dup.send(:setup, config, @transport.with_on_behalf_of(identifier))
       return scoped if !block_given?
 
       yield scoped
     end
 
-    def inspect = "#<#{self.class.name} url=#{config.redacted_url.inspect} auth=#{config.authentication_scheme}>"
+    # The scope is shown where there is one, so that a client acting for
+    # another user does not print as the one it was derived from.
+    def inspect
+      scope = @transport.on_behalf_of
+
+      "#<#{self.class.name} url=#{config.redacted_url.inspect} auth=#{config.authentication_scheme}#{" on_behalf_of=#{scope.inspect}" if scope}>"
+    end
 
     def method_missing(name, *args)
       return super if CONVERSION_METHODS.include?(name) || name.to_s.end_with?('=', '!', '?')
@@ -435,6 +452,12 @@ module ZammadAPI
     end
 
     def unknown_resource_message(name) = "Unknown resource #{name}, available resources are: #{RESOURCES.keys.join(', ')}"
+
+    def blank_on_behalf_of_message(identifier)
+      "on_behalf_of needs the login, email address or id of a user, and was given #{identifier.inspect}. " \
+        'Zammad reads a From header with nothing in it as no header at all, so every request would be performed ' \
+        'as the account this client authenticates as, with nothing to say the scope was missing.'
+    end
 
     # One of the proxies built with this client for a class it models, and a
     # new one for any other resource class. A new one each time, rather than

@@ -992,6 +992,11 @@ end
 The identifier can be a login, an email address or a user id. This sends the standard
 HTTP `From` header and requires Zammad 5.0 or later.
 
+An identifier that is `nil`, empty or blank raises `ArgumentError`. Zammad reads a `From`
+header with nothing in it as no header at all, so `client.on_behalf_of(user&.login)` with
+no user would otherwise perform every request as the account the client authenticates
+as, and read everything that account can see.
+
 ## Error handling
 
 Every error descends from `ZammadAPI::Error`.
