@@ -13,6 +13,8 @@ module TypedUsage
   def self.first_tickets: (ZammadAPI::Client) -> Array[ZammadAPI::Resources::Ticket]
   def self.found: (ZammadAPI::Client) -> ZammadAPI::Resources::Organization?
   def self.newest_open: (ZammadAPI::Client) -> String?
+  def self.readers_of_group: (ZammadAPI::Client) -> Array[String]
+  def self.owners_of_group: (ZammadAPI::Client) -> Array[String]
   def self.batches: (ZammadAPI::Client) -> Array[Integer]
   def self.customer_email: (ZammadAPI::Client) -> String?
   def self.article_bodies: (ZammadAPI::Client) -> Array[String]

@@ -40,6 +40,10 @@ module TypedUsage
     client.tickets.search('state.name:open').order(created_at: :desc).first&.number
   end
 
+  def self.readers_of_group(client) = client.users.search('smith', group_ids: { 2 => ['read'] }).map(&:login)
+
+  def self.owners_of_group(client) = client.users.search('smith', group_ids: [2]).map(&:login)
+
   def self.batches(client)
     sizes = [] #: Array[Integer]
     client.tickets.in_batches(of: 50) { |tickets| sizes << tickets.sum { it.article_count || 0 } }

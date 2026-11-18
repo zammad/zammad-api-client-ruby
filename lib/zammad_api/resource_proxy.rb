@@ -395,15 +395,29 @@ module ZammadAPI
     # read. Tickets are narrowed by group through a +condition+ on
     # +ticket.group_id+.
     #
+    # +group_ids:+ comes in two forms, and they do not ask for the same
+    # thing. User::Search walks it as pairs of a group and an access, and
+    # HasGroups.group_access reads an access that is missing as +full+. So a
+    # list of ids, which names none, is the agents with full access to those
+    # groups, and +group_ids: [2]+ leaves out an agent who may only read
+    # group 2. A Hash names the access for each group, and +full+ always
+    # counts as having it: +group_ids: {2 => ['read']}+ is every agent with
+    # read or full access to group 2.
+    #
     # @example
     #   client.users.search('smith')
     #   client.users.search('smith', role_ids: [2])
+    #   client.users.search('smith', group_ids: [2])             # full access to group 2
+    #   client.users.search('smith', group_ids: {2 => ['read']}) # read or full access to it
     #   client.tickets.search('printer', condition: {'ticket.state_id' => {operator: 'is', value: [1, 2]}})
     #   client.tickets.search('state.name:open').order(created_at: :desc)
     #
     # @param term [String] the Zammad search term
     # @param filters [Hash] +condition:+ and +ids:+ on every search, and on
-    #   users +role_ids:+, +group_ids:+ and +permissions:+
+    #   users +role_ids:+, +permissions:+ and +group_ids:+ - the last as a
+    #   list of group ids, for agents with full access to them, or as a Hash
+    #   of group id to +read+, +create+, +change+, +overview+ or +full+, one
+    #   or several
     # @return [Collection]
     # @raise [ArgumentError] when +term+ is not a non-empty string, or for a
     #   keyword the search endpoint does not read, a nil value, or two

@@ -762,9 +762,18 @@ on users, the one search that reads them:
 ```ruby
 client.users.search('smith', role_ids: [2])
 client.users.search('smith', group_ids: [1], permissions: ['ticket.agent'])
+client.users.search('smith', group_ids: {1 => ['read']})
 client.tickets.search('printer', condition: {'ticket.state_id' => {operator: 'is', value: [1, 2]}})
 client.tickets.search('printer', condition: {'ticket.group_id' => {operator: 'is', value: [2]}})
 ```
+
+`group_ids:` narrows to the agents with access to a group, and its two forms ask for
+different access. A list of ids names no access, and Zammad reads that as `full`:
+`group_ids: [1]` leaves out an agent who may only read group 1. A Hash names the access
+for each group — `read`, `create`, `change`, `overview` or `full`, one or several — and
+an agent with `full` access always counts: `group_ids: {1 => ['read']}` is every agent
+with `read` or `full` access to group 1. Access granted through a role counts like access
+granted to the user, and an agent matching any one of the groups is kept.
 
 Any other keyword raises `ArgumentError`. Zammad drops a parameter it does not know, so
 `search('smith', active: true)` would come back unnarrowed with nothing to say so; an

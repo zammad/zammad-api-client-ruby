@@ -228,7 +228,9 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   another resource: `tickets.search('printer', group_ids: [2])` was sent as written and
   answered with tickets from every group, where a `condition` on `ticket.group_id` is what
   narrows them. A resource of your own declares what its search reads with
-  `search_filters`.
+  `search_filters`. `group_ids:` is a list of group ids, for the agents with `full` access
+  to them, or a Hash of group id to access, `group_ids: {2 => ['read']}`, for any other:
+  Zammad reads a group named without an access as `full`.
 - There is no `where`. During the development of 2.0 there was one, which took `sort_by`
   and `order_by` on a generic index, nothing at all on tickets and users, and the search
   parameters on a search, and raised for everything else — an attribute filter above all,

@@ -15,7 +15,9 @@ module ZammadAPI
 
       # User::Search is the one search that reads these: it joins the roles
       # for +role_ids+, resolves +permissions+ to the roles that carry them,
-      # and +group_ids+ to the users with access to those groups.
+      # and +group_ids+ to the agents with access to those groups - full
+      # access where it is a list of ids, the access named for each group
+      # where it is a Hash. See {ResourceProxy#search}.
       search_filters :role_ids, :group_ids, :permissions
 
       belongs_to :organization, class_name: 'Organization'
