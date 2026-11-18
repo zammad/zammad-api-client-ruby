@@ -45,6 +45,10 @@ RSpec.describe ZammadAPI::Transport do
       unit_transport(user_agent: 'my-app/1.0').get('api/v1/groups', operation: 'test')
       expect(stub).to have_been_requested
     end
+
+    it 'carries a header value given in UTF-16 as the same text in UTF-8' do
+      expect(described_class.stringify_headers('X-Note' => 'ä'.encode('UTF-16LE'))).to eq('x-note' => 'ä')
+    end
   end
 
   describe 'base url handling' do
@@ -92,6 +96,26 @@ RSpec.describe ZammadAPI::Transport do
     it 'stringifies the scalars inside a nested hash' do
       expect(described_class.stringify_query(condition: { open: { active: true, limit: 5 } }))
         .to eq({ 'condition' => { 'open' => { 'active' => 'true', 'limit' => '5' } } })
+    end
+
+    # Faraday's escaping raised Encoding::CompatibilityError for one.
+    it 'sends a value given in UTF-16 as the same text in UTF-8' do
+      stub = stub_request(:get, "#{url}/search").with(query: { 'query' => 'ä b' }).to_return(json_response([]))
+      unit_transport.get('api/v1/groups/search', operation: 'test', query: { query: 'ä b'.encode('UTF-16LE') })
+      expect(stub).to have_been_requested
+    end
+
+    it 'leaves a value in an encoding ASCII is a part of as it was' do
+      value = "caf\xC3\xA9".b
+
+      expect(described_class.stringify_query(q: value)['q']).to be(value)
+    end
+
+    it 'refuses a value that cannot be converted to UTF-8, without quoting it' do
+      broken = "\xD8\x00".dup.force_encoding('UTF-16BE')
+
+      expect { described_class.stringify_query(token: broken) }
+        .to raise_error(ArgumentError, /\Aquery parameter token was given as UTF-16BE text that cannot be converted to UTF-8/)
     end
 
     it 'raises on a nil value rather than dropping the parameter' do
@@ -976,6 +1000,16 @@ RSpec.describe ZammadAPI::Transport do
       it "refuses #{blank.inspect}, which Zammad reads as no From header" do
         expect { unit_transport.with_on_behalf_of(blank) }.to raise_error(ArgumentError, /on_behalf_of needs the login/)
       end
+    end
+
+    # The blank check raised Encoding::CompatibilityError for text in an
+    # encoding ASCII is no part of, for an identifier that names someone too.
+    it 'refuses a blank identifier given in UTF-16' do
+      expect { unit_transport.with_on_behalf_of(' '.encode('UTF-16LE')) }.to raise_error(ArgumentError, /on_behalf_of needs the login/)
+    end
+
+    it 'holds an identifier given in UTF-16 as the same text in UTF-8' do
+      expect(unit_transport.with_on_behalf_of('bob'.encode('UTF-16LE')).on_behalf_of).to eq('bob').and(have_attributes(encoding: Encoding::UTF_8))
     end
 
     # `String#to_s` hands back the receiver, so the scoped transport held the

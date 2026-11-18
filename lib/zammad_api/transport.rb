@@ -243,7 +243,7 @@ module ZammadAPI
       when nil   then raise ArgumentError, "query parameter #{key} is nil, and Zammad has no way to read that: pass a value, or leave the parameter out"
       when Hash  then stringify_query_hash(value, key)
       when Array then stringify_query_list(key, value)
-      else value.to_s
+      else wire_text(value, "query parameter #{key}")
       end
     end
 
@@ -349,7 +349,7 @@ module ZammadAPI
       raise ArgumentError, "header #{name} is nil, and a header is always text: pass a value, or leave the header out" if value.nil?
       raise ArgumentError, "header #{name} was given as #{value.inspect}, and a header is always text: pass a String" if !value.is_a?(String) && !value.is_a?(Symbol) && !value.is_a?(Numeric)
 
-      value.to_s
+      wire_text(value, "header #{name}")
     end
 
     # The +From+ scope as a transport holds it: text, and a copy of its own.
@@ -384,7 +384,7 @@ module ZammadAPI
     def self.stringify_on_behalf_of(identifier)
       return nil if identifier.nil?
 
-      text = identifier.to_s
+      text = wire_text(identifier, 'on_behalf_of')
       raise ArgumentError, blank_on_behalf_of_message(identifier) if BLANK.match?(text)
 
       text.dup.freeze
@@ -393,7 +393,42 @@ module ZammadAPI
     # What Rails calls blank, for a String: nothing but whitespace, Unicode
     # spaces included. +strip+ removes the ASCII ones only, so a no-break
     # space passed a check built on it and was then read as nothing.
+    #
+    # Asked of a String {.wire_text} has had: the pattern is US-ASCII, and
+    # matching it against text in an encoding ASCII is no part of raises
+    # Encoding::CompatibilityError.
     BLANK = /\A[[:space:]]*\z/
+
+    # A value as text a request can carry: in UTF-8 where it was given in an
+    # encoding ASCII is no part of, such as UTF-16.
+    #
+    # Such a String cannot be joined to the ASCII around it. Faraday's
+    # escaping of a query value and Net::HTTP's writing of a header both
+    # raised Encoding::CompatibilityError for one, as did {BLANK} asked of a
+    # +From+ scope or a search keyword: neither a {ZammadAPI::Error} nor the
+    # ArgumentError a malformed value is refused with, and for a non-blank
+    # value, one that had nothing wrong with it but its encoding. Converted,
+    # it is the same text, in the encoding Zammad reads.
+    #
+    # An encoding ASCII is a part of is left as it was, binary included: its
+    # bytes are what went on the wire, and still are.
+    #
+    # @api private
+    # @param value [Object]
+    # @param name [String] what the value is, for the error message
+    # @return [String]
+    # @raise [ArgumentError] for text that cannot be converted to UTF-8
+    def self.wire_text(value, name)
+      text = value.to_s
+      return text if text.encoding.ascii_compatible?
+
+      begin
+        text.encode(Encoding::UTF_8)
+      rescue EncodingError
+        raise ArgumentError, "#{name} was given as #{text.encoding} text that cannot be converted to UTF-8, which is what " \
+                             'a request carries: it holds a byte sequence that is not valid in its own encoding.'
+      end
+    end
 
     # @api private
     # @return [String]

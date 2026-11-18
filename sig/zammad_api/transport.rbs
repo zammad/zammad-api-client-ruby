@@ -46,6 +46,7 @@ module ZammadAPI
     def self.misread_element_message: (String, Symbol) -> String
     def self.stringify_headers: (Hash[untyped, untyped]) -> Hash[String, String]
     BLANK: Regexp
+    def self.wire_text: (untyped value, String name) -> String
     def self.stringify_on_behalf_of: ((String | Integer)? identifier) -> String?
     def self.blank_on_behalf_of_message: (untyped identifier) -> String
     def self.stringify_header_value: (String, untyped) -> String

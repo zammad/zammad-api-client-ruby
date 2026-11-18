@@ -913,6 +913,14 @@ RSpec.describe ZammadAPI::ResourceProxy do
         expect { client.users.search('smith', permissions: "\u3000") }.to raise_error(ArgumentError, /search was given permissions:/)
       end
 
+      it 'refuses one that is blank in UTF-16, the way it does one in UTF-8' do
+        expect { client.users.search('smith', permissions: "\u3000".encode('UTF-16LE')) }.to raise_error(ArgumentError, /search was given permissions:/)
+      end
+
+      it 'takes one given in UTF-16 that is not blank' do
+        expect(client.users.search('smith', permissions: 'admin'.encode('UTF-16LE'))).to be_a(ZammadAPI::Collection)
+      end
+
       # Sent as `permissions=`, which is as blank as a String with nothing in
       # it: the check is of what is sent, not of the class it was given as.
       it 'refuses one given as a value whose text is empty' do
