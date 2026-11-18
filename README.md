@@ -775,6 +775,15 @@ an agent with `full` access always counts: `group_ids: {1 => ['read']}` is every
 with `read` or `full` access to group 1. Access granted through a role counts like access
 granted to the user, and an agent matching any one of the groups is kept.
 
+`permissions:` is not an access check. Zammad resolves it to the roles that grant one of
+the permissions and adds those to `role_ids:`, so the two together keep a user with any
+of the roles, not one with both. And where the instance searches through Elasticsearch, a
+permission that no active role grants resolves to no role at all, and Zammad then leaves
+the filter out: `permissions: ['ticket.agnet']`, or a permission nobody has been given,
+comes back with every user matching the term. Without Elasticsearch the same search is
+empty. Nothing in the response says which of the two answered, so where the result
+decides what someone may do, name the roles with `role_ids:`, which narrows on both.
+
 Any other keyword raises `ArgumentError`. Zammad drops a parameter it does not know, so
 `search('smith', active: true)` would come back unnarrowed with nothing to say so; an
 attribute value goes in the term, a sort in `order`, and paging in `page`, `in_batches` or

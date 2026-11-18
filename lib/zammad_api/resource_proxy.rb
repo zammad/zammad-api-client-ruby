@@ -404,6 +404,20 @@ module ZammadAPI
     # counts as having it: +group_ids: {2 => ['read']}+ is every agent with
     # read or full access to group 2.
     #
+    # +permissions:+ is not an access check, and is sent as it is given all
+    # the same, because what it does is Zammad's to decide. User::Search
+    # resolves it to the roles granting one of the permissions and adds them
+    # to +role_ids+, so the two together widen each other. On the
+    # Elasticsearch path the role clause is then written only where there is
+    # a role to put in it: a permission no active role grants - a misspelt
+    # one, or one nobody has been given - resolves to none, the clause is
+    # left out, and the search answers with every user matching the term.
+    # The SQL path joins the roles against the empty list and answers with
+    # nobody. Nothing in a response says which path answered, and a user
+    # record carries role ids rather than permissions, so there is nothing
+    # here to check the hits against. +role_ids:+ with at least one id
+    # narrows on both paths.
+    #
     # @example
     #   client.users.search('smith')
     #   client.users.search('smith', role_ids: [2])
