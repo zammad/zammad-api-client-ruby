@@ -90,8 +90,9 @@ module ZammadAPI
       def reset_pending_state!: () -> void
       def forget_related_targets: () -> void
       def write_attribute: (Symbol, untyped) -> untyped
-      def create_record: () -> Response
-      def update_record: () -> Response
+      def unsaved_attributes: (Hash[Symbol, untyped] held) -> Hash[Symbol, untyped]
+      def create_record: (Hash[Symbol, untyped] body) -> Response
+      def update_record: (Hash[Symbol, untyped] body) -> Response
       def member_path: () -> String
       def require_id!: () -> Integer
       def no_id_message: () -> String

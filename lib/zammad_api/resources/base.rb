@@ -501,7 +501,24 @@ module ZammadAPI
         # caller reading #error to report the failure read the wrong cause.
         @error = nil
 
-        if !new_record?
+        # What the request carries, held from before it goes out. The
+        # attributes are frozen and replaced on write, so this is the Hash the
+        # request is built from and stays that whatever is written meanwhile:
+        # see #acknowledge_changes!.
+        #
+        # Built from, and not only held beside. The body of an update used to
+        # be read out of the change set a few lines after this was taken, and
+        # those are two reads of a record another thread may write to in
+        # between: title "B" held here, "C" staged before the body was built,
+        # and the PUT carried "C" while an answer nothing could read settled
+        # the record on "B" - with nothing staged, so writing "B" again to
+        # put it right compared equal and sent nothing. One Hash is read once
+        # now, and both the body and what is settled come out of it.
+        sent = @attributes
+
+        if new_record?
+          response = create_record(sent)
+        else
           # An existing record is addressed by its id, so establish there is
           # one before anything here can report success. Only a record left
           # behind by a 2xx that did not decode reaches this without one, and
@@ -514,15 +531,11 @@ module ZammadAPI
           # bumping updated_at and updated_by, so re-saving a record that
           # nobody touched rewrote its audit trail and moved the timestamp
           # that other callers use to tell whether it changed under them.
-          return true if !changed?
-        end
+          unsaved = unsaved_attributes(sent)
+          return true if unsaved.empty?
 
-        # What the request carries, held from before it goes out. The
-        # attributes are frozen and replaced on write, so this is the Hash the
-        # request is built from and stays that whatever is written meanwhile:
-        # see #acknowledge_changes!.
-        sent     = @attributes
-        response = new_record? ? create_record : update_record
+          response = update_record(unsaved)
+        end
 
         replace_attributes!(response, operation: 'save object', sent: sent)
         true
@@ -847,23 +860,38 @@ module ZammadAPI
         staged
       end
 
-      def create_record
+      # The attributes of +held+ that differ from what this record arrived
+      # with, which is what an update sends.
+      #
+      # The same question {#write_attribute} asks before it stages a change,
+      # asked of one Hash of attributes rather than of the change set: see
+      # {#save!} for why the body of a request is not read from there.
+      #
+      # @param held [Hash{Symbol => Object}] attributes of this record
+      # @return [Hash{Symbol => Object}]
+      def unsaved_attributes(held)
+        baseline = @baseline
+
+        held.reject { |key, value| baseline.key?(key) && baseline[key] == value }
+      end
+
+      def create_record(body)
         transport.post(
           self.class.resource_path,
           operation:      'save object',
           resource_class: self.class,
           query:          { expand: true },
-          body:           attributes
+          body:           body
         )
       end
 
-      def update_record
+      def update_record(body)
         transport.put(
           member_path,
           operation:      'save object',
           resource_class: self.class,
           query:          { expand: true },
-          body:           @changes.transform_values { it[1] }
+          body:           body
         )
       end
 

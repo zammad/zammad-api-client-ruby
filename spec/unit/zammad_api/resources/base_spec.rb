@@ -1427,6 +1427,39 @@ RSpec.describe ZammadAPI::Resources::Base do
       end
     end
 
+    # The interval before that one: between the attributes being held and the
+    # request being built from them. Nothing of the caller's runs there on one
+    # thread, so the path being built stands in for a second thread writing to
+    # the record. The body used to be read from the change set at that point,
+    # so the PUT carried "C" and the record was settled on "B".
+    context 'when the record is written to before the request is built' do
+      subject(:other) { client.tickets.find(1) }
+
+      before do
+        stub_request(:put, ticket_url).with(query: hash_including({})).to_return(status: 200, body: '<html>proxy</html>')
+
+        other.title = 'B'
+        allow(ZammadAPI::Resources::Ticket).to receive(:member_path).and_wrap_original do |original, id|
+          other.title = 'C'
+          original.call(id)
+        end
+        begin
+          other.save
+        rescue ZammadAPI::ParseError
+          nil
+        end
+      end
+
+      it 'sent the value that was held when the save began' do
+        expect(a_request(:put, ticket_url).with(query: hash_including({}), body: { title: 'B' })).to have_been_made.once
+      end
+
+      it 'reads the value it sent, with nothing staged' do
+        expect(other.title).to eq('B')
+        expect(other.changes).to eq({})
+      end
+    end
+
     # The same write under a response that can be read, which is what the
     # above is held to: the attributes it carries replace the record's.
     it 'drops a write made while the request was out where the response can be read, too' do
