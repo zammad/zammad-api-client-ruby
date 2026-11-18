@@ -665,8 +665,12 @@ RSpec.describe ZammadAPI::Transport do
           .to raise_error(ZammadAPI::ConfigurationError, /Faraday::Response::RaiseError/)
       end
 
+      # The stub is for the path `find(1)` asks, and answers with a group. One
+      # for the index, which this was, is not a request `find` makes, so the
+      # assertion below held whether or not the GET went out before the
+      # refusal.
       it 'sends nothing before refusing' do
-        stub = stub_request(:get, url).with(query: hash_including({}))
+        stub = stub_request(:get, "#{url}/1").with(query: hash_including({})).to_return(json_response({ id: 1, name: 'Users' }))
 
         expect { unit_client(middleware: raising).groups.find(1) }.to raise_error(ZammadAPI::ConfigurationError)
         expect(stub).not_to have_been_requested
@@ -706,7 +710,7 @@ RSpec.describe ZammadAPI::Transport do
       end
 
       it 'sends nothing before refusing' do
-        stub = stub_request(:get, url).with(query: hash_including({}))
+        stub = stub_request(:get, "#{url}/1").with(query: hash_including({})).to_return(json_response({ id: 1, name: 'Users' }))
 
         expect { unit_client(middleware: ->(builder) { builder.use(subclass) }).groups.find(1) }.to raise_error(ZammadAPI::ConfigurationError)
         expect(stub).not_to have_been_requested
