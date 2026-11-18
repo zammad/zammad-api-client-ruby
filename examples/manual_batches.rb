@@ -45,8 +45,13 @@ end
 
 # 3. A resumable page loop ---------------------------------------------------
 #
-# Own the page number when the job has to survive being interrupted. A page
-# shorter than the page size is the last one.
+# Own the page number when the job has to survive being interrupted. The
+# loop ends on a page with nothing on it, and not on a page short of
+# PER_PAGE: that is the size asked for, and what counts is the size served.
+# An instance that serves 25 where 50 were asked for hands back a "short"
+# page every time, and a loop that stops on one has stopped after the first
+# with the checkpoint cleared. `find_each` and `in_batches` learn the size
+# from the first page; here one more request at the end does the same job.
 #
 # A page number is a position, not a record, so it only resumes where it left
 # off while nothing before it goes away. Delete one ticket from a page already
@@ -92,7 +97,6 @@ loop do
   # nothing in it, where the page before was still worth having.
   File.write(NEXT_CURSOR, page + 1)
   File.rename(NEXT_CURSOR, CURSOR)
-  break if batch.size < PER_PAGE
 
   page += 1
 end
