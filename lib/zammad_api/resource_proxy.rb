@@ -3,6 +3,7 @@
 require 'forwardable'
 
 require_relative 'collection'
+require_relative 'deep_copy'
 require_relative 'duplicate_keys'
 require_relative 'errors'
 require_relative 'transport'
@@ -372,7 +373,13 @@ module ZammadAPI
       collection(
         "#{path}/search",
         'get .search of object',
-        query:        { query: term }.merge(search_filters(filters)),
+        # A copy of the term and the filters, taken here. The collection is
+        # lazy, so it reads them when it is enumerated, and it was reading the
+        # caller's own objects: `search('printer', ids: ids)` followed by
+        # `ids << 7`, or a term built up in a buffer that is then reused,
+        # searched for something other than what this call was given - after
+        # it had been checked, and with the collection already handed on.
+        query:        DeepCopy.frozen_copy({ query: term }.merge(search_filters(filters))),
         max_per_page: SEARCH_MAX_PER_PAGE,
         sortable:     true,
         search:       true
@@ -404,7 +411,8 @@ module ZammadAPI
     # +condition+ - because left to the request they would be reported when
     # the collection is first enumerated, some lines away from the search
     # that wrote them. What it returns is discarded: the collection sends the
-    # values as they were given, and the transport stringifies them then.
+    # values as they were given - a copy of them, see {#search} - and the
+    # transport stringifies them then.
     #
     # @return [Hash{Symbol => Object}]
     # @raise [ArgumentError]

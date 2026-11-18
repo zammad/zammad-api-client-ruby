@@ -700,6 +700,59 @@ RSpec.describe ZammadAPI::ResourceProxy do
         client.users.search('smith', ids: [1]).to_a
         expect(a_request(:get, users_search).with(query: hash_including('query' => 'smith'))).to have_been_made
       end
+
+      # A collection is lazy: nothing is sent until it is enumerated. It held
+      # the caller's own Array, Hash and String until then, so changing one of
+      # them afterwards changed a search that had already been written and
+      # checked.
+      context 'when what it was given changes before the collection is read' do
+        it 'sends the ids it was given' do
+          ids    = [1]
+          search = client.users.search('x', ids: ids)
+          ids << 2
+          search.to_a
+
+          expect(a_request(:get, users_search).with(query: hash_including('ids' => ['1']))).to have_been_made
+        end
+
+        it 'sends the term it was given' do
+          term   = +'smith'
+          search = client.users.search(term)
+          term << ' jones'
+          search.to_a
+
+          expect(a_request(:get, users_search).with(query: hash_including('query' => 'smith'))).to have_been_made
+        end
+
+        it 'sends the condition it was given, at every depth' do
+          condition = { 'ticket.state_id' => { operator: 'is', value: [1] } }
+          search    = client.tickets.search('x', condition: condition)
+          condition['ticket.state_id'][:value] << 2
+          condition['ticket.owner_id'] = { operator: 'is', value: [3] }
+          search.to_a
+
+          expect(a_request(:get, "#{ClientHelper::BASE_URL}api/v1/tickets/search")
+            .with(query: hash_including('condition' => { 'ticket.state_id' => { 'operator' => 'is', 'value' => ['1'] } })))
+            .to have_been_made
+        end
+
+        it 'carries the copy through page and order' do
+          ids    = [1]
+          search = client.users.search('x', ids: ids).order(:login).page(2)
+          ids << 2
+          search.to_a
+
+          expect(a_request(:get, users_search).with(query: hash_including('ids' => ['1'], 'page' => '2', 'sort_by' => 'login')))
+            .to have_been_made
+        end
+
+        it 'leaves what it was given writable' do
+          ids = [1]
+          client.users.search('x', ids: ids)
+
+          expect(ids).not_to be_frozen
+        end
+      end
     end
 
     # Zammad drops a parameter it does not know, so these would come back

@@ -638,6 +638,11 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   as long as it ran. Two consecutive pages holding the same ids, in any order, raise
   `PaginationError` before the second is handed over. Records without an id are still
   compared by payload.
+- A search sends the term and the filters it was given. The collection `search` returns is
+  lazy and held the caller's own String, Array and Hash until it was enumerated, so
+  `search('printer', ids: ids)` followed by `ids << 7` searched for something the call was
+  never given, after the filters had been checked. `search` keeps a copy of its own, which
+  `page` and `order` carry on.
 
 ### Changed
 
