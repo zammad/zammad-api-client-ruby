@@ -19,12 +19,13 @@ tickets = client.tickets.all
 
 # Where the loop in part 3 keeps its checkpoint. A page number says which
 # tickets come next only together with the instance it was counted on, the
-# list it pages and the size of the pages, so the file is named for all
-# three. Under one name for every run, a job stopped at page 4 of one Zammad
-# had the next run against another start at page 4 there, with the first
-# three pages never read - and remove the first job's checkpoint when it
-# finished.
-JOB         = Digest::SHA256.hexdigest("#{client.config.url} api/v1/tickets #{PER_PAGE}")[0, 16]
+# user whose tickets they are - the index serves what that user may read -
+# the list it pages and the size of the pages, so the file is named for all
+# of them. Under one name for every run, a job stopped at page 4 of one
+# Zammad had the next run against another start at page 4 there, with the
+# first three pages never read - and remove the first job's checkpoint when
+# it finished. The user costs a request to look up.
+JOB         = Digest::SHA256.hexdigest("#{client.config.url} #{client.me.id} api/v1/tickets #{PER_PAGE}")[0, 16]
 CURSOR      = File.join(Dir.tmpdir, "zammad_batch_cursor_#{JOB}")
 NEXT_CURSOR = "#{CURSOR}.next".freeze
 
