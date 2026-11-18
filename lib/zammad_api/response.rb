@@ -148,14 +148,21 @@ module ZammadAPI
     # first `record.id` then died with `TypeError: no implicit conversion of
     # Symbol into Integer` from deep inside the gem: precisely the confusing
     # failure further downstream.
+    #
+    # Asked for by position, because the element itself cannot say whether
+    # one was found. `find` answers nil for no offender and for an offender
+    # that is nil, so a list holding a JSON null - `[null]`, or one null
+    # among the records - passed as a list of objects, and the same failure
+    # came back one type over: NoMethodError for `nil[:id]`, from the walk
+    # that reads the ids of a page.
     def array_of_objects!(array, operation:, resource_class:)
-      offender = array.find { !it.is_a?(Hash) }
-      return array if offender.nil?
+      position = array.index { !it.is_a?(Hash) }
+      return array if position.nil?
 
       raise ParseError.build(
         operation:      operation,
         expected:       'array of objects',
-        actual:         "an array holding #{offender.class}",
+        actual:         "an array holding #{array.fetch(position).class}",
         resource_class: resource_class
       )
     end

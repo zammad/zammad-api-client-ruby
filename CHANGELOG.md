@@ -395,6 +395,9 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - A list body that is not made of objects raises `ParseError` instead of failing later. An
   unexpanded search answering `[1, 2, 3]` stored an Integer as a record's attributes, and
   the first reader died with `TypeError: no implicit conversion of Symbol into Integer`.
+  A `null` among the records is refused as well. It passed the check, which could not tell
+  a `nil` it had found from having found nothing, and a walk then raised `NoMethodError`
+  reading the ids of the page.
 - `destroy` clears the staged changes and the last validation error, and refuses the
   association readers. A destroyed record went on reporting `changed?` and a change set
   that can never be sent, and `record.related` went on requesting a record that no longer

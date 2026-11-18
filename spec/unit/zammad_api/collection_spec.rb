@@ -1109,6 +1109,15 @@ RSpec.describe ZammadAPI::Collection do
       expect { search.to_a }.to raise_error(ZammadAPI::ParseError, /expected a JSON array, got Hash/)
     end
 
+    # The walk reads the id of every record on a page, so a null that got
+    # past the shape check died there as NoMethodError rather than as the
+    # ParseError a response of the wrong shape is.
+    it 'raises ParseError for a null among the records' do
+      stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response({ records: [nil, { id: 2 }], total_count: 2 }))
+
+      expect { search.to_a }.to raise_error(ZammadAPI::ParseError, /an array holding NilClass/)
+    end
+
     # One page is one request whatever it holds, so there is no walk for a
     # total to end, and the request is the one it always was.
     it 'does not ask a search limited to one page for the total' do

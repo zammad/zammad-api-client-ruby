@@ -80,6 +80,18 @@ RSpec.describe ZammadAPI::Response do
         .to raise_error(ZammadAPI::ParseError, /an array holding String/)
     end
 
+    # `find` cannot tell "no offender" from "the offender is nil", so a null
+    # passed as an object and the first read of it died with NoMethodError.
+    it 'raises for a list holding a null' do
+      expect { build(body: [nil]).decoded(:array, operation: 'get list') }
+        .to raise_error(ZammadAPI::ParseError, "Can't get list: expected a JSON array of objects, got an array holding NilClass")
+    end
+
+    it 'raises for a null among the objects of a list' do
+      expect { build(body: [{ id: 1 }, nil, { id: 3 }]).decoded(:array, operation: 'get list') }
+        .to raise_error(ZammadAPI::ParseError, /an array holding NilClass/)
+    end
+
     it 'names the resource class when a list element has the wrong shape' do
       expect { build(body: [1]).decoded(:array, operation: 'get list', resource_class: ZammadAPI::Resources::User) }
         .to raise_error(/\(ZammadAPI::Resources::User\)/)
@@ -112,6 +124,11 @@ RSpec.describe ZammadAPI::Response do
     it 'raises for records that are not objects' do
       expect { build(body: { records: [1, 2], total_count: 2 }).decoded_list(operation: 'get list') }
         .to raise_error(ZammadAPI::ParseError, "Can't get list: expected a JSON array of objects, got an array holding Integer")
+    end
+
+    it 'raises for a null among the records of a counted list' do
+      expect { build(body: { records: [nil, { a: 1 }], total_count: 2 }).decoded_list(operation: 'get list') }
+        .to raise_error(ZammadAPI::ParseError, "Can't get list: expected a JSON array of objects, got an array holding NilClass")
     end
 
     it 'raises for an object that holds no records' do
