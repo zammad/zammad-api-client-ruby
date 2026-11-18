@@ -318,6 +318,36 @@ RSpec.describe ZammadAPI::Transport do
     end
   end
 
+  describe '.redact' do
+    it 'blanks the value under a key that names a credential' do
+      expect(described_class.redact({ login: 'x', password: 'hunter2' })).to eq({ login: 'x', password: '[REDACTED]' })
+    end
+
+    it 'reads a String key the way it reads a Symbol' do
+      expect(described_class.redact({ 'api_key' => 'k' })).to eq({ 'api_key' => '[REDACTED]' })
+    end
+
+    it 'blanks one at any depth, through Hashes and Arrays' do
+      expect(described_class.redact({ users: [{ preferences: { access_token: 't', locale: 'de' } }] }))
+        .to eq({ users: [{ preferences: { access_token: '[REDACTED]', locale: 'de' } }] })
+    end
+
+    it 'blanks the whole of a structure held under such a key' do
+      expect(described_class.redact({ tokens: [{ name: 'a' }] })).to eq({ tokens: '[REDACTED]' })
+    end
+
+    it 'leaves what it was given as it was' do
+      attributes = { password: 'hunter2' }
+      described_class.redact(attributes)
+
+      expect(attributes).to eq({ password: 'hunter2' })
+    end
+
+    it 'hands back anything that is not a structure' do
+      expect(described_class.redact('password')).to eq('password')
+    end
+  end
+
   describe '.escape_path_segment' do
     it 'leaves an ordinary id alone' do
       expect(described_class.escape_path_segment(42)).to eq('42')

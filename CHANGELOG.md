@@ -808,6 +808,11 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   defaults lost a value without a word. `create`, `assign_attributes`, `update` and a
   writer handed a Hash refuse the pair the same way, at any depth, and nothing is staged
   when they do. It is the refusal a query parameter and a header already had.
+- A record's `inspect` blanks the value of an attribute that names a credential, by the
+  rule the debug log redacts a request with. The attributes were printed as they stood, so
+  `client.users.new(login: 'x', password: 'hunter2')` showed the password in IRB and under
+  `pp`, in an RSpec failure and in any exception report that interpolates the record.
+  `attributes`, `to_h` and `to_json` still hand the value over.
 
 ### Changed
 
