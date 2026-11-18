@@ -45,12 +45,14 @@ module ZammadAPI
     # @api private
     # @param per_page [Integer, nil] records fetched per request, or nil for
     #   as many as the endpoint serves
-    # @param countable [Boolean] whether this endpoint answers
-    #   +only_total_count+, which only a search endpoint does
+    # @param search [Boolean] whether this is a search endpoint, which
+    #   differs from an index in two ways a collection has to know about: it
+    #   answers +only_total_count+, and it can serve a page short of its size
+    #   before the last one
     # @param sortable [Boolean] whether this endpoint reads +sort_by+ and
     #   +order_by+
     # @param unsortable_hint [String] what to do instead where it does not
-    def initialize(transport:, resource_class:, path:, operation:, max_per_page:, sortable:, unsortable_hint:, query: {}, per_page: nil, page: nil, countable: false)
+    def initialize(transport:, resource_class:, path:, operation:, max_per_page:, sortable:, unsortable_hint:, query: {}, per_page: nil, page: nil, search: false)
       @transport       = transport
       @resource_class  = resource_class
       @path            = path
@@ -75,7 +77,7 @@ module ZammadAPI
       # own page instead of taking them off the front of this one.
       @per_page        = clamp_per_page(per_page || max_per_page)
       @page            = page
-      @countable       = countable
+      @search          = search
     end
 
     # Yields every record, fetching further pages as needed.
@@ -308,7 +310,7 @@ module ZammadAPI
       # A block or an argument is Enumerable counting matches, not this asking
       # how large the result is. A collection limited to one page has to read
       # that page, because the total describes the whole query.
-      return super if !args.empty? || block || @page || !@countable
+      return super if !args.empty? || block || @page || !@search
 
       total_count || super
     end
@@ -498,8 +500,22 @@ module ZammadAPI
         # endpoint whose cap was never this generous - every page came back
         # short and the walk stopped on page one with a truncated result and
         # nothing to show for it.
+        #
+        # Asked of an index endpoint only. Its page is one SQL query with an
+        # offset and a limit, so a page short of the size it has been serving
+        # is the last one. A search page is put together in two steps:
+        # ApplicationController#model_search_render has the search - through
+        # Elasticsearch, or through SQL - name the ids for the page, and then
+        # loads the records with `where(id: ids)`. An id whose record is gone
+        # by the second step is left out and nothing fills its place: a ticket
+        # deleted in between, or one Elasticsearch still lists because its
+        # index has drifted from the database. So a search can serve 199 of
+        # 200 on page two with page three still to come, and stopping there
+        # truncated the result with nothing to say so. Only the empty page
+        # above ends a search walk, which costs one more request where the
+        # last page of hits is part-filled.
         page_size = received if page_size.zero?
-        break if received < page_size
+        break if !@search && received < page_size
 
         previous = digest
         page += 1
@@ -518,7 +534,7 @@ module ZammadAPI
         query:           query,
         per_page:        per_page,
         page:            page,
-        countable:       @countable
+        search:          @search
       )
     end
 

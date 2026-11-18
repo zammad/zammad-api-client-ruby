@@ -623,6 +623,14 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   with `shift` looked like an empty page and the walk stopped after the first one, and a
   batch the block shortened looked like the last. The records are counted before they are
   handed over.
+- A search is walked to its end where one of its pages comes back short. A walk stopped at
+  the first page shorter than the one before it, which is right for an index and not for a
+  search: Zammad has the search name the ids for a page and then loads the records by id,
+  so one deleted in between, or one Elasticsearch still lists after it was removed, is left
+  out and nothing fills its place. `search(...).each` then ended on that page with the
+  rest of the hits unread, and `find_by` answered `nil` for a record on a later one. Only
+  an empty page ends a search walk now, at the cost of one more request where the last page
+  of hits is part-filled.
 
 ### Changed
 

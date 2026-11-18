@@ -882,6 +882,64 @@ RSpec.describe ZammadAPI::Collection do
   # the server's cap is lower than the request - a cap the gem's declaration
   # has gone stale on - every page is short of what was asked for, and reading
   # the requested size would make each one look like the last.
+  # A search names the ids for a page and then loads the records by id, so an
+  # id whose record is gone by then leaves the page one short - on any page,
+  # not only the last. An index page is a single query and has no such gap.
+  describe 'a search, which can serve a page short before the last one' do
+    subject(:search) { client.users.search('smith') }
+
+    let(:search_url) { "#{ClientHelper::BASE_URL}api/v1/users/search" }
+    let(:page_size)  { ZammadAPI::ResourceProxy::SEARCH_MAX_PER_PAGE }
+
+    def stub_search_page(page, records)
+      stub_request(:get, search_url)
+        .with(query: hash_including('page' => page.to_s))
+        .to_return(json_response(records))
+    end
+
+    def hits(range) = range.map { { id: it } }
+
+    it 'walks on past a page that came back short' do
+      stub_search_page(1, hits(1..page_size))
+      stub_search_page(2, hits((page_size + 1)...(page_size * 2)))
+      stub_search_page(3, hits([900, 901]))
+      stub_search_page(4, [])
+
+      expect(search.map(&:id)).to eq([*1...(page_size * 2), 900, 901])
+    end
+
+    it 'walks on past a short first page too' do
+      stub_search_page(1, hits(1...page_size))
+      stub_search_page(2, hits(page_size..(page_size * 2)))
+      stub_search_page(3, [])
+
+      expect(search.map(&:id)).to eq((1..(page_size * 2)).to_a)
+    end
+
+    it 'ends on the empty page' do
+      stub_search_page(1, hits(1..3))
+      last = stub_search_page(2, [])
+      stub_search_page(3, hits([4]))
+
+      expect(search.map(&:id)).to eq([1, 2, 3])
+      expect(last).to have_been_requested.once
+      expect(a_request(:get, search_url).with(query: hash_including('page' => '3'))).not_to have_been_made
+    end
+
+    it 'still raises PaginationError for a search that ignores the page parameter' do
+      stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response(hits(1..3)))
+
+      expect { search.to_a }.to raise_error(ZammadAPI::PaginationError, /ignoring the page parameter/)
+    end
+
+    it 'still reads only the one page a search was limited to' do
+      stub_search_page(2, hits(1..3))
+
+      expect(search.page(2).map(&:id)).to eq([1, 2, 3])
+      expect(a_request(:get, search_url).with(query: hash_including('page' => '3'))).not_to have_been_made
+    end
+  end
+
   describe 'an endpoint that pages smaller than it was asked for' do
     it 'is walked to the end rather than truncated at the first short page' do
       stub_capped_endpoint(url, total: 5, max: 2)

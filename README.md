@@ -784,6 +784,12 @@ truncated at the first short page.
 That keeps a walk complete: a page size the server silently shrank would otherwise end the
 iteration at the first page.
 
+A search is walked until a page comes back empty, whatever the size of the pages before it.
+Zammad has the search name the ids for a page and then loads those records, so a record
+deleted in between, or one Elasticsearch still lists after it was removed, leaves the page
+short with more hits behind it. A short page therefore ends the walk of an index and not of
+a search, which costs a search one more request where its last page of hits is part-filled.
+
 `first` and `take` size their own request rather than taking records off the front of one
 sized for walking, so the cheap-looking call is cheap:
 

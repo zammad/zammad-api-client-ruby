@@ -19,7 +19,7 @@ module ZammadAPI
     @unsortable_hint: String
     @per_page: Integer
     @page: Integer?
-    @countable: bool
+    @search: bool
 
     def initialize: (
       transport: Transport,
@@ -32,7 +32,7 @@ module ZammadAPI
       ?query: Hash[Symbol, untyped],
       ?per_page: Integer?,
       ?page: Integer?,
-      ?countable: bool
+      ?search: bool
     ) -> void
 
     def each: () { (R) -> void } -> Collection[R]

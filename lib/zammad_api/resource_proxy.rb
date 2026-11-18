@@ -375,7 +375,7 @@ module ZammadAPI
         query:        { query: term }.merge(search_filters(filters)),
         max_per_page: SEARCH_MAX_PER_PAGE,
         sortable:     true,
-        countable:    true
+        search:       true
       )
     end
 
@@ -383,7 +383,7 @@ module ZammadAPI
 
     private
 
-    def collection(path, operation, query: {}, max_per_page: resource_class.page_limit, sortable: resource_class.sortable?, countable: false)
+    def collection(path, operation, query: {}, max_per_page: resource_class.page_limit, sortable: resource_class.sortable?, search: false)
       Collection.new(
         transport:       @transport,
         resource_class:  resource_class,
@@ -392,7 +392,7 @@ module ZammadAPI
         max_per_page:    max_per_page,
         sortable:        sortable,
         unsortable_hint: resource_class.searchable? ? SEARCHABLE_UNSORTABLE_HINT : UNSORTABLE_HINT,
-        countable:       countable,
+        search:          search,
         query:           { expand: true }.merge(query)
       )
     end
