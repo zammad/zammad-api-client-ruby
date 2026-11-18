@@ -156,6 +156,12 @@ module ZammadAPI
     # untouched.
     DOT_SEGMENTS = ['.', '..'].freeze
 
+    # What a record id is written as: the Integer Zammad serves, or text - a
+    # String out of a request parameter, a Symbol for a named member such as
+    # `users/me`. Everything else has a `to_s` as well, and none of those
+    # names a record.
+    RECORD_ID_TYPES = [Integer, String, Symbol].freeze
+
     # A request path that carries a scheme and an authority, and so names a
     # host of its own. Any scheme and either case, which is wider than the
     # two lowercase prefixes Faraday itself treats as absolute: what is
@@ -508,20 +514,39 @@ module ZammadAPI
     # them inside the segment here, but a proxy that normalises a path before
     # routing it would undo that, and no Zammad record is named for one.
     #
+    # Anything that is not an id is refused rather than printed. `to_s`
+    # answers for every object, so a record where its id belongs was pasted
+    # in as it inspects: `exists?(ticket)` asked for
+    # `tickets/%23%3CZammadAPI%3A%3AResources%3A%3ATicket...%3E`, was told
+    # 404 about a path that names nothing, and answered false for a ticket
+    # that exists, while `destroy(ticket)` raised NotFoundError for one that
+    # was right there. The message names the class and does not quote the
+    # value, which for a record is every attribute it carries.
+    #
     # Public for the same reason as {.stringify_query}: {Test} builds the
     # paths it records with it.
     #
     # @api private
-    # @param value [Object]
+    # @param value [Integer, String, Symbol, nil]
     # @return [String]
-    # @raise [ArgumentError] when there is nothing to send, or when the id
-    #   navigates instead of naming a record
+    # @raise [ArgumentError] when there is nothing to send, when the value
+    #   is not an id at all, or when the id navigates instead of naming a
+    #   record
     def self.escape_path_segment(value)
+      raise ArgumentError, not_a_record_id_message(value) if !value.nil? && RECORD_ID_TYPES.none? { value.is_a?(it) }
+
       segment = value.to_s
       raise ArgumentError, 'a record id is required, and this one is empty' if segment.empty?
       raise ArgumentError, "#{segment.inspect} points at another endpoint rather than naming a record" if DOT_SEGMENTS.include?(segment)
 
       segment.gsub(UNRESERVED_IN_PATH) { |character| character.bytes.map { format('%%%02X', it) }.join }
+    end
+
+    # @api private
+    # @return [String]
+    def self.not_a_record_id_message(value)
+      "a record id is an Integer or a String, and this one is #{value.class}: it would go into the request path as " \
+        'that object prints, which names no record. To address a record you hold, pass its id.'
     end
 
     # Strips the leading slashes from a path so that it resolves against the

@@ -355,6 +355,35 @@ RSpec.describe ZammadAPI::Transport do
     it 'encodes an already-encoded dot segment rather than passing it on' do
       expect(described_class.escape_path_segment('%2e%2e')).to eq('%252e%252e')
     end
+
+    it 'takes a Symbol, for a member that is named rather than numbered' do
+      expect(described_class.escape_path_segment(:me)).to eq('me')
+    end
+
+    # `to_s` answers for every object, so a record where its id belongs was
+    # pasted into the path as it inspects and answered with a 404.
+    it 'raises for a record where its id belongs' do
+      record = ZammadAPI::Resources::Group.from_response(unit_transport, { id: 1, name: 'Users' })
+
+      expect { described_class.escape_path_segment(record) }
+        .to raise_error(ArgumentError, /record id is an Integer or a String, and this one is ZammadAPI::Resources::Group/)
+    end
+
+    it 'does not quote what it refuses, which for a record is its attributes' do
+      record = ZammadAPI::Resources::Group.from_response(unit_transport, { id: 1, name: 'Users' })
+
+      expect { described_class.escape_path_segment(record) }.to raise_error(ArgumentError) { |error| expect(error.message).not_to include('Users') }
+    end
+
+    [[1], { id: 1 }, 1.0, true, Object.new].each do |value|
+      it "raises for #{value.class}, which only prints as something" do
+        expect { described_class.escape_path_segment(value) }.to raise_error(ArgumentError, /this one is #{value.class}/)
+      end
+    end
+
+    it 'still says that an id is missing for nil' do
+      expect { described_class.escape_path_segment(nil) }.to raise_error(ArgumentError, /record id is required/)
+    end
   end
 
   describe 'request bodies' do

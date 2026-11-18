@@ -795,6 +795,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   request takes headers of its own and the request line prints them, and neither name
   matched the words that mark a credential, so `client.get(path, headers: {'Cookie' =>
   ...})` wrote the session out in full.
+- A record passed where its id belongs is refused with an `ArgumentError`. Whatever was
+  given went into the request path through `to_s`, which answers for every object, so
+  `client.tickets.exists?(ticket)` asked for a path spelling out the record's `inspect`, was
+  told 404 about it and answered `false` for a ticket that exists, and `destroy(ticket)`
+  raised `NotFoundError` for one that was right there. An id is an `Integer`, a `String` or
+  a `Symbol`; the message names the class of anything else and does not quote it.
 
 ### Changed
 
