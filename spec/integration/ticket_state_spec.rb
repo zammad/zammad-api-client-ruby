@@ -1,22 +1,22 @@
-require 'spec_helper'
+# frozen_string_literal: true
 
-describe ZammadAPI, 'ticket state object basics' do
+RSpec.describe ZammadAPI, 'ticket state object basics' do
   client = Helper.client
 
   name = "some_ticket_state#{Helper.random}"
   ticket_state = nil
 
   it 'new with invalid attributes' do
-    ticket_state_invalid = client.ticket_state.new
+    ticket_state_invalid = client.ticket_states.new
 
     expect(ticket_state_invalid.class).to eq(ZammadAPI::Resources::TicketState)
     expect(ticket_state_invalid.new_record?).to be(true)
 
-    expect { ticket_state_invalid.save }.to raise_error(ZammadAPI::ClientError)
+    expect { ticket_state_invalid.save! }.to raise_error(ZammadAPI::ClientError)
   end
 
   it 'new with valid attributes' do
-    ticket_state = client.ticket_state.new(
+    ticket_state = client.ticket_states.new(
       name:              name,
       state_type:        'new',
       next_state_id:     nil,
@@ -30,7 +30,7 @@ describe ZammadAPI, 'ticket state object basics' do
     expect(ticket_state.id).to be_nil
     expect(ticket_state.name).to eq(name)
     expect(ticket_state.state_type).to eq('new')
-    expect(ticket_state.state_type_id).to be_nil
+    expect(ticket_state.key?(:state_type_id)).to be(false)
     expect(ticket_state.next_state_id).to be_nil
     expect(ticket_state.ignore_escalation).to be(false)
     expect(ticket_state.note).to eq('')
@@ -38,6 +38,7 @@ describe ZammadAPI, 'ticket state object basics' do
   end
 
   it 'save' do
+    ticket_state = established!(ticket_state, 'new with valid attributes')
     result = ticket_state.save
 
     expect(result).to be(true)
@@ -91,7 +92,8 @@ describe ZammadAPI, 'ticket state object basics' do
   end
 
   it 'find' do
-    ticket_state_lookup = client.ticket_state.find(ticket_state.id)
+    ticket_state = established!(ticket_state, 'new with valid attributes')
+    ticket_state_lookup = client.ticket_states.find(ticket_state.id)
 
     expect(ticket_state_lookup.class).to eq(ZammadAPI::Resources::TicketState)
     expect(ticket_state_lookup.id).to eq(ticket_state.id)
@@ -108,7 +110,8 @@ describe ZammadAPI, 'ticket state object basics' do
   end
 
   it 'all' do
-    ticket_states = client.ticket_state.all
+    ticket_state = established!(ticket_state, 'new with valid attributes')
+    ticket_states = client.ticket_states.all
 
     ticket_state_exists = nil
     ticket_states.each do |local_ticket_state|
@@ -132,7 +135,7 @@ describe ZammadAPI, 'ticket state object basics' do
     ticket_state_exists.active = true
     ticket_state_exists.save
 
-    ticket_state_lookup = client.ticket_state.find(ticket_state.id)
+    ticket_state_lookup = client.ticket_states.find(ticket_state.id)
     expect(ticket_state_lookup.class).to eq(ZammadAPI::Resources::TicketState)
     expect(ticket_state_lookup.id).to eq(ticket_state.id)
     expect(ticket_state_lookup.name).to eq("#{name}-2")
@@ -147,9 +150,9 @@ describe ZammadAPI, 'ticket state object basics' do
   end
 
   it 'pagination with all' do
-    ticket_states = client.ticket_state.all
+    ticket_states = client.ticket_states.all
 
-    expect(ticket_states[0].class).to eq(ZammadAPI::Resources::TicketState)
+    expect(ticket_states.first.class).to eq(ZammadAPI::Resources::TicketState)
 
     count = 0
     ticket_states.each do |local_ticket_state|
@@ -159,18 +162,18 @@ describe ZammadAPI, 'ticket state object basics' do
     expect(count).to be >= 7
 
     count = 0
-    ticket_states = client.ticket_state.all
-    ticket_states.page(1, 3) do |local_ticket_state|
+    ticket_states = client.ticket_states.all
+    ticket_states.page(1, per_page: 3).each do |local_ticket_state|
       expect(local_ticket_state.class).to eq(ZammadAPI::Resources::TicketState)
       count += 1
     end
     expect(count).to eq(3)
-    ticket_states.page(2, 3) do |local_ticket_state|
+    ticket_states.page(2, per_page: 3).each do |local_ticket_state|
       expect(local_ticket_state.class).to eq(ZammadAPI::Resources::TicketState)
       count += 1
     end
     expect(count).to eq(6)
-    ticket_states.page(3, 3) do |local_ticket_state|
+    ticket_states.page(3, per_page: 3).each do |local_ticket_state|
       expect(local_ticket_state.class).to eq(ZammadAPI::Resources::TicketState)
       count += 1
     end
@@ -178,6 +181,7 @@ describe ZammadAPI, 'ticket state object basics' do
   end
 
   it 'destroy' do
+    ticket_state = established!(ticket_state, 'new with valid attributes')
     result = ticket_state.destroy
 
     expect(result).to be(true)

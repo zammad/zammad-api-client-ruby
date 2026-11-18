@@ -1,22 +1,22 @@
-require 'spec_helper'
+# frozen_string_literal: true
 
-describe ZammadAPI, 'organization object basics' do
+RSpec.describe ZammadAPI, 'organization object basics' do
   client = Helper.client
 
   name = "some_organization#{Helper.random}"
   organization = nil
 
   it 'new with invalid attributes' do
-    organization_invalid = client.organization.new
+    organization_invalid = client.organizations.new
 
     expect(organization_invalid.class).to eq(ZammadAPI::Resources::Organization)
     expect(organization_invalid.new_record?).to be(true)
 
-    expect { organization_invalid.save }.to raise_error(ZammadAPI::ClientError)
+    expect { organization_invalid.save! }.to raise_error(ZammadAPI::ClientError)
   end
 
   it 'new with valid attributes' do
-    organization = client.organization.new(
+    organization = client.organizations.new(
       name:   name,
       shared: false,
       note:   '',
@@ -33,6 +33,7 @@ describe ZammadAPI, 'organization object basics' do
   end
 
   it 'save' do
+    organization = established!(organization, 'new with valid attributes')
     result = organization.save
 
     expect(result).to be(true)
@@ -72,7 +73,8 @@ describe ZammadAPI, 'organization object basics' do
   end
 
   it 'find' do
-    organization_lookup = client.organization.find(organization.id)
+    organization = established!(organization, 'new with valid attributes')
+    organization_lookup = client.organizations.find(organization.id)
 
     expect(organization_lookup.class).to eq(ZammadAPI::Resources::Organization)
     expect(organization_lookup.id).to eq(organization.id)
@@ -85,7 +87,8 @@ describe ZammadAPI, 'organization object basics' do
   end
 
   it 'all' do
-    organizations = client.organization.all
+    organization = established!(organization, 'new with valid attributes')
+    organizations = client.organizations.all
 
     organization_exists = nil
     organizations.each do |local_organization|
@@ -104,7 +107,7 @@ describe ZammadAPI, 'organization object basics' do
     organization_exists.active = true
     organization_exists.save
 
-    organization_lookup = client.organization.find(organization.id)
+    organization_lookup = client.organizations.find(organization.id)
     expect(organization_lookup.class).to eq(ZammadAPI::Resources::Organization)
     expect(organization_lookup.id).to eq(organization.id)
     expect(organization_lookup.name).to eq("#{name}-2")
@@ -115,9 +118,9 @@ describe ZammadAPI, 'organization object basics' do
   end
 
   it 'pagination with all' do
-    organizations = client.organization.all
+    organizations = client.organizations.all
 
-    expect(organizations[0].class).to eq(ZammadAPI::Resources::Organization)
+    expect(organizations.first.class).to eq(ZammadAPI::Resources::Organization)
 
     count = 0
     organizations.each do |local_organization|
@@ -127,13 +130,13 @@ describe ZammadAPI, 'organization object basics' do
     expect(count).to eq(2)
 
     count = 0
-    organizations = client.organization.all
-    organizations.page(1, 3) do |local_organization|
+    organizations = client.organizations.all
+    organizations.page(1, per_page: 3).each do |local_organization|
       expect(local_organization.class).to eq(ZammadAPI::Resources::Organization)
       count += 1
     end
     expect(count).to eq(2)
-    organizations.page(2, 3) do |local_organization|
+    organizations.page(2, per_page: 3).each do |local_organization|
       expect(local_organization.class).to eq(ZammadAPI::Resources::Organization)
       count += 1
     end
@@ -141,7 +144,8 @@ describe ZammadAPI, 'organization object basics' do
   end
 
   it 'search' do
-    organizations = client.organization.search(query: name)
+    organization = established!(organization, 'new with valid attributes')
+    organizations = client.organizations.search(name)
 
     organization_exists = nil
     organizations.each do |local_organization|
@@ -160,7 +164,7 @@ describe ZammadAPI, 'organization object basics' do
     organization_exists.active = false
     organization_exists.save
 
-    organization_lookup = client.organization.find(organization.id)
+    organization_lookup = client.organizations.find(organization.id)
     expect(organization_lookup.class).to eq(ZammadAPI::Resources::Organization)
     expect(organization_lookup.id).to eq(organization.id)
     expect(organization_lookup.name).to eq("#{name}-2")
@@ -171,9 +175,10 @@ describe ZammadAPI, 'organization object basics' do
   end
 
   it 'pagination with search' do
-    organizations = client.organization.search(query: "#{name}-2")
+    organization = established!(organization, 'new with valid attributes')
+    organizations = client.organizations.search("#{name}-2")
 
-    expect(organizations[0].class).to eq(ZammadAPI::Resources::Organization)
+    expect(organizations.first.class).to eq(ZammadAPI::Resources::Organization)
 
     count = 0
     organization_exists = nil
@@ -194,13 +199,13 @@ describe ZammadAPI, 'organization object basics' do
     expect(organization_exists.updated_by).to eq('admin@example.com')
 
     count = 0
-    organizations = client.organization.search(query: 'zammad')
-    organizations.page(1, 3) do |local_organization|
+    organizations = client.organizations.search('zammad')
+    organizations.page(1, per_page: 3).each do |local_organization|
       expect(local_organization.class).to eq(ZammadAPI::Resources::Organization)
       count += 1
     end
     expect(count).to eq(1)
-    organizations.page(2, 3) do |local_organization|
+    organizations.page(2, per_page: 3).each do |local_organization|
       expect(local_organization.class).to eq(ZammadAPI::Resources::Organization)
       count += 1
     end
@@ -208,6 +213,7 @@ describe ZammadAPI, 'organization object basics' do
   end
 
   it 'destroy' do
+    organization = established!(organization, 'new with valid attributes')
     result = organization.destroy
 
     expect(result).to be(true)

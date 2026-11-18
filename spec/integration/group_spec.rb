@@ -1,22 +1,22 @@
-require 'spec_helper'
+# frozen_string_literal: true
 
-describe ZammadAPI, 'group object basics' do
+RSpec.describe ZammadAPI, 'group object basics' do
   client = Helper.client
 
   name = "some_group#{Helper.random}"
   group = nil
 
   it 'new with invalid attributes' do
-    group_invalid = client.group.new
+    group_invalid = client.groups.new
 
     expect(group_invalid.class).to eq(ZammadAPI::Resources::Group)
     expect(group_invalid.new_record?).to be(true)
 
-    expect { group_invalid.save }.to raise_error(ZammadAPI::ClientError)
+    expect { group_invalid.save! }.to raise_error(ZammadAPI::ClientError)
   end
 
   it 'new with valid attributes' do
-    group = client.group.new(
+    group = client.groups.new(
       name:                 name,
       assignment_timeout:   100,
       follow_up_assignment: false,
@@ -37,6 +37,7 @@ describe ZammadAPI, 'group object basics' do
   end
 
   it 'save' do
+    group = established!(group, 'new with valid attributes')
     result = group.save
 
     expect(result).to be(true)
@@ -76,7 +77,8 @@ describe ZammadAPI, 'group object basics' do
   end
 
   it 'find' do
-    group_lookup = client.group.find(group.id)
+    group = established!(group, 'new with valid attributes')
+    group_lookup = client.groups.find(group.id)
 
     expect(group_lookup.class).to eq(ZammadAPI::Resources::Group)
     expect(group_lookup.id).to eq(group.id)
@@ -89,7 +91,8 @@ describe ZammadAPI, 'group object basics' do
   end
 
   it 'all' do
-    groups = client.group.all
+    group = established!(group, 'new with valid attributes')
+    groups = client.groups.all
 
     group_exists = nil
     groups.each do |local_group|
@@ -109,7 +112,7 @@ describe ZammadAPI, 'group object basics' do
     group_exists.active = true
     group_exists.save
 
-    group_lookup = client.group.find(group.id)
+    group_lookup = client.groups.find(group.id)
     expect(group_lookup.class).to eq(ZammadAPI::Resources::Group)
     expect(group_lookup.id).to eq(group.id)
     expect(group_lookup.name).to eq("#{name}-2")
@@ -121,9 +124,9 @@ describe ZammadAPI, 'group object basics' do
   end
 
   it 'pagination with all' do
-    groups = client.group.all
+    groups = client.groups.all
 
-    expect(groups[0].class).to eq(ZammadAPI::Resources::Group)
+    expect(groups.first.class).to eq(ZammadAPI::Resources::Group)
 
     count = 0
     groups.each do |local_group|
@@ -133,13 +136,13 @@ describe ZammadAPI, 'group object basics' do
     expect(count).to eq(3)
 
     count = 0
-    groups = client.group.all
-    groups.page(1, 3) do |local_group|
+    groups = client.groups.all
+    groups.page(1, per_page: 3).each do |local_group|
       expect(local_group.class).to eq(ZammadAPI::Resources::Group)
       count += 1
     end
     expect(count).to eq(3)
-    groups.page(2, 3) do |local_group|
+    groups.page(2, per_page: 3).each do |local_group|
       expect(local_group.class).to eq(ZammadAPI::Resources::Group)
       count += 1
     end
@@ -147,6 +150,7 @@ describe ZammadAPI, 'group object basics' do
   end
 
   it 'destroy' do
+    group = established!(group, 'new with valid attributes')
     result = group.destroy
 
     expect(result).to be(true)

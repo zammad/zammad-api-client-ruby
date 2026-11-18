@@ -1,22 +1,22 @@
-require 'spec_helper'
+# frozen_string_literal: true
 
-describe ZammadAPI, 'ticket priority object basics' do
+RSpec.describe ZammadAPI, 'ticket priority object basics' do
   client = Helper.client
 
   name = "some_ticket_priority#{Helper.random}"
   ticket_priority = nil
 
   it 'new with invalid attributes' do
-    ticket_priority_invalid = client.ticket_priority.new
+    ticket_priority_invalid = client.ticket_priorities.new
 
     expect(ticket_priority_invalid.class).to eq(ZammadAPI::Resources::TicketPriority)
     expect(ticket_priority_invalid.new_record?).to be(true)
 
-    expect { ticket_priority_invalid.save }.to raise_error(ZammadAPI::ClientError)
+    expect { ticket_priority_invalid.save! }.to raise_error(ZammadAPI::ClientError)
   end
 
   it 'new with valid attributes' do
-    ticket_priority = client.ticket_priority.new(
+    ticket_priority = client.ticket_priorities.new(
       name:   name,
       note:   '',
       active: true,
@@ -31,6 +31,7 @@ describe ZammadAPI, 'ticket priority object basics' do
   end
 
   it 'save' do
+    ticket_priority = established!(ticket_priority, 'new with valid attributes')
     result = ticket_priority.save
 
     expect(result).to be(true)
@@ -61,7 +62,8 @@ describe ZammadAPI, 'ticket priority object basics' do
   end
 
   it 'find' do
-    ticket_priority_lookup = client.ticket_priority.find(ticket_priority.id)
+    ticket_priority = established!(ticket_priority, 'new with valid attributes')
+    ticket_priority_lookup = client.ticket_priorities.find(ticket_priority.id)
 
     expect(ticket_priority_lookup.class).to eq(ZammadAPI::Resources::TicketPriority)
     expect(ticket_priority_lookup.id).to eq(ticket_priority.id)
@@ -71,7 +73,8 @@ describe ZammadAPI, 'ticket priority object basics' do
   end
 
   it 'all' do
-    ticket_priorities = client.ticket_priority.all
+    ticket_priority = established!(ticket_priority, 'new with valid attributes')
+    ticket_priorities = client.ticket_priorities.all
 
     ticket_priority_exists = nil
     ticket_priorities.each do |local_ticket_priority|
@@ -88,7 +91,7 @@ describe ZammadAPI, 'ticket priority object basics' do
     ticket_priority_exists.active = true
     ticket_priority_exists.save
 
-    ticket_priority_lookup = client.ticket_priority.find(ticket_priority.id)
+    ticket_priority_lookup = client.ticket_priorities.find(ticket_priority.id)
     expect(ticket_priority_lookup.class).to eq(ZammadAPI::Resources::TicketPriority)
     expect(ticket_priority_lookup.id).to eq(ticket_priority.id)
     expect(ticket_priority_lookup.name).to eq("#{name}-2")
@@ -97,9 +100,9 @@ describe ZammadAPI, 'ticket priority object basics' do
   end
 
   it 'pagination with all' do
-    ticket_priorities = client.ticket_priority.all
+    ticket_priorities = client.ticket_priorities.all
 
-    expect(ticket_priorities[0].class).to eq(ZammadAPI::Resources::TicketPriority)
+    expect(ticket_priorities.first.class).to eq(ZammadAPI::Resources::TicketPriority)
 
     count = 0
     ticket_priorities.each do |local_ticket_priority|
@@ -109,18 +112,18 @@ describe ZammadAPI, 'ticket priority object basics' do
     expect(count).to eq(4)
 
     count = 0
-    ticket_priorities = client.ticket_priority.all
-    ticket_priorities.page(1, 2) do |local_ticket_priority|
+    ticket_priorities = client.ticket_priorities.all
+    ticket_priorities.page(1, per_page: 2).each do |local_ticket_priority|
       expect(local_ticket_priority.class).to eq(ZammadAPI::Resources::TicketPriority)
       count += 1
     end
     expect(count).to eq(2)
-    ticket_priorities.page(2, 2) do |local_ticket_priority|
+    ticket_priorities.page(2, per_page: 2).each do |local_ticket_priority|
       expect(local_ticket_priority.class).to eq(ZammadAPI::Resources::TicketPriority)
       count += 1
     end
     expect(count).to eq(4)
-    ticket_priorities.page(3, 2) do |local_ticket_priority|
+    ticket_priorities.page(3, per_page: 2).each do |local_ticket_priority|
       expect(local_ticket_priority.class).to eq(ZammadAPI::Resources::TicketPriority)
       count += 1
     end
@@ -128,6 +131,7 @@ describe ZammadAPI, 'ticket priority object basics' do
   end
 
   it 'destroy' do
+    ticket_priority = established!(ticket_priority, 'new with valid attributes')
     result = ticket_priority.destroy
 
     expect(result).to be(true)

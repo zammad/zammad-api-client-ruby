@@ -1,6 +1,6 @@
-require 'spec_helper'
+# frozen_string_literal: true
 
-describe ZammadAPI, 'user object basics' do
+RSpec.describe ZammadAPI, 'user object basics' do
   client = Helper.client
 
   random = Helper.random
@@ -10,16 +10,16 @@ describe ZammadAPI, 'user object basics' do
   user = nil
 
   it 'new with invalid attributes' do
-    user_invalid = client.user.new
+    user_invalid = client.users.new
 
     expect(user_invalid.class).to eq(ZammadAPI::Resources::User)
     expect(user_invalid.new_record?).to be(true)
 
-    expect { user_invalid.save }.to raise_error(ZammadAPI::ClientError)
+    expect { user_invalid.save! }.to raise_error(ZammadAPI::ClientError)
   end
 
   it 'new with valid attributes' do
-    user = client.user.new(
+    user = client.users.new(
       firstname:   firstname,
       lastname:    lastname,
       email:       email,
@@ -44,6 +44,7 @@ describe ZammadAPI, 'user object basics' do
   end
 
   it 'save' do
+    user = established!(user, 'new with valid attributes')
     result = user.save
 
     expect(result).to be(true)
@@ -88,7 +89,8 @@ describe ZammadAPI, 'user object basics' do
   end
 
   it 'find' do
-    user_lookup = client.user.find(user.id)
+    user = established!(user, 'new with valid attributes')
+    user_lookup = client.users.find(user.id)
 
     expect(user_lookup.class).to eq(ZammadAPI::Resources::User)
     expect(user_lookup.id).to eq(user.id)
@@ -105,7 +107,8 @@ describe ZammadAPI, 'user object basics' do
   end
 
   it 'all' do
-    users = client.user.all
+    user = established!(user, 'new with valid attributes')
+    users = client.users.all
 
     user_exists = nil
     users.each do |local_user|
@@ -128,7 +131,7 @@ describe ZammadAPI, 'user object basics' do
     expect(user_exists.updated_by).to eq('admin@example.com')
     user_exists.save
 
-    user_lookup = client.user.find(user.id)
+    user_lookup = client.users.find(user.id)
     expect(user_lookup.class).to eq(ZammadAPI::Resources::User)
     expect(user_lookup.id).to eq(user.id)
     expect(user_lookup.firstname).to eq("#{firstname}-2")
@@ -146,7 +149,7 @@ describe ZammadAPI, 'user object basics' do
 
   it 'pagination with all' do
     (1..10).each do |local_count|
-      client.user.create(
+      client.users.create(
         firstname: "firstname#{local_count}",
         lastname:  "lastname#{local_count}",
         email:     "customer_email#{local_count}@example.com",
@@ -157,9 +160,9 @@ describe ZammadAPI, 'user object basics' do
       )
     end
 
-    users = client.user.all
+    users = client.users.all
 
-    expect(users[0].class).to eq(ZammadAPI::Resources::User)
+    expect(users.first.class).to eq(ZammadAPI::Resources::User)
     count = 0
     users.each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
@@ -168,19 +171,19 @@ describe ZammadAPI, 'user object basics' do
     expect(count).to eq(15)
 
     count = 0
-    users = client.user.all
-    users.page(1, 4) do |local_user|
+    users = client.users.all
+    users.page(1, per_page: 4).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end
     expect(count).to eq(4)
-    users.page(2, 5) do |local_user|
+    users.page(2, per_page: 5).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end
     expect(count).to eq(9)
     count = 0
-    users.page(1, 200) do |local_user|
+    users.page(1, per_page: 200).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end
@@ -188,7 +191,8 @@ describe ZammadAPI, 'user object basics' do
   end
 
   it 'search' do
-    users = client.user.search(query: firstname)
+    user = established!(user, 'new with valid attributes')
+    users = client.users.search(firstname)
 
     user_exists = nil
     users.each do |local_user|
@@ -210,7 +214,7 @@ describe ZammadAPI, 'user object basics' do
     user_exists.active = false
     user_exists.save
 
-    user_lookup = client.user.find(user.id)
+    user_lookup = client.users.find(user.id)
     expect(user_lookup.class).to eq(ZammadAPI::Resources::User)
     expect(user_lookup.id).to eq(user.id)
     expect(user_lookup.firstname).to eq("#{firstname}-2")
@@ -224,9 +228,10 @@ describe ZammadAPI, 'user object basics' do
   end
 
   it 'pagination with search' do
-    users = client.user.search(query: firstname)
+    user = established!(user, 'new with valid attributes')
+    users = client.users.search(firstname)
 
-    expect(users[0].class).to eq(ZammadAPI::Resources::User)
+    expect(users.first.class).to eq(ZammadAPI::Resources::User)
 
     count = 0
     user_exists = nil
@@ -250,13 +255,13 @@ describe ZammadAPI, 'user object basics' do
     expect(user_exists.updated_by).to eq('admin@example.com')
 
     count = 0
-    users = client.user.search(query: firstname)
-    users.page(1, 3) do |local_user|
+    users = client.users.search(firstname)
+    users.page(1, per_page: 3).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end
     expect(count).to eq(1)
-    users.page(2, 3) do |local_user|
+    users.page(2, per_page: 3).each do |local_user|
       expect(local_user.class).to eq(ZammadAPI::Resources::User)
       count += 1
     end
@@ -264,6 +269,7 @@ describe ZammadAPI, 'user object basics' do
   end
 
   it 'destroy' do
+    user = established!(user, 'new with valid attributes')
     # wait until zammad scheduler wrote some entries to activity stream
     # to have some references and not allow users to delete
     sleep 12
