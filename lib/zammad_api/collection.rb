@@ -15,6 +15,10 @@ module ZammadAPI
   # +Enumerable+ stop the walk as soon as they have enough, so neither has to
   # download everything.
   #
+  # An index that serves every record in one response and reads no +page+ is
+  # read in one request instead, where its resource says so: see
+  # {Resources::Base.paginated}.
+  #
   # @example Iterate every ticket
   #   client.tickets.all.each { |ticket| puts ticket.title }
   #
@@ -57,7 +61,10 @@ module ZammadAPI
     #   +per_page+ once one has come back with nothing on it, which a read
     #   sized by {#first} may and a batch size a caller chose may not: see
     #   {#widened}
-    def initialize(transport:, resource_class:, path:, operation:, max_per_page:, sortable:, unsortable_hint:, query: {}, per_page: nil, page: nil, search: false, widens: false)
+    # @param paginated [Boolean] whether this endpoint reads +page+ and
+    #   +per_page+. One that does not serves every record in one response,
+    #   and is read in one request: see {#read_whole}
+    def initialize(transport:, resource_class:, path:, operation:, max_per_page:, sortable:, unsortable_hint:, query: {}, per_page: nil, page: nil, search: false, widens: false, paginated: true)
       @transport       = transport
       @resource_class  = resource_class
       @path            = path
@@ -84,6 +91,7 @@ module ZammadAPI
       @page            = page
       @search          = search
       @widens          = widens
+      @paginated       = paginated
     end
 
     # Yields every record, fetching further pages as needed.
@@ -115,6 +123,9 @@ module ZammadAPI
     # so +of+ is what sizes it. For groups of a size the API knows nothing
     # about, slice the records instead: +find_each.each_slice(12)+.
     #
+    # An index that is not paginated has one response for every record, so
+    # there a batch is a slice of it, of the same size at most.
+    #
     # @param of [Integer, nil] records fetched per request
     # @yieldparam records [Array<Resources::Base>]
     # @return [Enumerator] when no block is given
@@ -122,7 +133,7 @@ module ZammadAPI
       return to_enum(:in_batches, of: of) if !block
       return with(per_page: page_size!(of, 'of')).in_batches(&block) if of
 
-      walk(&block)
+      @paginated ? walk(&block) : read_whole(&block)
       self
     end
 
@@ -143,9 +154,11 @@ module ZammadAPI
     # @param per_page [Integer, nil] records on the page, as many as the endpoint
     #   serves by default
     # @return [Collection]
-    # @raise [ArgumentError] for a page size the endpoint does not serve
+    # @raise [ArgumentError] for a page size the endpoint does not serve, or
+    #   an endpoint that does not page at all
     def page(number, per_page: nil)
       raise ArgumentError, 'page needs to be a positive integer' if !number.is_a?(Integer) || !number.positive?
+      raise ArgumentError, "#{@path} serves every record in one response and reads no page parameter, so page(#{number}) would hold all of them, whatever the number. Read them with each, or in groups with each_slice." if !@paginated
       return with(page: number) if per_page.nil?
 
       size = positive_integer!(per_page, 'per_page')
@@ -362,7 +375,7 @@ module ZammadAPI
     def empty? = first.nil?
 
     def inspect
-      "#<#{self.class.name} #{@resource_class.name} path=#{@path.inspect} per_page=#{@per_page}#{" page=#{@page}" if @page}>"
+      "#<#{self.class.name} #{@resource_class.name} path=#{@path.inspect} per_page=#{@per_page}#{" page=#{@page}" if @page}#{' paginated=false' if !@paginated}>"
     end
 
     private
@@ -387,8 +400,11 @@ module ZammadAPI
     # endpoint serves - {#clamp_per_page} would reduce it to the same size the
     # collection already has. A zero or negative count is left to
     # Enumerable#first, which has its own answers for both.
+    #
+    # And not where the endpoint does not page: it serves every record
+    # whatever it is asked for, so there is no request to size.
     def own_request_for_first?(count)
-      return false if @page
+      return false if @page || !@paginated
 
       count.is_a?(Integer) && count.positive? && count <= @max_per_page
     end
@@ -472,6 +488,34 @@ module ZammadAPI
       size
     end
 
+    # The one read of an index that does not page: every record it serves,
+    # from one request that names no page.
+    #
+    # Walked like the others, such an index never got past its first page.
+    # A walk learns the page size from the first page and asks for the next
+    # while pages come back that full, so a whole list was always followed
+    # by a request for page two - and an endpoint that reads no +page+
+    # answers that with the same list. The repeated-page guard is there for
+    # exactly that answer, so `to_a` raised PaginationError with every
+    # record in hand, and a `find_by` that found nothing on the first page
+    # raised it instead of answering nil.
+    #
+    # Nothing in the two responses tells such an endpoint from one that
+    # ignores +page+ and serves the first hundred of a thousand records.
+    # Reading that one in a single request would return a truncated list and
+    # call it whole, which is what the guard exists to refuse. So this is
+    # not inferred from a page that repeats: the resource says it, with
+    # {Resources::Base.paginated}, and the guard stays as it is for every
+    # resource that does not.
+    #
+    # The batches are slices of the one response, so that `in_batches(of:
+    # 50)` hands a block fifty records at most here as everywhere else.
+    def read_whole(&block)
+      records, = fetch(1, @per_page)
+
+      records.each_slice(@per_page, &block)
+    end
+
     def walk
       page      = @page || 1
       previous  = nil
@@ -522,7 +566,7 @@ module ZammadAPI
         # are what a search serves for two pages of hits whose records are
         # gone, with more beyond them - see #hits_past? - and there is nothing
         # on either for the block to be handed twice.
-        raise PaginationError.build(operation: @operation, page: page, resource_class: @resource_class) if received.positive? && digest == previous
+        raise PaginationError.build(operation: @operation, page: page, resource_class: @resource_class, index: !@search) if received.positive? && digest == previous
 
         yield records if received.positive?
 
@@ -663,7 +707,8 @@ module ZammadAPI
         per_page:        per_page,
         page:            page,
         search:          @search,
-        widens:          widens
+        widens:          widens,
+        paginated:       @paginated
       )
     end
 
@@ -738,7 +783,12 @@ module ZammadAPI
     # It costs Zammad nothing it was not doing. model_search_render asks the
     # search for the total on every request and leaves it out of the answer
     # unless the parameter is there.
+    #
+    # An endpoint that does not page is sent neither parameter. It would
+    # drop both, and a request that names a page reads as one of several.
     def page_query(page, per_page)
+      return @query if !@paginated
+
       query = @query.merge(page: page, per_page: per_page)
 
       @search && @page.nil? ? query.merge(with_total_count: true) : query

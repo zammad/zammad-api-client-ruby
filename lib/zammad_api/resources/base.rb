@@ -127,6 +127,46 @@ module ZammadAPI
           @sortable = value
         end
 
+        # Declares whether this resource's index endpoint pages.
+        #
+        # ApplicationController#model_index_render reads +page+ and
+        # +per_page+, and every resource this gem models is served by it.
+        # That is the default, so a resource says nothing. Not every index
+        # is: ObjectManagerAttributesController#index renders
+        # `ObjectManager::Attribute.list_full`, every attribute in one
+        # response, and reads no parameter at all.
+        #
+        # Such an index could not be read. A {Collection} asks for the page
+        # after a full one, was answered with the same list again, and
+        # raised {PaginationError} for it - correctly, as far as it could
+        # tell, because an endpoint that ignores +page+ and serves only the
+        # first of many pages looks the same. A resource that declares
+        # +paginated false+ says which of the two it is: its index is read
+        # in one request, and {Collection#page} refuses it.
+        #
+        # Declare it only for an endpoint that does serve every record. One
+        # that caps what it serves and ignores +page+ would be read as far
+        # as its cap and no further, with nothing to say so.
+        #
+        # A search is not affected. Every search endpoint pages.
+        #
+        # Whether the index sorts is not affected either: that is
+        # {.sortable}, a declaration of its own. An endpoint that reads no
+        # parameter at all, as the one below, says both.
+        #
+        # @example
+        #   class ObjectAttribute < ZammadAPI::Resources::Base
+        #     path 'api/v1/object_manager_attributes'
+        #     paginated false
+        #     sortable false
+        #   end
+        #
+        # @param value [Boolean]
+        # @return [void]
+        def paginated(value)
+          @paginated = value
+        end
+
         # @return [String] the API path of this resource
         def resource_path
           declaration(:path) || raise(Error, "#{name} does not declare an API path")
@@ -149,6 +189,10 @@ module ZammadAPI
         # @return [Boolean] whether this resource's index endpoint reads
         #   +sort_by+ and +order_by+
         def sortable? = declaration(:sortable) { true }
+
+        # @return [Boolean] whether this resource's index endpoint reads
+        #   +page+ and +per_page+
+        def paginated? = declaration(:paginated) { true }
 
         # The API path of one record of this kind.
         #

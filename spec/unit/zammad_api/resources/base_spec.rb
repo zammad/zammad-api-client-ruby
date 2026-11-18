@@ -1001,6 +1001,12 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(subclass.sortable?).to be(false)
     end
 
+    it 'inherits whether the index endpoint pages' do
+      unpaged = Class.new(described_class) { paginated false }
+
+      expect(Class.new(unpaged).paginated?).to be(false)
+    end
+
     it 'inherits the associations, as it always did' do
       expect(subclass.associations.keys).to eq(ZammadAPI::Resources::Ticket.associations.keys)
     end
@@ -1041,6 +1047,27 @@ RSpec.describe ZammadAPI::Resources::Base do
 
     it 'defaults to an index endpoint that sorts, as the generic ones do' do
       expect(Class.new(described_class).sortable?).to be(true)
+    end
+
+    it 'defaults to an index endpoint that pages, as the generic ones do' do
+      expect(Class.new(described_class).paginated?).to be(true)
+    end
+
+    it 'records a declaration that the index endpoint does not page' do
+      expect(Class.new(described_class) { paginated false }.paginated?).to be(false)
+    end
+
+    # Two declarations, and neither reads the other.
+    it 'leaves whether the index endpoint sorts to its own declaration' do
+      expect(Class.new(described_class) { paginated false }.sortable?).to be(true)
+    end
+
+    it 'leaves whether the index endpoint pages to its own declaration' do
+      expect(Class.new(described_class) { sortable false }.paginated?).to be(true)
+    end
+
+    it 'pages every resource this gem models' do
+      expect(ZammadAPI::Client::RESOURCES.values).to all(be_paginated)
     end
 
     it 'records a declared page limit' do

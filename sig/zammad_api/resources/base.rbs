@@ -36,17 +36,20 @@ module ZammadAPI
       self.@max_per_page: Integer?
       self.@search_filters: Array[Symbol]?
       self.@sortable: bool?
+      self.@paginated: bool?
 
       def self.path: (String) -> void
       def self.searchable: (bool) -> void
       def self.max_per_page: (Integer) -> void
       def self.search_filters: (*Symbol | String names) -> void
       def self.sortable: (bool) -> void
+      def self.paginated: (bool) -> void
       def self.resource_path: () -> String
       def self.searchable?: () -> bool
       def self.search_filter_names: () -> Array[Symbol]
       def self.page_limit: () -> Integer
       def self.sortable?: () -> bool
+      def self.paginated?: () -> bool
       def self.member_path: ((Integer | String) id) -> String
       def self.fetch_one: (Transport transport, (Integer | String) id) -> Base
       def self.from_response: (Transport, Hash[untyped, untyped] attributes) -> Base
