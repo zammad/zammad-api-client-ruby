@@ -547,6 +547,20 @@ RSpec.describe ZammadAPI::Client do
             .to raise_error(ArgumentError) { |error| expect(error.message).not_to include('s3cret') }
         end
 
+        # Ruby attaches the error a rescue raised in to the one it raises,
+        # and prints it with it. URI's quotes the path.
+        it 'does not carry the error that quotes the path along as its cause' do
+          expect { client.get('api/v1/ro les?token=s3cret') }.to raise_error(ArgumentError) { |error|
+            expect(error.cause).to be_nil
+            expect(error.full_message(highlight: false)).not_to include('s3cret')
+          }
+        end
+
+        it 'does not carry one along for a query string it cannot read either' do
+          expect { client.get('api/v1/roles?token=s3cret&token[b]=2') }
+            .to raise_error(ArgumentError) { |error| expect(error.cause).to be_nil }
+        end
+
         it 'refuses it for every verb' do
           %i[post put delete].each do |verb|
             expect { client.public_send(verb, 'api/v1/tägs') }.to raise_error(ArgumentError, /cannot be read as one/)

@@ -551,8 +551,10 @@ module ZammadAPI
     # TypeError from inside the connection.
     #
     # Neither message quotes the path, for the reason the one above does
-    # not, and neither passes on the message of the error underneath, which
-    # does quote it.
+    # not, and neither passes on the error underneath, which does quote it:
+    # not its message, and not the error itself as the cause, which Ruby
+    # attaches to an error raised in a rescue and prints with it, so an
+    # exception tracker recorded the path, credentials and all.
     #
     # @api private
     # @param relative [String]
@@ -562,7 +564,7 @@ module ZammadAPI
       begin
         URI.parse(relative)
       rescue URI::InvalidURIError
-        raise ArgumentError, unreadable_path_message(relative)
+        raise ArgumentError, unreadable_path_message(relative), cause: nil
       end
 
       begin
@@ -570,7 +572,7 @@ module ZammadAPI
       rescue TypeError, Faraday::Error
         raise ArgumentError, 'the query string written into this request path cannot be read as parameters: it names one of them ' \
                              'both as a value and as a structure, or nests them deeper than a query string is read. ' \
-                             'Pass the parameters as query: instead, which takes them as a Hash.'
+                             'Pass the parameters as query: instead, which takes them as a Hash.', cause: nil
       end
     end
 
