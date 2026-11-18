@@ -637,7 +637,43 @@ RSpec.describe ZammadAPI::Transport do
       end
     end
 
-    # The build-time check knows `Faraday::Response::Json` by name; anything
+    # `c.response :raise_error` is in most Faraday stacks people have written
+    # before, so it is what a caller adds by habit. It sits below the retry
+    # middleware and raises for a 4xx or 5xx before this gem sees the
+    # response: a GET answered 503 left as Faraday::ServerError without being
+    # retried, and a 404 as Faraday::ResourceNotFound rather than the
+    # NotFoundError that `exists?` and every caller's rescue are written for.
+    context 'with middleware that raises for an error status first' do
+      let(:raising) { ->(builder) { builder.response(:raise_error) } }
+
+      it 'refuses it when the stack is built' do
+        expect { unit_transport(middleware: raising) }
+          .to raise_error(ZammadAPI::ConfigurationError, /raises a Faraday error for a 4xx or 5xx response before this gem sees it/)
+      end
+
+      it 'names the middleware it found' do
+        expect { unit_transport(middleware: raising) }
+          .to raise_error(ZammadAPI::ConfigurationError, /the configured middleware includes Faraday::Response::RaiseError/)
+      end
+
+      it 'says which middleware to drop' do
+        expect { unit_transport(middleware: raising) }.to raise_error(ZammadAPI::ConfigurationError, /drop `c\.response :raise_error`/)
+      end
+
+      it 'refuses it where it was added by class' do
+        expect { unit_transport(middleware: ->(builder) { builder.use(Faraday::Response::RaiseError) }) }
+          .to raise_error(ZammadAPI::ConfigurationError, /Faraday::Response::RaiseError/)
+      end
+
+      it 'sends nothing before refusing' do
+        stub = stub_request(:get, url).with(query: hash_including({}))
+
+        expect { unit_client(middleware: raising).groups.find(1) }.to raise_error(ZammadAPI::ConfigurationError)
+        expect(stub).not_to have_been_requested
+      end
+    end
+
+    # The build-time check knows the two above by name; anything
     # else that consumes the body is caught only once a response is in hand.
     context 'with a decoder the build-time check does not know by name' do
       subject(:transport) do

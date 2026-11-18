@@ -202,11 +202,14 @@ loop, or runs a worker pool, add `faraday-net_http_persistent` to your Gemfile a
 `adapter: :net_http_persistent` as above. Nothing else changes — the option is the whole of
 it.
 
-Middleware that decodes the response body — `connection.response :json` — is the one thing
-the seam will not take, and says so with a `ZammadAPI::ConfigurationError`. This gem parses
-JSON itself, and hands the undecoded bytes back as the file from
-`attachment.download`, so a stack that has already consumed the body leaves nothing
-faithful to return.
+Two things the seam will not take, and it says so with a `ZammadAPI::ConfigurationError`
+when the client is built. One is middleware that decodes the response body,
+`connection.response :json`: this gem parses JSON itself, and hands the undecoded bytes
+back as the file from `attachment.download`, so a stack that has already consumed the body
+leaves nothing faithful to return. The other is `connection.response :raise_error`, which
+raises a Faraday error for a 4xx or 5xx before this gem sees the response: nothing would be
+retried, and a missing record would arrive as `Faraday::ResourceNotFound` rather than the
+`ZammadAPI::NotFoundError` your code rescues.
 
 ## Available resources
 

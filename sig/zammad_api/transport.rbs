@@ -23,7 +23,7 @@ module ZammadAPI
     # openssl declarations that a consumer has not loaded.
     SSL_ERRORS: Array[untyped]
     # private_constant in the source; RBS has no way to say so.
-    DECODING_MIDDLEWARE: Array[String]
+    REFUSED_MIDDLEWARE: Hash[String, String]
     SENSITIVE_KEY_PATTERN: Regexp
     REDACTED: String
     UNRESERVED_IN_PATH: Regexp
@@ -58,7 +58,7 @@ module ZammadAPI
     def timed_out?: (untyped error) -> bool
     def perform: (Symbol, String, Hash[Symbol, untyped]?, untyped, String?, Hash[untyped, untyped]?) -> untyped
     def build_connection: () -> untyped
-    def refuse_decoding_middleware!: (untyped connection) -> void
+    def refuse_unusable_middleware!: (untyped connection) -> void
     def apply_authentication: (untyped) -> void
     def retry_options: () -> Hash[Symbol, untyped]
     def decode: (untyped) -> Response

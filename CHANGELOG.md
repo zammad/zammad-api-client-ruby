@@ -685,6 +685,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   quoting the proxy URL in full. The cause is dropped where its report would print a
   configured value that redaction changes, and kept everywhere else, so a `middleware:`
   callable that raises still shows the backtrace into the caller's code.
+- `middleware:` that adds `c.response :raise_error` is refused with a `ConfigurationError`
+  when the client is built, as `c.response :json` already is. It sits below the retry
+  middleware and raises for a 4xx or 5xx before this gem sees the response, so a `GET`
+  answered 503 was not retried and left as `Faraday::ServerError`, a 404 left as
+  `Faraday::ResourceNotFound`, which `exists?` does not rescue, and a 422 as an error
+  `save` does not turn into `false`. None of them is a `ZammadAPI::Error`.
 
 ### Changed
 

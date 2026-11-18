@@ -567,7 +567,7 @@ module ZammadAPI
         faraday.adapter(config.adapter || Faraday.default_adapter)
       end
 
-      refuse_decoding_middleware!(connection)
+      refuse_unusable_middleware!(connection)
       connection
     rescue ZammadAPI::Error
       raise
@@ -696,29 +696,44 @@ module ZammadAPI
       )
     end
 
-    # Middleware that reads the body before this gem can. Matched by name so
-    # that naming one does not require it to be loaded.
-    DECODING_MIDDLEWARE = %w[Faraday::Response::Json].freeze
-    private_constant :DECODING_MIDDLEWARE
-
-    # Refuses a stack that would decode the response body, while the stack is
-    # still the only thing that has happened.
+    # Middleware this gem cannot do its own work behind, each with what it
+    # takes away and how it is usually spelled. Matched by name so that naming
+    # one does not require it to be loaded.
     #
-    # `raw_body!` below catches the same mistake, but only once a response is
-    # in hand - which is one request too late: `client.groups.create(...)` sent
-    # the POST, Zammad created the group, and only then did a
+    # The first reads the body before this gem can. The second raises for a
+    # 4xx or 5xx before this gem sees the response, and it sits below the
+    # retry middleware, which is where a caller's middleware goes: a GET
+    # answered 503 left as Faraday::ServerError without being retried, a 404
+    # as Faraday::ResourceNotFound, so `exists?` raised for a record that is
+    # merely absent, and a 422 as an error `save` does not turn into false.
+    # None of them is a {ZammadAPI::Error}, which is what every failure is
+    # documented to leave as.
+    REFUSED_MIDDLEWARE = {
+      'Faraday::Response::Json'       => 'which decodes the response body before this gem can. This gem parses JSON itself, and hands ' \
+                                         'the undecoded bytes to attachment downloads, so it needs the body as it arrives: ' \
+                                         'drop `c.response :json` from the `middleware:` callable.',
+      'Faraday::Response::RaiseError' => 'which raises a Faraday error for a 4xx or 5xx response before this gem sees it. This gem ' \
+                                         'raises its own error for each status, and retries a read that was answered 429 or 5xx, ' \
+                                         'and behind this middleware it does neither: ' \
+                                         'drop `c.response :raise_error` from the `middleware:` callable.'
+    }.freeze
+    private_constant :REFUSED_MIDDLEWARE
+
+    # Refuses a stack this gem cannot work behind, while the stack is still
+    # the only thing that has happened.
+    #
+    # `raw_body!` below catches a decoded body too, but only once a response
+    # is in hand - which is one request too late: `client.groups.create(...)`
+    # sent the POST, Zammad created the group, and only then did a
     # ConfigurationError come back, so a caller retrying what looked like a
     # configuration failure created a second one. The middleware is fully
     # visible here, where the unregistered adapter and the unusable proxy are
     # already refused before anything is sent.
-    def refuse_decoding_middleware!(connection)
-      offender = connection.builder.handlers.find { DECODING_MIDDLEWARE.include?(it.klass.name) }
+    def refuse_unusable_middleware!(connection)
+      offender = connection.builder.handlers.find { REFUSED_MIDDLEWARE.key?(it.klass.name) }
       return if offender.nil?
 
-      raise ConfigurationError,
-            "the configured middleware includes #{offender.klass.name}, which decodes the response body before " \
-            'this gem can. This gem parses JSON itself, and hands the undecoded bytes to attachment downloads, ' \
-            'so it needs the body as it arrives: drop `c.response :json` from the `middleware:` callable.'
+      raise ConfigurationError, "the configured middleware includes #{offender.klass.name}, #{REFUSED_MIDDLEWARE.fetch(offender.klass.name)}"
     end
 
     # The body as it came off the wire.
