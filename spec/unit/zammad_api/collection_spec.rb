@@ -1132,23 +1132,48 @@ RSpec.describe ZammadAPI::Collection do
       # the way Zammad serves one: the ids for the page first, and then the
       # records that are still there. Answers with every page it was asked
       # for, as page and size.
-      def stub_search_over(hits, stale: [])
+      #
+      # `serves` is a page size the endpoint holds to whatever it is asked
+      # for, paging by it. `window` is an Elasticsearch result window: a page
+      # that reaches past it is refused, and Zammad answers that as no hits
+      # and a total of nought.
+      def stub_search_over(hits, stale: [], serves: nil, window: nil)
         asked = []
         stub_request(:get, search_url).with(query: hash_including({})).to_return do |request|
           params = URI.decode_www_form(URI(request.uri).query).to_h
           page   = Integer(params['page'])
           size   = Integer(params['per_page'])
           asked << [page, size]
+          next json_response({ records: [], total_count: 0 }) if window && page * size > window
+
+          size = [size, serves].min if serves
           json_response({ records: (Array(hits)[(page - 1) * size, size].to_a - Array(stale)).map { { id: it } }, total_count: Array(hits).size })
         end
         asked
       end
 
       it 'asks for a larger page after each empty one, starting where the last ended' do
-        asked = stub_search_over(1..20, stale: 1..20)
+        asked = stub_search_over(1..32, stale: 1..32)
 
         expect(search.empty?).to be(true)
         expect(asked).to eq([[1, 1], [2, 1], [2, 2], [2, 4], [2, 8], [2, 16]])
+      end
+
+      # A page that reaches past the total is one an index whose result
+      # window was lowered may refuse.
+      it 'asks for no page that reaches past the total the search reported' do
+        asked = stub_search_over(1..20, stale: 1..20)
+        search.empty?
+
+        expect(asked).to eq([[1, 1], [2, 1], [2, 2], [2, 4], [2, 8], [5, 4]])
+      end
+
+      # Hits 257 to 384 were asked for, past the window, which Zammad answers
+      # as nothing at all, and the read ended there with the live hit unread.
+      it 'finds a live hit inside a lowered result window behind stale ones' do
+        stub_search_over(1..300, stale: 1..279, window: 300)
+
+        expect(search.first.id).to eq(280)
       end
 
       it 'reads past five thousand stale hits in tens of requests, not thousands' do

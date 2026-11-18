@@ -940,10 +940,13 @@ since that size says which records it holds.
 
 On a search, the size is where the read starts and not what it is held to. Past a page with
 nothing on it and hits still behind it, `first`, `take` and `empty?` ask for more at a
-time, each page starting where the last one ended, up to the 200 a search serves. Held to a
-page of one they paid a request for every stale hit in a row, which is thousands of them
-where an Elasticsearch index has drifted from the database. A batch size you chose, with
-`in_batches(of:)` or `find_each(batch_size:)`, is never changed.
+time, each page starting where the last one ended, up to the 200 a search serves and never
+past the total it reported. Held to a page of one they paid a request for every stale hit
+in a row, which is thousands of them where an Elasticsearch index has drifted from the
+database. Held to the total, they stay inside an index whose result window was lowered
+below the hits there are, which refuses a page reaching past it and is answered as no hits
+at all. A batch size you chose, with `in_batches(of:)` or `find_each(batch_size:)`, is
+never changed.
 
 ### Reading single attributes
 

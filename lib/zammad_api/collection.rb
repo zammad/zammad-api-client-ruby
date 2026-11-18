@@ -554,7 +554,7 @@ module ZammadAPI
         break if !@search && received < page_size
 
         previous = digest
-        page, per_page = page_after(page, per_page, received)
+        page, per_page = page_after(page, per_page, received, total)
       end
     end
 
@@ -564,8 +564,8 @@ module ZammadAPI
     # with nothing received.
     #
     # @return [Array(Integer, Integer)] the page to ask for and its size
-    def page_after(page, per_page, received)
-      received.zero? && @widens ? widened(page * per_page) : [page + 1, per_page]
+    def page_after(page, per_page, received, total)
+      received.zero? && @widens ? widened(page * per_page, total) : [page + 1, per_page]
     end
 
     # The page to ask for after an empty one, in a read that may widen: the
@@ -594,6 +594,17 @@ module ZammadAPI
     # divisor that fits. Five thousand stale hits are read past in
     # thirty-four requests.
     #
+    # No page reaches past the total the search last reported, though the
+    # endpoint would serve one: with 256 hits covered of 300, the next page
+    # is 32 hits rather than 128. Zammad hands the offset and the size to
+    # Elasticsearch as they are, and an index whose result window was
+    # lowered below them - the per-model settings allow it - refuses the
+    # request, which Zammad answers as no hits and a total of nought. Asked
+    # for hits 257 to 384 against a window of 300, a read with a live hit
+    # at 280 answered nil where a page of one would have found it. The
+    # window cannot be seen from here, so a total beyond it still leaves the
+    # read to end there; the default window is a million hits.
+    #
     # It takes the endpoint to serve the size it is asked for, up to
     # +max_per_page+, which is what #hits_past? takes as well. One that
     # serves less pages by its own size, so page 3 of 192 served as 100 is
@@ -607,9 +618,11 @@ module ZammadAPI
     # records a batch may hold, and a page of 160 is not one of those.
     #
     # @param covered [Integer] the hits the pages read so far have covered
+    # @param total [Integer, nil] the hits the search last reported
     # @return [Array(Integer, Integer)] the page to ask for and its size
-    def widened(covered)
-      pages = covered.fdiv(@max_per_page).ceil
+    def widened(covered, total)
+      limit = total ? (total - covered).clamp(1, @max_per_page) : @max_per_page
+      pages = covered.fdiv(limit).ceil
       pages += 1 until (covered % pages).zero?
 
       [pages + 1, covered / pages]

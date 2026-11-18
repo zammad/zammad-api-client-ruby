@@ -69,8 +69,8 @@ module ZammadAPI
     def positive_integer!: (untyped, String) -> Integer
     def page_size!: (untyped, String) -> Integer
     def walk: () { (Array[R]) -> void } -> void
-    def page_after: (Integer page, Integer per_page, Integer received) -> [ Integer, Integer ]
-    def widened: (Integer covered) -> [ Integer, Integer ]
+    def page_after: (Integer page, Integer per_page, Integer received, Integer? total) -> [ Integer, Integer ]
+    def widened: (Integer covered, Integer? total) -> [ Integer, Integer ]
     def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped], ?widens: bool) -> Collection[R]
     def hits_past?: (Integer covered, Integer? total) -> bool
     def fetch: (Integer, Integer) -> [ Array[R], Integer, Integer? ]
