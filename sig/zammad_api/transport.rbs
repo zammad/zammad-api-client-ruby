@@ -78,6 +78,7 @@ module ZammadAPI
     def timed_out?: (untyped error) -> bool
     def perform: (Symbol, String, Hash[Symbol, untyped]?, String?, Hash[untyped, untyped]?) -> untyped
     def build_connection: () -> untyped
+    def apply_middleware_and_adapter: (untyped faraday) -> void
     def refuse_unusable_middleware!: (untyped connection) -> void
     def refused_middleware: (Class klass) -> String?
     def refused_middleware_message: (Class klass, String refused) -> String
