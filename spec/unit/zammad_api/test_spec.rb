@@ -71,6 +71,54 @@ RSpec.describe ZammadAPI::Test do
 
         expect(zammad.requests.last.on_behalf_of).to eq('agent@example.com')
       end
+
+      # The stand-in's transport answered `with_config` with itself, so what
+      # is read from the transport stayed the stand-in's own: the derived
+      # client reported the option and went on as if it had not been given.
+      it 'retries as often as the derived client is told to' do
+        zammad.stub(:get, 'api/v1/groups/1', status: 503)
+
+        expect { zammad.client.with(retries: 0).groups.find(1) }.to raise_error(ZammadAPI::ServerError)
+        expect(zammad.requests.size).to eq(1)
+      end
+
+      it 'leaves the retries of the client it was derived from as they were' do
+        zammad.stub(:get, 'api/v1/groups/1', status: 503)
+        zammad.client.with(retries: 0)
+
+        expect { zammad.client.groups.find(1) }.to raise_error(ZammadAPI::ServerError)
+        expect(zammad.requests.size).to eq(1 + zammad.config.retries)
+      end
+
+      it 'holds a Retry-After against the derived timeout' do
+        zammad.stub(:get, 'api/v1/groups/1', status: 429, headers: { 'Retry-After' => '30' })
+        zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
+
+        expect { zammad.client.with(timeout: 5).groups.find(1) }.to raise_error(ZammadAPI::RateLimitError)
+        expect(zammad.requests.size).to eq(1)
+      end
+
+      it 'keeps the derived options under an on_behalf_of scope taken afterwards' do
+        zammad.stub(:get, 'api/v1/groups/1', status: 503)
+
+        expect { zammad.client.with(retries: 0).on_behalf_of('agent@example.com').groups.find(1) }.to raise_error(ZammadAPI::ServerError)
+        expect(zammad.requests.size).to eq(1)
+      end
+
+      # A record names its installation by the URL of its transport.
+      it 'tells a record found through another URL from one of its own' do
+        zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
+
+        expect(zammad.client.with(url: 'https://other.test/').groups.find(1)).not_to eq(zammad.client.groups.find(1))
+      end
+
+      it 'still takes two records found through the same derived client as one' do
+        zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
+        derived = zammad.client.with(timeout: 5)
+        found   = derived.groups.find(1)
+
+        expect(derived.groups.find(1)).to eq(found)
+      end
     end
   end
 

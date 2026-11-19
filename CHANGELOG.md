@@ -909,6 +909,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   inside its `preferences`, importing a PGP key logged its passphrase beside the redacted
   key, and a record of an LDAP source printed the password. `otp` and `salt` are matched
   as words, as `key` is, with `totp` and `hotp` counted in.
+- A client derived with `Client#with` from the test kit's client behaves as it is
+  configured. The stand-in's transport kept its own configuration, so
+  `zammad.client.with(retries: 0)` was asked three times for a stubbed 503 where a derived
+  client is asked once on the wire, `with(timeout:)` did not change which `Retry-After`
+  ends the attempts, and a record found through `with(url:)` compared equal to the same id
+  found through the client it was derived from. Only `client.config` showed the option.
 
 ### Changed
 
