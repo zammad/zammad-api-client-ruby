@@ -50,6 +50,20 @@ RSpec.describe ZammadAPI::Config do
         .to raise_error(ZammadAPI::ConfigurationError, 'config url needs a host after the scheme, got "https://"')
     end
 
+    # The value was quoted as it stood, and what stands where the host
+    # belongs may be credentials: a slash too many, and the userinfo is the
+    # start of a path as far as the syntax goes.
+    it 'does not quote the credentials of a url with a slash too many' do
+      expect { build(url: 'https:///admin:url-s3cret@zammad.example.com/') }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config url needs a host after the scheme, got "https://[REDACTED]@zammad.example.com/"')
+    end
+
+    it 'does not quote them where a ? or a # stands in for the host' do
+      %w[https://?admin:url-s3cret@zammad.example.com/ https://#admin:url-s3cret@zammad.example.com/].each do |url|
+        expect { build(url: url) }.to raise_error(ZammadAPI::ConfigurationError) { expect(it.message).not_to include('s3cret') }
+      end
+    end
+
     # URI(...) is what a caller reaches for, and it prints as the URL, so it
     # reached String#end_with? and died there as a NoMethodError - past the
     # ConfigurationError the constructor is documented to raise.
@@ -389,6 +403,28 @@ RSpec.describe ZammadAPI::Config do
       expect(build(proxy: 'proxy.test:8080').inspect).to include('proxy="proxy.test:8080"')
     end
 
+    # A proxy written with the slashes and without the scheme, or with a
+    # slash too many. The authority was looked for where the scheme ended,
+    # and found to end at once, at the slash it began with: an empty
+    # authority holds no colon and no @, so nothing was blanked.
+    {
+      'two slashes and no scheme' => ['//puser:pproxy-s3cret@proxy.test:8080', '[REDACTED]@proxy.test:8080'],
+      'one slash'                 => ['/puser:pproxy-s3cret@proxy.test:8080', '[REDACTED]@proxy.test:8080'],
+      'a scheme and three'        => ['http:///puser:pproxy-s3cret@proxy.test:8080', 'http://[REDACTED]@proxy.test:8080'],
+      'two and a # in a password' => ['//puser:pa#ss-s3cret@proxy.test:8080', '[REDACTED]@proxy.test:8080']
+    }.each do |opening, (proxy, redacted)|
+      it "redacts the credentials of a proxy that opens with #{opening}" do
+        rendered = build(proxy: proxy).inspect
+
+        expect(rendered).to include("proxy=#{redacted.inspect}")
+        expect(rendered).not_to include('s3cret')
+      end
+    end
+
+    it 'leaves a proxy that opens with two slashes and has no credentials alone' do
+      expect(build(proxy: '//proxy.test:8080').inspect).to include('proxy="//proxy.test:8080"')
+    end
+
     it 'leaves a url without credentials alone' do
       expect(build(url: 'https://zammad.example.com/').inspect).to include('url="https://zammad.example.com/"')
     end
@@ -513,6 +549,16 @@ RSpec.describe ZammadAPI::Config do
     # password.
     it 'blanks rather than guesses where a colon could be either a port or a password' do
       expect(build.redacted('https://zammad.example.com:8443/tenant@acme/')).to eq('https://[REDACTED]@acme/')
+    end
+
+    # No host stands in an empty authority, so there is none to blank by
+    # mistake, and what follows it is searched to its last @.
+    it 'blanks what stands behind an empty authority' do
+      expect(build.redacted('https:///admin:s3cret@zammad.example.com/')).to eq('https://[REDACTED]@zammad.example.com/')
+    end
+
+    it 'leaves a value with an empty authority and no @ alone' do
+      expect(build.redacted('https:///helpdesk/')).to eq('https:///helpdesk/')
     end
   end
 

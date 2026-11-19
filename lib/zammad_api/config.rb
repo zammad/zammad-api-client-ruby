@@ -284,13 +284,21 @@ module ZammadAPI
     # cannot tell a port from a password, and of the two mistakes that is the
     # one that leaks nothing.
     #
+    # An empty authority is searched the same way, for the same reason and
+    # at no cost: there is no host in it to blank by mistake. It is what a
+    # slash too many leaves, or the slashes without the scheme - the
+    # authority ends at the first slash, so +//user:secret@proxy:8080+ and
+    # +https:///user:secret@host/+ have none, with no colon and no +@+ in it,
+    # and were printed as they stood: the proxy by {#inspect}, and the url
+    # by the ConfigurationError that refuses a url without a host.
+    #
     # @param value [String] a URL that may carry inline credentials
     # @return [String] the same URL with the credentials blanked
     def redact_userinfo(value)
       scheme    = value[URL_SCHEME_PATTERN].to_s
       rest      = value.delete_prefix(scheme)
       authority = rest[URL_AUTHORITY_PATTERN].to_s
-      boundary  = authority.include?(':') ? rest.rindex('@') : authority.rindex('@')
+      boundary  = authority.empty? || authority.include?(':') ? rest.rindex('@') : authority.rindex('@')
       return value if boundary.nil?
 
       "#{scheme}#{REDACTION}#{rest[boundary..]}"
@@ -317,7 +325,9 @@ module ZammadAPI
       raise ConfigurationError, 'missing url in config' if presence(value).nil?
       raise ConfigurationError, "config url needs to be a string, got #{value.class}" if !value.is_a?(String)
       raise ConfigurationError, 'config url needs to start with http:// or https://' if !SCHEME_PATTERN.match?(value)
-      raise ConfigurationError, "config url needs a host after the scheme, got #{value.inspect}" if !URL_PATTERN.match?(value)
+      # Quoted through the redaction: what follows the scheme here is not a
+      # host, and may be the credentials of a url with a slash too many.
+      raise ConfigurationError, "config url needs a host after the scheme, got #{redact_userinfo(value).inspect}" if !URL_PATTERN.match?(value)
       raise ConfigurationError, inline_credentials_message(value) if inline_credentials?(value)
 
       # A trailing slash keeps Zammad installations served from a sub-path

@@ -830,6 +830,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   that serves only its first page, so it is declared rather than inferred, and the error
   for an index that repeats its first page now says what to declare. `page` refuses a
   resource declared this way. Whether its index sorts is still what `sortable` says.
+- A proxy or instance URL with no host where the host belongs is redacted. A slash too
+  many, or the slashes without the scheme, end the authority before it has begun, so
+  `proxy: '//user:secret@proxy:8080'` was printed by `Config#inspect` with its password, and
+  `url: 'https:///admin:secret@host/'` was quoted in full by the `ConfigurationError` that
+  refuses a url without a host. With no host there to blank by mistake, everything up to
+  the last `@` is blanked, and that error quotes the url redacted.
 
 ### Changed
 
