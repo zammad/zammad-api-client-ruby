@@ -928,6 +928,9 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   and Zammad narrowed by that text. `client.on_behalf_of(user)`, with the record where its
   id or login belongs, built a client whose `From` header carried the record the same way,
   and raises too. Both messages name the class and do not quote the value.
+- The signatures no longer declare `ZammadAPI::Response::TOTAL_COUNT_HEADER`, a constant
+  the library does not have. Steep accepted code that named it, which then raised
+  `NameError` when it ran.
 
 ### Changed
 
