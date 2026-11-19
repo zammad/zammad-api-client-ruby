@@ -1007,11 +1007,12 @@ client.tickets.search('state.name:open').count   # one request
 client.tickets.all.count                         # one request per page
 ```
 
-`size` and `length` are `count`, and cost the same. `empty?` and `first` ask for a single
-record rather than a page:
+`size` and `length` are `count`, and cost the same. `empty?`, `any?`, `none?` and `first`
+ask for a single record rather than a page:
 
 ```ruby
 client.tickets.search('state.name:merged').empty? # one request, for one record
+client.tickets.search('state.name:new').any?      # the same
 client.groups.all.size                            # => 12, having walked
 ```
 

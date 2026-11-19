@@ -57,6 +57,10 @@ module ZammadAPI
     def size: (*untyped) ?{ (R) -> boolish } -> Integer
     def length: (*untyped) ?{ (R) -> boolish } -> Integer
     def empty?: () -> bool
+    def any?: () -> bool
+           | ...
+    def none?: () -> bool
+            | ...
     def inspect: () -> String
 
     private

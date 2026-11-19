@@ -796,6 +796,78 @@ RSpec.describe ZammadAPI::Collection do
     end
   end
 
+  # The question #empty? asks, in the words more often typed. They were
+  # Enumerable's, which starts a walk at the page size for walking and stops
+  # at the first record: up to a full page of expanded records fetched to
+  # learn whether there is one.
+  describe '#any? and #none?' do
+    context 'with a record at the endpoint' do
+      before { stub_request(:get, url).with(query: hash_including({})).to_return(json_response([{ id: 1 }])) }
+
+      it 'answers any? with true' do
+        expect(collection.any?).to be(true)
+      end
+
+      it 'answers none? with false' do
+        expect(collection.none?).to be(false)
+      end
+
+      it 'asks for a single record to answer any?' do
+        collection.any?
+
+        expect(a_request(:get, url).with(query: hash_including('per_page' => '1'))).to have_been_made.once
+        expect(a_request(:get, url).with(query: hash_including({}))).to have_been_made.once
+      end
+
+      it 'asks for a single record to answer none?' do
+        collection.none?
+
+        expect(a_request(:get, url).with(query: hash_including('per_page' => '1'))).to have_been_made.once
+        expect(a_request(:get, url).with(query: hash_including({}))).to have_been_made.once
+      end
+
+      it 'leaves the page size alone on a collection limited to one page' do
+        collection.page(2, per_page: 5).any?
+
+        expect(a_request(:get, url).with(query: hash_including('page' => '2', 'per_page' => '5'))).to have_been_made
+      end
+    end
+
+    context 'with no record at the endpoint' do
+      before { stub_request(:get, url).with(query: hash_including({})).to_return(json_response([])) }
+
+      it 'answers any? with false' do
+        expect(collection.any?).to be(false)
+      end
+
+      it 'answers none? with true' do
+        expect(collection.none?).to be(true)
+      end
+    end
+
+    # A block or a pattern asks about the records, and that is a walk.
+    context 'with a block or a pattern' do
+      before do
+        stub_page(1, [{ id: 1, name: 'Users' }, { id: 2, name: 'Support' }])
+        stub_page(2, [])
+      end
+
+      it 'leaves any? with a block to Enumerable' do
+        expect(collection.any? { it.name == 'Support' }).to be(true)
+        expect(collection.any? { it.name == 'Sales' }).to be(false)
+      end
+
+      it 'leaves none? with a block to Enumerable' do
+        expect(collection.none? { it.name == 'Sales' }).to be(true)
+      end
+
+      it 'leaves a pattern to Enumerable' do
+        expect(collection.any?(ZammadAPI::Resources::Group)).to be(true)
+        expect(collection.none?(ZammadAPI::Resources::Group)).to be(false)
+      end
+    end
+  end
+
   # `take(n)` and `first(n)` ask one question. Enumerable answers both by
   # taking records off the front of a page sized for walking, so with #first
   # sizing its own page and this one left alone, what the same read cost

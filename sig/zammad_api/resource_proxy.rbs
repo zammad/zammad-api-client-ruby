@@ -38,6 +38,10 @@ module ZammadAPI
     def size: () -> Integer
     def length: () -> Integer
     def empty?: () -> bool
+    def any?: () -> bool
+           | ...
+    def none?: () -> bool
+            | ...
     def first: () -> R?
              | (Integer count) -> Array[R]
     def take: (Integer count) -> Array[R]

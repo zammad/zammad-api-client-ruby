@@ -883,6 +883,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   in 1.x, `ticket.article(body: '…')`, answered with the staged article, sent nothing and
   raised nothing; it now raises and names `add_article`. The message says where a value
   for the attribute is written, on a record that takes writes.
+- `any?` and `none?` without a block ask for one record, as `empty?` does. They were
+  `Enumerable`'s, which starts a walk at the page size for walking and stops at the first
+  record: `client.tickets.all.any?` fetched a hundred expanded tickets, and
+  `client.tickets.search('x').any?` two hundred hits, to answer what `empty?` answers with a
+  page of one. A resource proxy forwards both. With a block or a pattern they walk, as
+  before.
 
 ### Changed
 

@@ -367,6 +367,17 @@ module ZammadAPI
     #   @return [Boolean]
     #   @see Collection#empty?
 
+    # @!method any?(*pattern, &block)
+    #   Overrides +Enumerable#any?+ so that, without a block or a pattern, it
+    #   asks for one record rather than a page.
+    #   @return [Boolean]
+    #   @see Collection#any?
+
+    # @!method none?(*pattern, &block)
+    #   Overrides +Enumerable#none?+ the same way.
+    #   @return [Boolean]
+    #   @see Collection#none?
+
     # @!method first(count = nil)
     #   Overrides +Enumerable#first+ so that it reads one sized page rather
     #   than taking records off the front of one sized for walking.
@@ -379,7 +390,7 @@ module ZammadAPI
     #   @return [Array<Resources::Base>]
     #   @see Collection#take
 
-    def_delegators :all, :order, :each, :find_each, :in_batches, :page, :pluck, :count, :size, :length, :empty?, :first, :take
+    def_delegators :all, :order, :each, :find_each, :in_batches, :page, :pluck, :count, :size, :length, :empty?, :any?, :none?, :first, :take
 
     # @!endgroup
 
