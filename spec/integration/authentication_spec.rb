@@ -20,7 +20,7 @@ RSpec.describe ZammadAPI, 'authentication' do
       expect { client.users.find(1) }.to raise_error(ZammadAPI::ClientError)
     end
 
-    %i[organization group ticket_priority ticket_state].each do |resource|
+    %i[organizations groups ticket_priorities ticket_states].each do |resource|
       it "raises for #{resource}" do
         expect { client.public_send(resource).find(1) }.to raise_error(ZammadAPI::AuthenticationError)
       end
