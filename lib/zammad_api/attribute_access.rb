@@ -193,7 +193,20 @@ module ZammadAPI
       identifier = name.to_s
       return super if NON_ATTRIBUTE_SUFFIXES.any? { identifier.end_with?(it) }
       return write_attribute(identifier.delete_suffix('=').to_sym, args.first) if ATTRIBUTE_WRITER.match?(identifier)
-      return attributes[name] if attributes.key?(name)
+
+      if attributes.key?(name)
+        # A reader takes no arguments, and says so as one written out
+        # would. They were never looked at: `ticket.state('closed')`
+        # answered "open" and changed nothing, and the call 1.x added an
+        # article with, `ticket.article(body: '...')`, answered with the
+        # article already staged on a ticket that had one, sent nothing
+        # and raised nothing. Keywords arrive here as one Hash, so they
+        # count as one. A block is not asked about, as it is not for any
+        # method that does not use one.
+        raise ArgumentError, reader_arguments_message(name, args.size) if !args.empty?
+
+        return attributes[name]
+      end
 
       # An attribute the record does not carry used to read as nil, which made
       # `ticket.titel` a silent nil that flowed on into whatever was written
@@ -282,6 +295,24 @@ module ZammadAPI
         "Check the spelling, or read it with [#{name.inspect}] or fetch(#{name.inspect}, nil) where it may be absent. " \
         'Zammad also serves a reduced object where the authenticated user may not see the whole record, so an ' \
         'attribute the record has in Zammad can still be missing here - check what this client may read.'
+    end
+
+    # What a reader called with arguments raises with.
+    #
+    # It opens the way Ruby's own message for the mistake does, so that it
+    # reads as that mistake, and then says what Ruby cannot: that the name
+    # is an attribute, and where a value for it goes on a record that takes
+    # one. A record may add what it knows about a name: see
+    # {Resources::Ticket#reader_arguments_message}.
+    #
+    # @param name [Symbol]
+    # @param given [Integer] how many arguments the reader was called with
+    # @return [String]
+    def reader_arguments_message(name, given)
+      message = "wrong number of arguments (given #{given}, expected 0): #{name} reads the attribute of that name and takes no arguments."
+      return message if !writable_attributes? || !attribute_writable?(name)
+
+      "#{message} To change it, write it with #{name} = ... or update(#{name}: ...)."
     end
 
     # Whether this record stages attribute writes, so that {#respond_to?} and

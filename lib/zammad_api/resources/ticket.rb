@@ -86,6 +86,21 @@ module ZammadAPI
         record.save!
         record
       end
+
+      private
+
+      # `ticket.article(body: '...')` is the call that added an article in
+      # 1.x. On a ticket with an article staged - one built with `article:`
+      # whose save was rejected, say - +article+ is an attribute it carries,
+      # and the call reaches the reader with an argument. Whoever wrote it
+      # meant {#add_article}, so the refusal names it.
+      #
+      # @see AttributeAccess#reader_arguments_message
+      def reader_arguments_message(name, given)
+        return super if name != :article
+
+        "#{super} To add an article to this ticket, which is what article(...) did in 1.x, call add_article(...)."
+      end
     end
   end
 end

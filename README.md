@@ -1488,7 +1488,7 @@ If this is not the time to move, [1.x stays available](#staying-on-1x).
 | `record.unknown_attribute` → `nil`  | raises `NoMethodError`; use `record[:x]`, `fetch(:x, nil)` or `key?(:x)` | A typo read as `nil` and flowed on into whatever was written with it. Zammad also serves a reduced object where the user may not see the whole record, and that is worth being told about |
 | `client.x.new(id: 5)`               | `client.x.find(5)`                                   | The constructor was the one door that did not refuse a staged id — and the only one whose value reached Zammad, since a new record is sent in full |
 | `client.users.find(ticket.customer_id)` | `ticket.related.customer`                         | Following a foreign key needed the client threaded through           |
-| `ticket.article(body: '…')`         | `ticket.add_article(body: '…')`                      | A noun that sends a `POST`, one letter away from `ticket.articles`, which only reads. The method is gone: `article` is an attribute reader like any other, and raises `NoMethodError` on a ticket that has no article staged |
+| `ticket.article(body: '…')`         | `ticket.add_article(body: '…')`                      | A noun that sends a `POST`, one letter away from `ticket.articles`, which only reads. The method is gone: `article` is an attribute reader like any other, and the old call raises `NoMethodError` on a ticket that has no article staged and `ArgumentError`, naming `add_article`, on one that has |
 
 ### Errors
 
