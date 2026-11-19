@@ -181,11 +181,24 @@ module ZammadAPI
     # names a record.
     RECORD_ID_TYPES = [Integer, String, Symbol].freeze
 
-    # A request path that carries a scheme and an authority, and so names a
-    # host of its own. Any scheme and either case, which is wider than the
-    # two lowercase prefixes Faraday itself treats as absolute: what is
-    # refused here should not depend on how one Faraday version reads a URL.
-    ABSOLUTE_URL = %r{\A[a-z][a-z0-9+.-]*://}i
+    # A request path that opens with a scheme, which is what makes a URL an
+    # absolute one, whatever follows. Any scheme and either case, which is
+    # wider than the two lowercase prefixes Faraday itself treats as
+    # absolute: what is refused here should not depend on how one Faraday
+    # version reads a URL.
+    #
+    # It did. This asked for `://` after the scheme, so `http:/collect`
+    # passed as a relative path, and Faraday 2.9.0 and 2.9.1, which the
+    # gemspec allows, join a path to the instance URL the way URI does: the
+    # result is `http:/collect`, an absolute URL with no host, and the
+    # request leaves for it over plain HTTP with this client's headers
+    # attached. Faraday keeps such a path relative from 2.9.2 on, with a
+    # `./` in front of it.
+    #
+    # A path relative to the instance never matches. A colon in the first
+    # segment is the one thing RFC 3986 does not let a relative path have,
+    # for this reason, and every path Zammad serves opens with `api/`.
+    ABSOLUTE_URL = /\A[a-z][a-z0-9+.-]*:/i
 
     # @return [Config]
     attr_reader :config
@@ -604,6 +617,8 @@ module ZammadAPI
     # to that host. Record ids are held inside their segment by
     # {.escape_path_segment}; this is the same escape, one level up. The
     # message does not quote the path, which may carry a secret of its own.
+    # What counts as absolute is {ABSOLUTE_URL}: a path that opens with a
+    # scheme, with or without a host after it.
     #
     # Public for the same reason as {.stringify_query} and
     # {.escape_path_segment}: {Client} and {Test} both apply this rule, the
@@ -630,8 +645,9 @@ module ZammadAPI
     def self.relative_path(path)
       relative = path.to_s.sub(%r{\A/+}, '')
       if ABSOLUTE_URL.match?(relative)
-        raise ArgumentError, 'a request path is relative to the instance URL, and this one is an absolute URL: sending it would hand ' \
-                             "this client's credentials to another host. Pass the path alone, such as 'api/v1/tickets'."
+        raise ArgumentError, 'a request path is relative to the instance URL, and this one opens with a scheme, which makes it an ' \
+                             "absolute URL: sending it would hand this client's credentials to another host. Pass the path alone, " \
+                             "such as 'api/v1/tickets'."
       end
 
       refuse_unreadable_path!(relative)

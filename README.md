@@ -392,11 +392,12 @@ endpoint, and `full=true` on the index endpoints that render through
 Paths are relative to the instance URL, and a leading slash is ignored, so they can be
 pasted straight from the Zammad documentation. An absolute URL raises `ArgumentError`: the
 client's credentials only ever go to the instance it was configured for, so a link taken
-from a response body has to be reduced to its path first. A path is written the way a URL
-is, so a space or a character outside ASCII has to be percent-encoded, `t%C3%A4gs` for
-`tägs`; one that cannot be read as a URL raises `ArgumentError` too, before anything is
-sent or logged. A non-2xx response raises the same error class it would raise for a
-modelled resource, and only a `GET` is retried.
+from a response body has to be reduced to its path first. Any path that opens with a
+scheme counts as one, `http:/collect` as much as `https://other.example/collect`. A path
+is written the way a URL is, so a space or a character outside ASCII has to be
+percent-encoded, `t%C3%A4gs` for `tägs`; one that cannot be read as a URL raises
+`ArgumentError` too, before anything is sent or logged. A non-2xx response raises the same
+error class it would raise for a modelled resource, and only a `GET` is retried.
 
 ## Working with records
 
