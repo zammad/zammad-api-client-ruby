@@ -447,6 +447,31 @@ RSpec.describe ZammadAPI::Client do
         expect { client.get('/https://other.example/collect') }.to raise_error(ArgumentError, /absolute URL/)
       end
 
+      # The guard asked for `://` after the scheme. Faraday 2.9.0 and 2.9.1
+      # join such a path to the instance URL as URI does, which makes it an
+      # absolute URL with no host, and send the client's headers there.
+      ['http:/collect', 'HTTP:/collect', 'http:collect', '/http:/collect', 'file:/etc/hosts', 'api:v1/tickets'].each do |path|
+        it "refuses #{path}, which opens with a scheme and no host" do
+          expect { client.get(path) }.to raise_error(ArgumentError, /opens with a scheme, which makes it an absolute URL/)
+        end
+      end
+
+      it 'reads such a path as URI does, which is what an older Faraday resolves it with' do
+        expect(URI('https://zammad.test/').merge('http:/collect').host).to be_nil
+      end
+
+      it 'takes a colon after the first segment, which leaves the path relative' do
+        stub = stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/tags:x").to_return(json_response({}))
+        client.get('api/v1/tags:x')
+        expect(stub).to have_been_requested
+      end
+
+      it 'takes a URL written into the query string' do
+        stub = stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/roles").with(query: { 'next' => 'http://other.example/x' }).to_return(json_response({}))
+        client.get('api/v1/roles?next=http://other.example/x')
+        expect(stub).to have_been_requested
+      end
+
       it 'refuses an absolute URL for every verb' do
         %i[post put delete].each do |verb|
           expect { client.public_send(verb, 'https://other.example/collect') }.to raise_error(ArgumentError, /absolute URL/)

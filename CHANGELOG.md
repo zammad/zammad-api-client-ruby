@@ -915,6 +915,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   client is asked once on the wire, `with(timeout:)` did not change which `Retry-After`
   ends the attempts, and a record found through `with(url:)` compared equal to the same id
   found through the client it was derived from. Only `client.config` showed the option.
+- A raw request refuses any path that opens with a scheme, not only one followed by `://`.
+  `client.get('http:/collect')` passed as a relative path, and Faraday 2.9.0 and 2.9.1,
+  which the gemspec allows, resolve it as URI does: to an absolute URL with no host, where
+  the request then goes over plain HTTP with the client's `Authorization` header and any
+  `on_behalf_of` scope. Faraday from 2.9.2 on keeps such a path on the instance; the
+  refusal no longer depends on which is installed.
 
 ### Changed
 
