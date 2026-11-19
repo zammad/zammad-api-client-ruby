@@ -352,7 +352,8 @@ module ZammadAPI
     # @param identifier [String, Integer] login, email address or user id
     # @yieldparam scoped [Client]
     # @return [Client] when no block is given, otherwise the block's value
-    # @raise [ArgumentError] for an identifier that is nil, empty or blank
+    # @raise [ArgumentError] for an identifier that is nil, empty or blank,
+    #   or neither text nor an Integer, such as the record of the user
     def on_behalf_of(identifier)
       # Nil is what a transport takes for no scope, so it is refused here.
       # The rest is refused by the rule every transport is meant to apply,

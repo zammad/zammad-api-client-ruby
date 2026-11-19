@@ -30,6 +30,7 @@ module ZammadAPI
     UNRESERVED_IN_PATH: Regexp
     DOT_SEGMENTS: Array[String]
     RECORD_ID_TYPES: Array[Class]
+    QUERY_VALUE_TYPES: Array[Class]
     ABSOLUTE_URL: Regexp
     RESERVED_HEADERS: Hash[String, String]
 
@@ -46,6 +47,7 @@ module ZammadAPI
     def self.stringify_query: (untyped) -> Hash[String, untyped]
     def self.stringify_query_hash: (Hash[untyped, untyped], String?) -> Hash[String, untyped]
     def self.stringify_query_value: (String, untyped) -> untyped
+    def self.not_a_query_value_message: (String key, untyped value) -> String
     def self.stringify_query_list: (String, Array[untyped]) -> Array[untyped]
     def self.misread_element_message: (String, Symbol) -> String
     def self.empty_query_name_message: (String? prefix) -> String
@@ -55,6 +57,7 @@ module ZammadAPI
     LINE_BREAK_ADVICE: String
     def self.line_break?: (String text) -> bool
     def self.stringify_on_behalf_of: ((String | Integer)? identifier) -> String?
+    def self.not_an_identifier_message: (untyped identifier) -> String
     def self.blank_on_behalf_of_message: (untyped identifier) -> String
     def self.stringify_header_value: (String, untyped) -> String
     def self.escape_path_segment: (untyped) -> String
