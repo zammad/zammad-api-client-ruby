@@ -181,6 +181,12 @@ module ZammadAPI
     # names a record.
     RECORD_ID_TYPES = [Integer, String, Symbol].freeze
 
+    # What a query value is written as, where it is not a list or a
+    # structure: text, a number or a boolean. Each has one spelling a query
+    # string can carry and Zammad reads back. No other object does, and
+    # `to_s` answers for all of them.
+    QUERY_VALUE_TYPES = [String, Symbol, Numeric, TrueClass, FalseClass].freeze
+
     # A request path that opens with a scheme, which is what makes a URL an
     # absolute one, whatever follows. Any scheme and either case, which is
     # wider than the two lowercase prefixes Faraday itself treats as
@@ -242,8 +248,9 @@ module ZammadAPI
     # @param query [Hash]
     # @return [Hash{String => String, Array<String>, Hash}]
     # @raise [ArgumentError] for a query that is not a Hash, for a nil
-    #   value, for two keys that name the same parameter, or for a list a
-    #   query string cannot carry, the last three at any depth
+    #   value, for a value that is neither text, a number, a boolean, a
+    #   list nor a structure, for two keys that name the same parameter, or
+    #   for a list a query string cannot carry, the last four at any depth
     def self.stringify_query(query)
       hash = Hash.try_convert(query) || raise(ArgumentError, "query needs to be a Hash of parameter names and values, got #{query.class}")
 
@@ -305,22 +312,44 @@ module ZammadAPI
     # A Hash is written as `condition[ticket.state_id][operator]=is`, which
     # is the shape Rails reads back.
     #
+    # The same happened one kind of value further out. Whatever was neither
+    # a Hash nor an Array was still rendered with to_s: `ids: Set[1, 2]`
+    # went on the wire as `ids=Set[1, 2]` and `ids: (1..3)` as `ids=1..3`,
+    # text that names no record and that Zammad narrows by all the same,
+    # and a record under a key went as `#<ZammadAPI::Resources::User...>`.
+    # Refused, as a record where an id belongs is by
+    # {.escape_path_segment}, and for its reason: the answer to such a
+    # request is the wrong one, and nothing marks it. See
+    # {QUERY_VALUE_TYPES} for what is written.
+    #
     # @api private
     # @param key [String] the parameter path, for the error message
     # @param value [Object]
     # @return [String, Array, Hash]
-    # @raise [ArgumentError] for a nil value, or a list a query string cannot
-    #   carry
+    # @raise [ArgumentError] for a nil value, a value a query string has no
+    #   spelling for, or a list it cannot carry
     def self.stringify_query_value(key, value)
       case value
-      when nil   then raise ArgumentError, "query parameter #{key} is nil, and Zammad has no way to read that: pass a value, or leave the parameter out"
-      when Hash  then stringify_query_hash(value, key)
-      when Array then stringify_query_list(key, value)
+      when nil                then raise ArgumentError, "query parameter #{key} is nil, and Zammad has no way to read that: pass a value, or leave the parameter out"
+      when Hash               then stringify_query_hash(value, key)
+      when Array              then stringify_query_list(key, value)
+      when *QUERY_VALUE_TYPES then wire_text(value, "query parameter #{key}")
       else
-        converted = Hash.try_convert(value)
+        converted = Hash.try_convert(value) || raise(ArgumentError, not_a_query_value_message(key, value))
 
-        converted ? stringify_query_hash(converted, key) : wire_text(value, "query parameter #{key}")
+        stringify_query_hash(converted, key)
       end
+    end
+
+    # Names the class and does not quote the value, which for a record is
+    # every attribute it carries.
+    #
+    # @api private
+    # @return [String]
+    def self.not_a_query_value_message(key, value)
+      "query parameter #{key} was given as #{value.class}, and a query string carries text, numbers and booleans, alone " \
+        'or in an Array or a Hash: it would be sent as that object prints, and Zammad would narrow by that text. ' \
+        'Pass a Set or a Range as its to_a, a time as text Zammad reads, such as its iso8601, and a record as its id.'
     end
 
     # Stringifies a list, and refuses one Rails could not read back as the
@@ -487,12 +516,20 @@ module ZammadAPI
     # counts Unicode spaces as well as ASCII ones: Zammad asks
     # `request_header_from.blank?`.
     #
+    # So is one that is neither text nor an Integer. Every object has a
+    # `to_s`, and `client.on_behalf_of(user)`, with the record where its
+    # login belongs, built a client whose From header read
+    # `#<ZammadAPI::Resources::User:0x...>`. The types are the ones a
+    # record id is written as: see {RECORD_ID_TYPES}.
+    #
     # @api private
     # @param identifier [String, Integer, nil] login, email or user id
     # @return [String, nil] frozen, or nil for no scope
-    # @raise [ArgumentError] for an identifier with nothing in it
+    # @raise [ArgumentError] for an identifier that is neither text nor an
+    #   Integer, or has nothing in it
     def self.stringify_on_behalf_of(identifier)
       return nil if identifier.nil?
+      raise ArgumentError, not_an_identifier_message(identifier) if RECORD_ID_TYPES.none? { identifier.is_a?(it) }
 
       text = wire_text(identifier, 'on_behalf_of')
       raise ArgumentError, blank_on_behalf_of_message(identifier) if BLANK.match?(text)
@@ -539,6 +576,16 @@ module ZammadAPI
         raise ArgumentError, "#{name} was given as #{text.encoding} text that cannot be converted to UTF-8, which is what " \
                              'a request carries: it holds a byte sequence that is not valid in its own encoding.'
       end
+    end
+
+    # Names the class and does not quote the identifier, which for a record
+    # is every attribute it carries.
+    #
+    # @api private
+    # @return [String]
+    def self.not_an_identifier_message(identifier)
+      "on_behalf_of needs the login, email address or id of a user, as a String or an Integer, and was given #{identifier.class}: " \
+        'the From header would carry that object as it prints, which names no user. To act for a user you hold a record of, pass its id.'
     end
 
     # @api private

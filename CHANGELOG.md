@@ -921,6 +921,13 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   the request then goes over plain HTTP with the client's `Authorization` header and any
   `on_behalf_of` scope. Faraday from 2.9.2 on keeps such a path on the instance; the
   refusal no longer depends on which is installed.
+- A query value that is not text, a number, a boolean, a list or a structure raises
+  `ArgumentError`, at any depth. It was sent as its `to_s`:
+  `client.users.search('smith', ids: Set[1, 2])` asked for `ids=Set[1, 2]`, which names
+  neither user, `ids: (1..3)` for `ids=1..3`, and a record under a key went as it prints,
+  and Zammad narrowed by that text. `client.on_behalf_of(user)`, with the record where its
+  id or login belongs, built a client whose `From` header carried the record the same way,
+  and raises too. Both messages name the class and do not quote the value.
 
 ### Changed
 

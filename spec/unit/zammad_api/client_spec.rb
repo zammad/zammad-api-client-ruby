@@ -825,6 +825,23 @@ RSpec.describe ZammadAPI::Client do
         .to have_been_made.twice
     end
 
+    # `client.on_behalf_of(user)` built a client whose From header carried
+    # the record as it prints.
+    describe 'the record of a user where its login belongs' do
+      let(:user) { unit_client.users.find(1) }
+
+      it 'is refused by its class, without printing it' do
+        expect { unit_client.on_behalf_of(user) }
+          .to raise_error(ArgumentError, /and was given ZammadAPI::Resources::User: .* pass its id\.\z/) { |error|
+            expect(error.message).not_to include('#<')
+          }
+      end
+
+      it 'is what its id is taken from' do
+        expect(unit_client.on_behalf_of(user.id).inspect).to include('on_behalf_of="1"')
+      end
+    end
+
     # Zammad skips a From header with nothing in it, and a nil sent none, so
     # each of these handed back a client that ran every request as the
     # account it authenticates as - with no error to say the scope was gone.

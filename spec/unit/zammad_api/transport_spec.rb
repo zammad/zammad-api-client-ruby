@@ -119,6 +119,38 @@ RSpec.describe ZammadAPI::Transport do
         .to eq({ 'condition' => { 'open' => { 'active' => 'true', 'limit' => '5' } } })
     end
 
+    # Whatever was neither a Hash nor an Array went on the wire as its
+    # `to_s`, which names nothing, and Zammad narrowed by it all the same.
+    context 'with a value a query string has no spelling for' do
+      { 'a Set' => Set[1, 2], 'a Range' => (1..3), 'a Time' => Time.at(0), 'any other object' => Object.new }.each do |kind, value|
+        it "refuses #{kind} by its class, without quoting it" do
+          expect { described_class.stringify_query(ids: value) }
+            .to raise_error(ArgumentError, /\Aquery parameter ids was given as #{value.class}, and a query string carries text, numbers and booleans/) { |error|
+              expect(error.message).not_to include(value.to_s)
+            }
+        end
+      end
+
+      it 'refuses one inside a list, naming where' do
+        expect { described_class.stringify_query(ids: [1, Set[2]]) }.to raise_error(ArgumentError, /\Aquery parameter ids\[1\] was given as Set/)
+      end
+
+      it 'refuses one inside a structure, naming where' do
+        expect { described_class.stringify_query(condition: { 'ticket.id' => { operator: 'is', value: (1..3) } }) }
+          .to raise_error(ArgumentError, /\Aquery parameter condition\[ticket\.id\]\[value\] was given as Range/)
+      end
+
+      it 'sends nothing for a request that carries one' do
+        expect { unit_transport.get('api/v1/groups', operation: 'test', query: { ids: Set[1, 2] }) }.to raise_error(ArgumentError)
+        expect(a_request(:any, //)).not_to have_been_made
+      end
+
+      it 'still writes text, a Symbol, a number and a boolean' do
+        expect(described_class.stringify_query(a: 'x', b: :y, c: 1, d: 1.5, e: true, f: false))
+          .to eq({ 'a' => 'x', 'b' => 'y', 'c' => '1', 'd' => '1.5', 'e' => 'true', 'f' => 'false' })
+      end
+    end
+
     # `ActionController::Parameters` is not a Hash. Nested, it was written
     # as its `to_s`; as the whole query it raised NoMethodError.
     context 'with what converts to a Hash and is not one' do
@@ -1304,6 +1336,22 @@ RSpec.describe ZammadAPI::Transport do
       it "refuses #{blank.inspect}, which Zammad reads as no From header" do
         expect { unit_transport.with_on_behalf_of(blank) }.to raise_error(ArgumentError, /on_behalf_of needs the login/)
       end
+    end
+
+    # Every object has a `to_s`, and the From header carried it.
+    { 'an Array' => ['agent'], 'a Float' => 1.5, 'true' => true, 'any other object' => Object.new }.each do |kind, value|
+      it "refuses #{kind}, which names no user, by its class" do
+        expect { unit_transport.with_on_behalf_of(value) }
+          .to raise_error(ArgumentError, /\Aon_behalf_of needs the login, email address or id of a user, as a String or an Integer, and was given #{value.class}:/)
+      end
+    end
+
+    it 'takes a user id given as an Integer' do
+      expect(unit_transport.with_on_behalf_of(7).on_behalf_of).to eq('7')
+    end
+
+    it 'takes a login given as a Symbol' do
+      expect(unit_transport.with_on_behalf_of(:agent).on_behalf_of).to eq('agent')
     end
 
     # The blank check raised Encoding::CompatibilityError for text in an
