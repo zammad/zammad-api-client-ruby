@@ -420,6 +420,36 @@ RSpec.describe ZammadAPI::Resources::Base do
         expect(group).not_to be_changed
       end
     end
+
+    # The constructor makes a Symbol of a key where it can and keeps one it
+    # cannot. Here every key went through `to_sym`, so the Hash the
+    # constructor takes raised NoMethodError from inside the gem.
+    it 'keeps a key that cannot become a Symbol, as the constructor does' do
+      group.assign_attributes(1 => 'x')
+
+      expect(group.attributes).to eq(client.groups.new(:name => 'Support', 1 => 'x').attributes)
+    end
+
+    # Handed straight to a method of Hash, so what was not one raised
+    # NoMethodError naming that method, and an Array was read as pairs.
+    context 'with something that is not a Hash' do
+      it 'refuses nil, and names the class it was given' do
+        expect { group.assign_attributes(nil) }.to raise_error(ArgumentError, 'attributes need to be a Hash of names and values, got NilClass')
+      end
+
+      it 'refuses a String' do
+        expect { group.assign_attributes('name') }.to raise_error(ArgumentError, /got String/)
+      end
+
+      it 'refuses an Array of pairs rather than reading it as a Hash' do
+        expect { group.assign_attributes([[:name, 'Renamed']]) }.to raise_error(ArgumentError, /got Array/)
+        expect(group).not_to be_changed
+      end
+
+      it 'does not quote what it was given, which may hold a credential' do
+        expect { group.assign_attributes('password=hunter2') }.to raise_error(ArgumentError) { expect(it.message).not_to include('hunter2') }
+      end
+    end
   end
 
   describe '#update' do
@@ -471,10 +501,22 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(client.groups.new.update(name: 'Support')).to be(true)
       expect(stub).to have_been_requested
     end
+
+    # `update(params[:group])` with the key missing. It raised NoMethodError
+    # for nil, from inside the gem.
+    it 'refuses nil, and sends nothing' do
+      expect { group.update(nil) }.to raise_error(ArgumentError, /attributes need to be a Hash of names and values, got NilClass/)
+      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+    end
   end
 
   describe '#update!' do
     subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, note: 'old') }
+
+    it 'refuses nil, and sends nothing' do
+      expect { group.update!(nil) }.to raise_error(ArgumentError, /got NilClass/)
+      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+    end
 
     it 'returns true' do
       stub_request(:put, "#{url}/1").with(query: hash_including({})).to_return(json_response({ id: 1 }))

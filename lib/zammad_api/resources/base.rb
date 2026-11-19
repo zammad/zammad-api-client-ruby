@@ -488,20 +488,35 @@ module ZammadAPI
       # @raise [Error] when an attribute cannot be staged, such as +id+, or
       #   when the record was destroyed. Nothing is staged in either case, so
       #   the record is left as it was.
-      # @raise [ArgumentError] when an attribute is named twice, as a String
-      #   and as a Symbol. Nothing is staged then either.
+      # @raise [ArgumentError] when given something that is not a Hash, nil
+      #   included, or when an attribute is named twice, as a String and as
+      #   a Symbol. Nothing is staged then either.
       def assign_attributes(attributes)
+        # Asked before anything else, because everything below is a method
+        # of Hash. Nil raised NoMethodError naming `each_with_object`, from
+        # inside the gem, and so did `update(params[:group])` with the key
+        # missing; an Array of pairs was read as a Hash, by the accident of
+        # how it is iterated. Refused rather than read as nothing to assign,
+        # which is what the constructor makes of nil: a record built from
+        # nothing says so by being empty, and an `update` that staged
+        # nothing answers true as if it had stored something.
+        raise ArgumentError, "attributes need to be a Hash of names and values, got #{attributes.class}" if !attributes.is_a?(Hash)
+
         # Two spellings of one attribute are refused before anything is
         # written, for the reason the constructor refuses them - see
         # {DeepCopy.frozen_hash}. Each key is written by its Symbol, so
         # `assign_attributes('name' => 'A', name: 'B')` wrote the attribute
         # twice and kept whichever Hash order put last.
         #
+        # A key becomes a Symbol by the constructor's rule, which keeps one
+        # that cannot: through `to_sym`, `assign_attributes(1 => 'x')` raised
+        # NoMethodError for a Hash `new` takes.
+        #
         # The values are copied here as well, which is where a pair inside
         # one of them is refused. Left to the writes below, a value that
         # names a nested key twice raised from the middle of them, with the
         # attributes before it already staged.
-        staged = frozen_attributes(DuplicateKeys.normalize(attributes, noun: 'attribute', &:to_sym))
+        staged = frozen_attributes(DuplicateKeys.normalize(attributes, noun: 'attribute') { DeepCopy.symbolize(it) })
 
         # rubocop:disable Style/CombinableLoops -- combining them is the bug
         # Two passes on purpose: every key is checked before any of them is
@@ -611,6 +626,8 @@ module ZammadAPI
       # @return [Boolean] whether the record was stored
       # @raise [Error] when the record was destroyed, or when an attribute
       #   cannot be staged, such as +id+
+      # @raise [ArgumentError] when given something that is not a Hash, nil
+      #   included, or an attribute named twice: see {#assign_attributes}
       # @raise [ResponseError] for any failure other than a validation error
       # @see #save
       def update(attributes)
@@ -631,6 +648,8 @@ module ZammadAPI
       # @return [true]
       # @raise [Error] when the record was destroyed, or when an attribute
       #   cannot be staged, such as +id+
+      # @raise [ArgumentError] when given something that is not a Hash, nil
+      #   included, or an attribute named twice: see {#assign_attributes}
       # @raise [ResponseError] when Zammad rejected the request
       # @see #save!
       def update!(attributes)
