@@ -16,8 +16,8 @@ module ZammadAPI
     @transport: Transport
 
     def initialize: (Transport, untyped resource_class) -> void
-    def new: (?Hash[untyped, untyped] attributes) -> R
-    def create: (?Hash[untyped, untyped] attributes) -> R
+    def new: (?hash[untyped, untyped] attributes) -> R
+    def create: (?hash[untyped, untyped] attributes) -> R
     def find: (Integer | String id) -> R
     def find_by: (**untyped) -> R?
     def find_by!: (**untyped) -> R

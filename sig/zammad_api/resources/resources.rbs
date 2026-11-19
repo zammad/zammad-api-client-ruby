@@ -151,7 +151,7 @@ module ZammadAPI
       attr_reader last_owner_update_at: String?
 
       def articles: () -> Array[TicketArticle]
-      def add_article: (?Hash[untyped, untyped] attributes) -> TicketArticle
+      def add_article: (?hash[untyped, untyped] attributes) -> TicketArticle
     end
 
     class TicketArticle < Base

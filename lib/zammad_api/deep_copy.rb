@@ -16,6 +16,9 @@ module ZammadAPI
   # +JSON.parse+ builds and what a caller may hand in as attributes. Numbers,
   # booleans and nil are immutable already and are passed through untouched.
   #
+  # A caller may also hand in what is not a Hash and converts to one, and
+  # that is read as the Hash it converts to: see {frozen_object}.
+  #
   # One walk, deliberately. A record built from a response copies every String
   # of a body +JSON.parse+ has just built and nothing else holds, so a variant
   # that froze such a body in place would save that copy on the paging hot
@@ -55,12 +58,48 @@ module ZammadAPI
     # @raise [ArgumentError] when symbolizing lands two keys of one Hash on
     #   one name
     def frozen_copy(value, symbolize_keys: false)
+      # Ordered by how often each kind turns up in a record Zammad serves,
+      # where nil, a String and an Integer are nine values in ten. Every
+      # value that has nothing to copy is answered before {frozen_object} is
+      # asked, and in this order asking it costs the record-building path
+      # nothing that a benchmark of a page of tickets shows: copying one
+      # hundred of them took the same time with the question as without.
       case value
+      when nil    then nil
+      when String then value.dup.freeze
+      when Integer, true, false, Float, Symbol then value
       when Hash   then frozen_hash(value, symbolize_keys)
       when Array  then value.map { frozen_copy(it, symbolize_keys: symbolize_keys) }.freeze
-      when String then value.dup.freeze
-      else value
+      else frozen_object(value, symbolize_keys)
       end
+    end
+
+    # What is none of the above: copied as the Hash it converts to, where it
+    # converts to one, and handed back as it is otherwise.
+    #
+    # `ActionController::Parameters` is the reason. It is not a Hash, so the
+    # walk passed it through, and it is what a Rails controller holds:
+    # `client.users.new(params.require(:user).permit(:login, :password))`
+    # built a record whose attributes were the caller's own object, unfrozen
+    # and with String keys. Its `inspect` and the debug log redact by key
+    # through a Hash and printed the password, and the body of its `save`
+    # was that object's `to_s` as one JSON string, where 1.x sent
+    # `params.to_json`. Nested under an attribute it did the same one level
+    # down.
+    #
+    # +to_hash+ is what is asked, which is how Ruby itself asks whether
+    # something may stand in for a Hash - a Struct and a Data have +to_h+
+    # and do not claim that. Strong parameters answer it with plain Hashes
+    # all the way down, and refuse where they were not permitted, with
+    # `ActionController::UnfilteredParameters`: that error is left to say
+    # so.
+    #
+    # @api private
+    # @return [Object] a frozen copy, or +value+
+    def frozen_object(value, symbolize_keys)
+      converted = Hash.try_convert(value)
+
+      converted ? frozen_hash(converted, symbolize_keys) : value
     end
 
     # The Hash branch of {frozen_copy}.

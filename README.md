@@ -402,6 +402,17 @@ Or in one call:
 group = client.groups.create(name: 'Support', note: 'Some note')
 ```
 
+Attributes are a Hash, or anything that converts to one with `to_hash`. In a Rails
+controller that is the permitted parameters, which `new`, `create`, `update`,
+`assign_attributes` and `add_article` take as they are:
+
+```ruby
+client.users.create(params.require(:user).permit(:login, :email, :password))
+```
+
+Parameters that were not permitted raise `ActionController::UnfilteredParameters`, and
+anything else that is not a Hash raises `ArgumentError`.
+
 ### Fetch
 
 ```ruby

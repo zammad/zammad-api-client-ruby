@@ -197,13 +197,26 @@ module ZammadAPI
     # shape as the dropped nil above, and the reason {ResourceProxy#search}
     # normalises its keywords before they ever reach here.
     #
+    # What is not a Hash and converts to one is read as that Hash, at the
+    # top and at any depth, as a record reads its attributes: see
+    # {DeepCopy.frozen_object}. `ActionController::Parameters` is the case.
+    # A +condition+ handed to {ResourceProxy#search} as one went on the wire
+    # as its +to_s+, which is the unnarrowed search described below, and a
+    # whole +query:+ given as one raised NoMethodError from inside the gem.
+    # So did anything else that is no Hash, and that is refused here by
+    # name.
+    #
     # @api private
     # @param query [Hash]
     # @return [Hash{String => String, Array<String>, Hash}]
-    # @raise [ArgumentError] for a nil value, for two keys that name the
-    #   same parameter, or for a list a query string cannot carry, any of
-    #   them at any depth
-    def self.stringify_query(query) = stringify_query_hash(query, nil)
+    # @raise [ArgumentError] for a query that is not a Hash, for a nil
+    #   value, for two keys that name the same parameter, or for a list a
+    #   query string cannot carry, the last three at any depth
+    def self.stringify_query(query)
+      hash = Hash.try_convert(query) || raise(ArgumentError, "query needs to be a Hash of parameter names and values, got #{query.class}")
+
+      stringify_query_hash(hash, nil)
+    end
 
     # Stringifies one level of a query, at whatever depth it sits.
     #
@@ -271,7 +284,10 @@ module ZammadAPI
       when nil   then raise ArgumentError, "query parameter #{key} is nil, and Zammad has no way to read that: pass a value, or leave the parameter out"
       when Hash  then stringify_query_hash(value, key)
       when Array then stringify_query_list(key, value)
-      else wire_text(value, "query parameter #{key}")
+      else
+        converted = Hash.try_convert(value)
+
+        converted ? stringify_query_hash(converted, key) : wire_text(value, "query parameter #{key}")
       end
     end
 
@@ -764,7 +780,13 @@ module ZammadAPI
     def self.encode_body(body, operation:, resource_class: nil)
       return body if body.nil? || body.is_a?(String)
 
-      JSON.generate(body)
+      # Through the walk a record's attributes go through, for what it
+      # reads as a Hash: see {DeepCopy.frozen_object}. The generator has no
+      # spelling for `ActionController::Parameters` and writes its `to_s`
+      # as one String, so `client.post(path, body: permitted)` sent that in
+      # place of an object, password included, and a body holding one sent
+      # it under the key.
+      JSON.generate(DeepCopy.frozen_copy(body))
     rescue JSON::JSONError => e
       raise Error, "Can't #{Error.subject_for(operation, resource_class)}: the request body cannot be encoded as JSON (#{e.message}). " \
                    'Every value has to be a JSON type, and text has to be valid UTF-8: Base64-encode binary data such as an ' \
@@ -953,7 +975,12 @@ module ZammadAPI
       # not leave a line claiming a request that was never made.
       params = query && Transport.stringify_query(query)
       fields = headers && Transport.stringify_headers(headers)
-      log_request(method, path, query, payload, fields)
+      # The query as it is sent, like the headers and the body. The one the
+      # caller handed over was logged, redacted by key through its Hashes,
+      # and what it held that converts to a Hash and is sent as one - see
+      # {.stringify_query} - was printed by `inspect`, under whatever key
+      # it sat.
+      log_request(method, path, params, payload, fields)
 
       @connection.public_send(method, path) do |request|
         request.params.update(params) if params

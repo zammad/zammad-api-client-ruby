@@ -55,6 +55,71 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(group).not_to be_changed
     end
 
+    # What a Rails controller holds. It is not a Hash, so it was stored as
+    # it was handed over: the record held the caller's own object, printed
+    # its password, and saved it as one JSON string.
+    context 'when given strong parameters, which convert to a Hash and are not one' do
+      subject(:user) { client.users.new(permitted) }
+
+      let(:permitted) { StrongParameters.new(login: 'jane', password: 'hunter2', preferences: StrongParameters.new(locale: 'de')) }
+
+      it 'holds them as attributes of its own' do
+        expect(user.attributes).to eq(login: 'jane', password: 'hunter2', preferences: { locale: 'de' })
+      end
+
+      it 'holds a frozen copy, as it does of a Hash' do
+        expect(user.instance_variable_get(:@attributes)).to be_frozen.and be_a(Hash)
+      end
+
+      it 'keeps the password out of inspect' do
+        expect(user.inspect).to include('password: "[REDACTED]"')
+        expect(user.inspect).not_to include('hunter2')
+      end
+
+      it 'saves them as a JSON object' do
+        stub = stub_request(:post, "#{ClientHelper::BASE_URL}api/v1/users")
+          .with(query: hash_including({}), body: '{"login":"jane","password":"hunter2","preferences":{"locale":"de"}}')
+          .to_return(json_response({ id: 7, login: 'jane' }, status: 201))
+
+        client.users.create(permitted)
+        expect(stub).to have_been_requested
+      end
+
+      it 'reads them as a Hash where they are the value of an attribute' do
+        expect(client.users.new(login: 'jane', preferences: StrongParameters.new(locale: 'de')).preferences).to eq(locale: 'de')
+      end
+
+      it 'reads them as a Hash where a writer is given them' do
+        user.preferences = StrongParameters.new(locale: 'en')
+
+        expect(user.preferences).to eq(locale: 'en')
+      end
+
+      it 'leaves the refusal of parameters that were not permitted to say so' do
+        expect { client.users.new(StrongParameters.new({ login: 'jane' }, permitted: false)) }.to raise_error(StrongParameters::Unfiltered)
+      end
+    end
+
+    # Each of these reached a method of Hash and raised NoMethodError for
+    # it, and an Array of pairs was stored as the attributes.
+    context 'when given what is no set of attributes' do
+      it 'refuses a String, naming its class' do
+        expect { client.groups.new('name') }.to raise_error(ArgumentError, 'attributes need to be a Hash of names and values, got String')
+      end
+
+      it 'refuses an Array of pairs' do
+        expect { client.groups.new([[:name, 'Support']]) }.to raise_error(ArgumentError, /got Array/)
+      end
+
+      it 'refuses a Struct, which has a to_h and does not claim to be a Hash' do
+        expect { client.groups.new(Struct.new(:name).new('Support')) }.to raise_error(ArgumentError, /attributes need to be a Hash/)
+      end
+
+      it 'still takes nil for no attributes' do
+        expect(client.groups.new(nil).attributes).to eq({})
+      end
+    end
+
     it 'records a change as old and new value' do
       group.name = 'Other'
       expect(group.changes).to eq(name: %w[Support Other])
@@ -448,6 +513,21 @@ RSpec.describe ZammadAPI::Resources::Base do
 
       it 'does not quote what it was given, which may hold a credential' do
         expect { group.assign_attributes('password=hunter2') }.to raise_error(ArgumentError) { expect(it.message).not_to include('hunter2') }
+      end
+    end
+
+    # `record.update(params.require(:group).permit(:name))`. It raised
+    # NoMethodError naming `each_with_object`.
+    context 'with strong parameters' do
+      it 'stages what they convert to' do
+        group.assign_attributes(StrongParameters.new(name: 'Renamed', note: 'Why'))
+
+        expect(group.changes).to eq(name: %w[Support Renamed], note: [nil, 'Why'])
+      end
+
+      it 'stages nothing where they were not permitted' do
+        expect { group.assign_attributes(StrongParameters.new({ name: 'Renamed' }, permitted: false)) }.to raise_error(StrongParameters::Unfiltered)
+        expect(group).not_to be_changed
       end
     end
   end

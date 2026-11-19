@@ -43,7 +43,7 @@ module ZammadAPI
     def self.credential_parameter?: (String parameter) -> bool
     def self.blank_query_value: (String parameter) -> String
     def self.redact: (untyped value) -> untyped
-    def self.stringify_query: (Hash[untyped, untyped]) -> Hash[String, untyped]
+    def self.stringify_query: (untyped) -> Hash[String, untyped]
     def self.stringify_query_hash: (Hash[untyped, untyped], String?) -> Hash[String, untyped]
     def self.stringify_query_value: (String, untyped) -> untyped
     def self.stringify_query_list: (String, Array[untyped]) -> Array[untyped]
@@ -84,7 +84,7 @@ module ZammadAPI
     def apply_authentication: (untyped) -> void
     def decode: (untyped) -> Response
     def raw_body!: (untyped) -> String
-    def log_request: (Symbol, String, Hash[Symbol, untyped]?, String?, Hash[String, String]?) -> void
+    def log_request: (Symbol, String, Hash[String, untyped]?, String?, Hash[String, String]?) -> void
     def log_response: (Symbol, String, Response, Float) -> void
     def loggable_body: (String payload) -> untyped
     def unlogged_body: (String body) -> String
