@@ -74,7 +74,7 @@ module ZammadAPI
     private
 
     def timed_out?: (untyped error) -> bool
-    def perform: (Symbol, String, Hash[Symbol, untyped]?, untyped, String?, Hash[untyped, untyped]?) -> untyped
+    def perform: (Symbol, String, Hash[Symbol, untyped]?, String?, Hash[untyped, untyped]?) -> untyped
     def build_connection: () -> untyped
     def refuse_unusable_middleware!: (untyped connection) -> void
     def refused_middleware: (Class klass) -> String?
@@ -82,9 +82,9 @@ module ZammadAPI
     def apply_authentication: (untyped) -> void
     def decode: (untyped) -> Response
     def raw_body!: (untyped) -> String
-    def log_request: (Symbol, String, Hash[Symbol, untyped]?, untyped, Hash[String, String]?) -> void
+    def log_request: (Symbol, String, Hash[Symbol, untyped]?, String?, Hash[String, String]?) -> void
     def log_response: (Symbol, String, Response, Float) -> void
-    def loggable_body: (untyped body) -> untyped
+    def loggable_body: (String payload) -> untyped
     def unlogged_body: (String body) -> String
     def reportable_cause: (StandardError error) -> StandardError?
     def redact_config_values: (untyped message) -> String

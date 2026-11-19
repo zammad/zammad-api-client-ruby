@@ -1323,11 +1323,11 @@ RSpec.describe ZammadAPI::Transport do
     end
 
     it 'marks the redacted payload value' do
-      expect(log).to include('password: "[REDACTED]"')
+      expect(log).to include('"password" => "[REDACTED]"')
     end
 
     it 'keeps non-sensitive payload values' do
-      expect(log).to include('login: "jane"')
+      expect(log).to include('"login" => "jane"')
     end
 
     it 'stays silent by default' do
@@ -1393,7 +1393,7 @@ RSpec.describe ZammadAPI::Transport do
       # Matched as a word, so that a key merely containing the letters stays
       # readable in the log rather than being blanked for nothing.
       it 'leaves a key whose name only contains one of the words alone' do
-        expect(log).to include('keyboard_layout: "de"')
+        expect(log).to include('"keyboard_layout" => "de"')
       end
 
       it 'redacts a client_secret' do
@@ -1401,7 +1401,7 @@ RSpec.describe ZammadAPI::Transport do
       end
 
       it 'still keeps a non-sensitive value' do
-        expect(log).to include('login: "jane"')
+        expect(log).to include('"login" => "jane"')
       end
     end
 
@@ -1456,6 +1456,67 @@ RSpec.describe ZammadAPI::Transport do
         transport.post('api/v1/groups', operation: 'test', body: '{"login":"jane","password":"string-s3cret"}')
 
         expect(a_request(:post, url).with(body: '{"login":"jane","password":"string-s3cret"}')).to have_been_made
+      end
+    end
+
+    # The payload line printed the body the caller handed over, redacted by
+    # key through its Hashes and Arrays, and anything else in it by
+    # `inspect`. An object that writes its own JSON goes out as keys and
+    # values like any Hash, and was printed with every one of them.
+    context 'with a body holding an object that is neither a Hash nor an Array' do
+      subject(:log) { log_device.string }
+
+      let(:log_device)  { StringIO.new }
+      let(:transport)   { unit_transport(logger: Logger.new(log_device, level: Logger::DEBUG)) }
+      let(:credentials) { Data.define(:login, :password) { def to_json(*) = to_h.to_json(*) }.new(login: 'jane', password: 'object-s3cret') }
+
+      before { stub_request(:post, url).to_return(json_response({ id: 1 }, status: 201)) }
+
+      it 'redacts a credential in one that writes its own JSON' do
+        transport.post('api/v1/groups', operation: 'test', body: credentials)
+
+        expect(log).not_to include('object-s3cret')
+      end
+
+      it 'prints it as it is sent, redacted by key' do
+        transport.post('api/v1/groups', operation: 'test', body: credentials)
+
+        expect(log).to include('Zammad API payload: {"login" => "jane", "password" => "[REDACTED]"}')
+      end
+
+      it 'redacts a credential in one that a Hash holds' do
+        transport.post('api/v1/groups', operation: 'test', body: { note: 'x', user: credentials })
+
+        expect(log).to include('Zammad API payload: {"note" => "x", "user" => {"login" => "jane", "password" => "[REDACTED]"}}')
+      end
+
+      it 'redacts a credential in one that an Array holds' do
+        transport.post('api/v1/groups', operation: 'test', body: [credentials])
+
+        expect(log).not_to include('object-s3cret')
+      end
+
+      # JSON has no spelling for such an object, and the generator sends its
+      # `to_s`, which names the class and no more. `inspect` lists what it
+      # holds, so the log showed a value the request never carried.
+      it 'does not print what an object holds and the request does not carry' do
+        holder = Class.new { def initialize = @password = 'object-s3cret' }.new
+        transport.post('api/v1/groups', operation: 'test', body: { user: holder })
+
+        expect(log).not_to include('object-s3cret')
+      end
+
+      it 'does not log a body that is one value with no keys to go by' do
+        transport.post('api/v1/groups', operation: 'test', body: :'object-s3cret')
+
+        expect(log).not_to include('object-s3cret')
+        expect(log).to include('Zammad API payload: "[15 bytes that are not a JSON object or array, not logged]"')
+      end
+
+      it 'still sends the body as it was given' do
+        transport.post('api/v1/groups', operation: 'test', body: { user: credentials })
+
+        expect(a_request(:post, url).with(body: '{"user":{"login":"jane","password":"object-s3cret"}}')).to have_been_made
       end
     end
 

@@ -875,7 +875,7 @@ module ZammadAPI
       path     = Transport.relative_path(path)
       payload  = Transport.encode_body(body, operation: operation, resource_class: resource_class)
       started  = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      response = decode(perform(method, path, query, body, payload, headers))
+      response = decode(perform(method, path, query, payload, headers))
       log_response(method, path, response, started)
 
       return response if response.success?
@@ -913,14 +913,14 @@ module ZammadAPI
       [wrapped, error.cause].any? { |inner| TIMEOUT_ERRORS.any? { inner.is_a?(it) } }
     end
 
-    # +body+ is what the caller handed over, which is what the log redacts
-    # and prints; +payload+ is the same thing encoded, which is what is sent.
-    def perform(method, path, query, body, payload, headers)
+    # +payload+ is the body as it is sent, and it is what the log reads as
+    # well: see {#loggable_body}.
+    def perform(method, path, query, payload, headers)
       # Built before the request is logged, so a rejected query or header does
       # not leave a line claiming a request that was never made.
       params = query && Transport.stringify_query(query)
       fields = headers && Transport.stringify_headers(headers)
-      log_request(method, path, query, body, fields)
+      log_request(method, path, query, payload, fields)
 
       @connection.public_send(method, path) do |request|
         request.params.update(params) if params
@@ -1174,11 +1174,11 @@ module ZammadAPI
             'drop the parsing middleware - `c.response :json` is the usual one - from the `middleware:` callable.'
     end
 
-    def log_request(method, path, query, body, headers)
+    def log_request(method, path, query, payload, headers)
       logger.debug do
         "Zammad API request: #{method.to_s.upcase} #{Transport.redact_path(path)}#{" query=#{Transport.redact(query).inspect}" if query}#{" headers=#{Transport.redact(headers).inspect}" if headers}"
       end
-      logger.debug { "Zammad API payload: #{loggable_body(body).inspect}" } if body
+      logger.debug { "Zammad API payload: #{loggable_body(payload).inspect}" } if payload
     end
 
     def log_response(method, path, response, started)
@@ -1186,22 +1186,37 @@ module ZammadAPI
       logger.debug { "Zammad API response: #{method.to_s.upcase} #{Transport.redact_path(path)} -> #{response.status} in #{duration}ms" }
     end
 
-    # What the log prints for a request body.
+    # What the log prints for a request body: the body as it is sent, read
+    # back for its keys and redacted by them.
     #
-    # A body handed over as a String is the caller's own encoding, and
-    # {#redact} works by key: it had no keys to go by, so
+    # Read from the encoded payload and not from what the caller handed
+    # over, because {.redact} works by key and only a Hash has keys. What
+    # was handed over was printed by +inspect+ wherever it was anything
+    # else, and there are two ways for that to be a credential.
+    #
+    # One is a String, which is the caller's own encoding:
     # `client.post(path, body: '{"login":"a","password":"hunter2"}')` was
-    # written to the log as it stood. Where the String is JSON it is read
-    # for its keys and redacted like the structure it spells. Where it is
-    # not - a form body, a file - nothing in it can be told from a
-    # credential, and its size is logged in its place.
-    def loggable_body(body)
-      return Transport.redact(body) if !body.is_a?(String)
-
-      decoded = JSON.parse(body)
-      decoded.is_a?(Hash) || decoded.is_a?(Array) ? Transport.redact(decoded) : unlogged_body(body)
+    # written to the log as it stood.
+    #
+    # The other is an object inside the body. One that writes its own JSON
+    # goes out as keys and values like any Hash - a value object with a
+    # +to_json+, as the whole body or under a key of it - and +inspect+
+    # printed every one of them. One that does not is sent as its +to_s+,
+    # which for most objects names the class and no more, while +inspect+
+    # lists what the object holds: the log then showed a value the request
+    # never carried.
+    #
+    # So the payload is parsed, and the log holds what the wire holds. Where
+    # it is a JSON object or array it is redacted like the structure it
+    # spells. Where it is not - a form body, a file, a single value -
+    # nothing in it can be told from a credential, and its size is logged
+    # in its place. Parsed only where the line is written: this runs inside
+    # the logger's block.
+    def loggable_body(payload)
+      decoded = JSON.parse(payload)
+      decoded.is_a?(Hash) || decoded.is_a?(Array) ? Transport.redact(decoded) : unlogged_body(payload)
     rescue JSON::JSONError, EncodingError
-      unlogged_body(body)
+      unlogged_body(payload)
     end
 
     def unlogged_body(body) = "[#{body.bytesize} bytes that are not a JSON object or array, not logged]"
