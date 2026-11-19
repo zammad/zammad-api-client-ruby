@@ -143,7 +143,26 @@ module ZammadAPI
     # `Proxy-Authorization` went the same way. `Authorization` itself never
     # gets this far - {RESERVED_HEADERS} refuses it - but every header named
     # after it carries what it carries.
-    SENSITIVE_KEY_PATTERN = /password|passwd|pwd|token|secret|credential|cookie|authorization|api_?key|(?<![a-z])keys?(?![a-z])/i
+    #
+    # `bind_pw` and `passphrase` are Zammad's own: the password an LDAP
+    # source binds with, which sits inside its +preferences+, and the
+    # passphrase of a PGP key. Neither matched a word above, so creating
+    # either wrote it to the log, and a record of an LDAP source printed
+    # it. Both are in the list Zammad filters its own log by, in
+    # config/initializers/filter_parameter_logging.rb, and so are `otp` and
+    # `salt`. Those two are matched as words, as `key` is: `footprint`
+    # holds one and `basalt` the other. `totp` and `hotp` are the two kinds
+    # of one-time password, and count.
+    #
+    # `key` as a word did not see the one in `privateKey`, where no
+    # separator stands in front of it. A capital K after a lower-case
+    # letter or a digit begins the word as well, which is where camelCase
+    # puts it. `hotKeyboard` is left alone, as `keyboard` is.
+    SENSITIVE_KEY_PATTERN = /
+      password|passwd|pwd|bind_pw|passphrase|token|secret|credential|cookie|authorization|api_?key
+      |(?<![a-z])(?:keys?|[ht]?otp|salt)(?![a-z])
+      |(?-i:(?<=[a-z0-9])Keys?(?![a-z]))
+    /ix
 
     REDACTED = '[REDACTED]'
 
