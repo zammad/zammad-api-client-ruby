@@ -374,6 +374,42 @@ module ZammadAPI
     # @return [Boolean]
     def empty? = first.nil?
 
+    # Whether this collection has a record.
+    #
+    # Without a block or a pattern it is {#empty?} asked the other way
+    # round, and costs what that costs. It was +Enumerable#any?+, which
+    # starts a walk at the page size for walking and stops at the first
+    # record, so +client.tickets.all.any?+ fetched a hundred expanded
+    # tickets, and two hundred hits on a search, to learn what one record
+    # says - the argument made above {#take}, that what a read costs should
+    # not depend on which word it was written with. A record is never nil
+    # or false, so the answer is the same.
+    #
+    # A block or a pattern asks about the records themselves, which is a
+    # walk, and is left to +Enumerable+.
+    #
+    # @example
+    #   notify(agent) if client.tickets.search("owner.login:#{login} AND state.name:open").any?
+    #
+    # @yieldparam record [Resources::Base]
+    # @return [Boolean]
+    def any?(*pattern, &block)
+      return super if block || !pattern.empty?
+
+      !empty?
+    end
+
+    # Whether this collection has no record: {#empty?}, unless a block or a
+    # pattern is given. See {#any?}.
+    #
+    # @yieldparam record [Resources::Base]
+    # @return [Boolean]
+    def none?(*pattern, &block)
+      return super if block || !pattern.empty?
+
+      empty?
+    end
+
     def inspect
       "#<#{self.class.name} #{@resource_class.name} path=#{@path.inspect} per_page=#{@per_page}#{" page=#{@page}" if @page}#{' paginated=false' if !@paginated}>"
     end

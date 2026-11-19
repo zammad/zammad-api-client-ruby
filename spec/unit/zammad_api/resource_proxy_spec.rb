@@ -704,6 +704,22 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect(proxy).to be_empty
     end
 
+    # A proxy is Enumerable, so it had Enumerable's own, which read a page
+    # sized for walking to answer what one record answers.
+    it 'forwards #any? and #none?, which ask for a single record' do
+      stub_page(1, [{ id: 1, name: 'Users' }], per_page: 1)
+
+      expect(proxy.any?).to be(true)
+      expect(proxy.none?).to be(false)
+      expect(a_request(:get, url).with(query: hash_including('per_page' => '1'))).to have_been_made.twice
+    end
+
+    it 'forwards the block of #any? as well' do
+      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([{ id: 1, name: 'Users' }]), json_response([]))
+
+      expect(proxy.any? { it.name == 'Users' }).to be(true)
+    end
+
     it 'keeps #find as a lookup by id rather than Enumerable#find' do
       stub_request(:get, "#{url}/1").with(query: hash_including({})).to_return(json_response({ id: 1, name: 'Users' }))
 
