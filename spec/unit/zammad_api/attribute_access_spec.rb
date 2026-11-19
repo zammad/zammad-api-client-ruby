@@ -80,6 +80,38 @@ RSpec.describe ZammadAPI::AttributeAccess do
       expect(record.id).to eq(1)
     end
 
+    # The arguments were never looked at, so `record.name('Other')` answered
+    # with the name and changed nothing, where a reader written out raises.
+    context 'when a reader is given arguments' do
+      it 'raises ArgumentError, as a reader written out would' do
+        expect { record.name('Other') }.to raise_error(ArgumentError, /\Awrong number of arguments \(given 1, expected 0\)/)
+      end
+
+      it 'counts them' do
+        expect { record.name(1, 2, 3) }.to raise_error(ArgumentError, /given 3, expected 0/)
+      end
+
+      it 'counts keywords as the one Hash they arrive as' do
+        expect { record.name(to: 'Other') }.to raise_error(ArgumentError, /given 1, expected 0/)
+      end
+
+      it 'says what the reader reads' do
+        expect { record.name('Other') }.to raise_error(ArgumentError, /name reads the attribute of that name and takes no arguments/)
+      end
+
+      it 'does not point a record that takes no writes at a writer' do
+        expect { record.name('Other') }.to raise_error(ArgumentError) { expect(it.message).not_to include('name =') }
+      end
+
+      it 'still reads with a block, which any method takes' do
+        expect(record.name { 'ignored' }).to eq('Support')
+      end
+
+      it 'still raises NoMethodError for an attribute the record does not carry' do
+        expect { record.custom_field('x') }.to raise_error(NoMethodError, /undefined attribute custom_field/)
+      end
+    end
+
     # A reader used to answer nil here, which made a typo a silent nil that
     # flowed on into whatever was written with it - and put respond_to? and
     # the call itself at odds, since respond_to?(:custom_field) was false

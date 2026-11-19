@@ -205,5 +205,31 @@ RSpec.describe ZammadAPI::Resources::Ticket do
 
       expect(ticket.article).to eq(body: 'reply')
     end
+
+    # With an article staged the reader is there, and it never looked at
+    # its arguments: the call 1.x made answered with the staged article,
+    # sent nothing and raised nothing.
+    context 'when an article is staged and the call 1.x made is made' do
+      before { ticket.article = { body: 'draft' } }
+
+      it 'raises ArgumentError rather than answering with the staged article' do
+        expect { ticket.article(body: 'reply') }.to raise_error(ArgumentError, /wrong number of arguments \(given 1, expected 0\)/)
+      end
+
+      it 'names add_article' do
+        expect { ticket.article(body: 'reply') }.to raise_error(ArgumentError, /add_article\(\.\.\.\)/)
+      end
+
+      it 'sends nothing' do
+        expect { ticket.article(body: 'reply') }.to raise_error(ArgumentError)
+        expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+      end
+    end
+
+    it 'tells a reader given a value where the value is written' do
+      ticket.assign_attributes(state: 'open')
+
+      expect { ticket.state('closed') }.to raise_error(ArgumentError, /write it with state = \.\.\. or update\(state: \.\.\.\)/)
+    end
   end
 end

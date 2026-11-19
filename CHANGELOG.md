@@ -173,8 +173,9 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   environment that itself sets two schemes is refused until an argument says which is meant.
 - `ticket.article(…)` is `ticket.add_article(…)`. A noun that sends a `POST` sat one letter
   away from `ticket.articles`, which only reads. The old method is gone, which leaves
-  `article` an attribute reader like any other: it raises `NoMethodError` on a ticket that
-  has no article staged, and sends nothing.
+  `article` an attribute reader like any other: called the old way it raises `NoMethodError`
+  on a ticket that has no article staged and `ArgumentError`, naming `add_article`, on one
+  that has, and sends nothing either way.
 
 ### Added
 
@@ -876,6 +877,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   attributes. A `query:` that is not a Hash raises `ArgumentError` the same way.
 - The debug log prints the query of a request as it is sent, like its headers and its
   body, so the line shows String keys and values: `query={"page" => "1"}`.
+- An attribute reader called with arguments raises `ArgumentError`, as a reader written out
+  does. The arguments were never looked at, so `ticket.state('closed')` answered `"open"`
+  and changed nothing. On a ticket with an article staged, the call that added an article
+  in 1.x, `ticket.article(body: '…')`, answered with the staged article, sent nothing and
+  raised nothing; it now raises and names `add_article`. The message says where a value
+  for the attribute is written, on a record that takes writes.
 
 ### Changed
 
