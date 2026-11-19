@@ -836,6 +836,15 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `url: 'https:///admin:secret@host/'` was quoted in full by the `ConfigurationError` that
   refuses a url without a host. With no host there to blank by mistake, everything up to
   the last `@` is blanked, and that error quotes the url redacted.
+- The debug log prints a request body as it is sent, and no longer by `inspect`. It
+  redacted by key through the Hashes and lists of the body it was handed and printed
+  anything else in it as it stood, so an object that writes its own JSON — a value object
+  with a `to_json`, as the body or under a key of it — was logged with the password the
+  request carries as a key. An object that does not is sent as its `to_s`, and the log
+  showed what `inspect` lists and the request never carried. The payload is now read back
+  from the JSON it was encoded to and redacted by key, however it was handed over, so the
+  line shows String keys: `{"login" => "jane", "password" => "[REDACTED]"}`. A body that is
+  one value is not logged, only its size.
 
 ### Changed
 
