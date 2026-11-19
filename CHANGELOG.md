@@ -845,6 +845,13 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   from the JSON it was encoded to and redacted by key, however it was handed over, so the
   line shows String keys: `{"login" => "jane", "password" => "[REDACTED]"}`. A body that is
   one value is not logged, only its size.
+- A query string written into the path of a raw request is redacted where its parameters
+  are separated by `;`. Zammad up to 7.0 runs on Rack 2, which ends a parameter at a `;` as
+  it does at an `&`, so `client.get('api/v1/x?page=2;token=...')` carries a token there. The
+  path was split at `&` alone, which made that the tail of a value named `page`, and it was
+  printed in the log and in the message of an error the request raised. A credential that
+  opens such a stretch is still blanked to the next `&`, since Rack 3, and Zammad since 7.1,
+  reads a `;` as part of the value.
 
 ### Changed
 
