@@ -197,6 +197,20 @@ requests as the client finished building them and responses before anything else
 Faraday stays an implementation detail either way: an unregistered adapter raises
 `ZammadAPI::ConfigurationError`, not a Faraday error.
 
+`adapter:` takes a name. An adapter that needs arguments is set inside the callable
+instead, and is the one the client then uses:
+
+```ruby
+client = ZammadAPI::Client.new(
+  url:        'https://zammad.example.com/',
+  http_token: 'token',
+  middleware: ->(connection) { connection.adapter :net_http_persistent, pool_size: 5 }
+)
+```
+
+Naming an adapter both ways raises `ZammadAPI::ConfigurationError`, since one of the two
+would be dropped.
+
 Faraday's default adapter, `net_http`, opens and closes a connection around every
 request, so a walk of N pages is N TCP connections and N TLS handshakes. That is the
 default because it needs no extra gem; for anything that pages, downloads attachments in a

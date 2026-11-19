@@ -1008,8 +1008,7 @@ module ZammadAPI
         faraday.request :retry, Transport.retry_options(config)
         # Last in the stack, so a caller's middleware sees the request as this
         # gem finished building it and the response before anything else does.
-        config.middleware&.call(faraday)
-        faraday.adapter(config.adapter || Faraday.default_adapter)
+        apply_middleware_and_adapter(faraday)
       end
 
       refuse_unusable_middleware!(connection)
@@ -1030,6 +1029,38 @@ module ZammadAPI
       # documented to need. The class is named in the message because
       # "bad URI (is not URI?)" on its own says nothing about where to look.
       raise ConfigurationError, "config could not be used to build a connection: #{e.class}: #{redact_config_values(e.message)}", cause: reportable_cause(e)
+    end
+
+    # Runs the caller's `middleware:` callable, and then settles the adapter.
+    #
+    # The adapter used to be set after the callable, unconditionally, and
+    # setting one replaces the one that is there. So an adapter the callable
+    # chose was dropped without a word: `middleware: ->(f) { f.adapter
+    # :test, stubs }` left the connection on Net::HTTP, and a test that
+    # believed itself stubbed sent real requests with the real token. The
+    # callable is also the one place an adapter can be given arguments -
+    # `f.adapter :net_http_persistent, pool_size: 5` - since `adapter:`
+    # takes a name.
+    #
+    # An adapter the callable set is kept. Whether it set one is asked of
+    # the handler's identity: Faraday puts its default in before the block
+    # runs and builds a new handler for every `adapter` call, so one that
+    # names the default again, to hand it a block, is seen as well.
+    #
+    # Named in both places, it is refused. One of the two would be dropped,
+    # and which one is not something either spelling says.
+    def apply_middleware_and_adapter(faraday)
+      preset = faraday.builder.adapter
+      config.middleware&.call(faraday)
+      chosen = faraday.builder.adapter
+
+      return faraday.adapter(config.adapter || Faraday.default_adapter) if chosen.equal?(preset)
+      return if config.adapter.nil?
+
+      raise ConfigurationError,
+            "config adapter is #{config.adapter.inspect}, and the `middleware:` callable set an adapter as well (#{chosen.name}): " \
+            'a connection has one adapter. Drop the `adapter:` option to use the one the callable sets, with the arguments ' \
+            'it gives it, or drop the call from the callable.'
     end
 
     # The error to keep as the cause of the ConfigurationError above, where

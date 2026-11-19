@@ -1138,6 +1138,53 @@ RSpec.describe ZammadAPI::Transport do
       expect(transport.instance_variable_get(:@connection).adapter.name).to include('Adapter::Test')
     end
 
+    # The adapter was set after the callable ran, and setting one replaces
+    # the one that is there. A test that put the test adapter in through
+    # the callable was on Net::HTTP, with nothing to say so.
+    context 'with an adapter chosen inside the middleware callable' do
+      let(:stubs) { Faraday::Adapter::Test::Stubs.new { it.get('/api/v1/groups') { [200, { 'Content-Type' => 'application/json' }, '[{"id":7}]'] } } }
+
+      it 'keeps it' do
+        transport = unit_transport(middleware: ->(faraday) { faraday.adapter :test, stubs })
+
+        expect(transport.instance_variable_get(:@connection).adapter.name).to include('Adapter::Test')
+      end
+
+      it 'sends requests through it, with the arguments it was given' do
+        transport = unit_transport(middleware: ->(faraday) { faraday.adapter :test, stubs })
+
+        expect(transport.get('api/v1/groups', operation: 'test').body).to eq([{ id: 7 }])
+        expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+      end
+
+      it 'keeps it where it is the default adapter, named again to give it a block' do
+        configured = nil
+        transport  = unit_transport(middleware: ->(faraday) { faraday.adapter(Faraday.default_adapter) { configured = true } })
+        stub_request(:get, url).to_return(json_response([]))
+        transport.get('api/v1/groups', operation: 'test')
+
+        expect(configured).to be(true)
+      end
+
+      it 'still puts the default adapter in where the callable chose none' do
+        transport = unit_transport(middleware: ->(faraday) { faraday.use(Class.new(Faraday::Middleware)) })
+
+        expect(transport.instance_variable_get(:@connection).adapter.name).to eq(Faraday::Adapter.lookup_middleware(Faraday.default_adapter).name)
+      end
+
+      # Two answers to one question, and whichever was kept the other was
+      # dropped without a word.
+      it 'refuses one named in the adapter option as well' do
+        expect { unit_transport(adapter: :net_http, middleware: ->(faraday) { faraday.adapter :test, stubs }) }
+          .to raise_error(ZammadAPI::ConfigurationError, /config adapter is :net_http, and the `middleware:` callable set an adapter as well \(Faraday::Adapter::Test\)/)
+      end
+
+      it 'refuses the pair even where both name the same adapter' do
+        expect { unit_transport(adapter: :test, middleware: ->(faraday) { faraday.adapter :test, stubs }) }
+          .to raise_error(ZammadAPI::ConfigurationError, /set an adapter as well/)
+      end
+    end
+
     it 'reports an unregistered adapter as a configuration error' do
       expect { unit_transport(adapter: :nonsense) }
         .to raise_error(ZammadAPI::ConfigurationError, /is not registered on Faraday::Adapter/)

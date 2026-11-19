@@ -43,10 +43,12 @@ module ZammadAPI
   #   @return [String, nil] proxy URL
   # @!attribute [r] adapter
   #   @return [Symbol, nil] name of the Faraday adapter, +nil+ for Faraday's
-  #     default
+  #     default or for one the +middleware+ callable sets
   # @!attribute [r] middleware
   #   @return [Proc, nil] called with the Faraday connection while it is
-  #     being built
+  #     being built. An adapter it sets is the one used, which is how an
+  #     adapter is given arguments; one named in +adapter+ as well is
+  #     refused when the connection is built
   # @!attribute [r] logger
   #   @return [Logger] where debug output goes
   Config = Data.define(

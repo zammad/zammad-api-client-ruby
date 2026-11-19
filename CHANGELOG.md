@@ -889,6 +889,13 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `client.tickets.search('x').any?` two hundred hits, to answer what `empty?` answers with a
   page of one. A resource proxy forwards both. With a block or a pattern they walk, as
   before.
+- An adapter set inside the `middleware:` callable is kept. The adapter was set after the
+  callable ran, which replaces the one that is there, so
+  `middleware: ->(f) { f.adapter :test, stubs }` left the connection on Net::HTTP without a
+  word: a test that believed itself stubbed sent real requests with the real token. The
+  callable is also the only place an adapter can be given arguments, such as
+  `f.adapter :net_http_persistent, pool_size: 5`. Naming an adapter there and in `adapter:`
+  as well raises `ConfigurationError`.
 
 ### Changed
 
