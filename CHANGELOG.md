@@ -896,6 +896,13 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   callable is also the only place an adapter can be given arguments, such as
   `f.adapter :net_http_persistent, pool_size: 5`. Naming an adapter there and in `adapter:`
   as well raises `ConfigurationError`.
+- A line break in a header value is refused beside bytes that are invalid in the value's
+  encoding too. The check stripped the value first, which raises for such text, and read
+  the error as no line break: `http_token: "abc\xFF\ndef"` built a client, a raw request
+  took the same in `headers:`, and an adapter that checks no header itself sent what
+  followed the break as a header of its own. The bytes are read now. `http_token`,
+  `oauth2_token` or `user_agent` given as UTF-16 text that cannot be converted raises
+  `ConfigurationError`; it was passed as holding no line break.
 
 ### Changed
 

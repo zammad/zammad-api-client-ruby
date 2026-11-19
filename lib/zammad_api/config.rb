@@ -437,10 +437,21 @@ module ZammadAPI
     def validate_header_options!
       HEADER_OPTIONS.each do |name|
         value = public_send(name)
-        next if !value.is_a?(String) || !Transport.line_break?(value)
+        next if !value.is_a?(String) || !Transport.line_break?(header_text(name, value))
 
         raise ConfigurationError, "config #{name} holds a line break, which a header cannot carry: #{Transport::LINE_BREAK_ADVICE}"
       end
+    end
+
+    # The option as text whose bytes are the ones a header carries: see
+    # {Transport.wire_text}. Text that cannot be converted cannot be shown
+    # to hold no line break, and was passed as holding none. Refused
+    # without the error underneath as its cause, which quotes the bytes it
+    # stopped at.
+    def header_text(name, value)
+      Transport.wire_text(value, "config #{name}")
+    rescue ArgumentError => e
+      raise ConfigurationError, e.message, cause: nil
     end
 
     # A proxy is the second string here that may carry credentials, and the

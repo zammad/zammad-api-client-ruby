@@ -415,15 +415,20 @@ module ZammadAPI
     # break at either end is stripped there, so a token read from a file
     # with its newline still on works, and is still taken.
     #
+    # Asked of the bytes. +strip+ raises for text that holds a byte sequence
+    # its encoding does not allow, and that error was read here as "no line
+    # break": `http_token: "abc\xFF\ndef"` was taken, and an adapter that
+    # does not check a header itself sent what follows the break as a header
+    # of its own. A line break is the same byte in every encoding ASCII is a
+    # part of, and binary text has no sequence that is not allowed.
+    #
+    # Asked of a String {.wire_text} has had, as {BLANK} is: the bytes of
+    # UTF-16 are not the bytes a request carries.
+    #
     # @api private
     # @param text [String]
     # @return [Boolean]
-    def self.line_break?(text)
-      text = text.encode(Encoding::UTF_8) if !text.encoding.ascii_compatible?
-      /[\r\n]/.match?(text.strip)
-    rescue EncodingError
-      false
-    end
+    def self.line_break?(text) = /[\r\n]/.match?(text.b.strip)
 
     # The +From+ scope as a transport holds it: text, and a copy of its own.
     #

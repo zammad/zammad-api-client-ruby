@@ -54,6 +54,15 @@ RSpec.describe ZammadAPI::Transport do
         }
     end
 
+    # The check stripped the value first, which raises for such text, and
+    # read the error as "no line break".
+    it 'refuses a line break beside a byte sequence that is invalid in the encoding' do
+      expect { described_class.stringify_headers('Accept-Language' => "de\xFF\nX-Injected: secret") }
+        .to raise_error(ArgumentError, /\Aheader accept-language holds a line break, which a header cannot carry/) { |error|
+          expect(error.message).not_to include('secret')
+        }
+    end
+
     it 'takes one that only ends in a line break, which Net::HTTP strips' do
       expect(described_class.stringify_headers('X-Note' => "abc\n")).to eq('x-note' => "abc\n")
     end
