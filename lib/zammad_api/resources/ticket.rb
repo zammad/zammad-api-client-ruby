@@ -75,7 +75,13 @@ module ZammadAPI
         # article refuses two spellings of one attribute now, and a String
         # `ticket_id` left beside this ticket's would be refused as a pair
         # the caller never wrote.
-        own    = attributes.reject { |key, _| key.to_s == 'ticket_id' }
+        #
+        # Read as a Hash first, by the rule the article's own constructor
+        # has - see {Base#attribute_hash} - so that what is taken apart here
+        # is one: the strong parameters of a controller, converted, and
+        # anything that is no set of attributes refused before `reject` is
+        # called on it.
+        own    = attribute_hash(attributes).reject { |key, _| key.to_s == 'ticket_id' }
         record = TicketArticle.new(transport, own.merge(ticket_id: require_id!))
         record.save!
         record

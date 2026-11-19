@@ -793,6 +793,22 @@ RSpec.describe ZammadAPI::ResourceProxy do
           .to have_been_made
       end
 
+      # `condition: params.require(:condition).permit!`. It is not a Hash,
+      # so it was written as its `to_s`, which Zammad cannot read and drops:
+      # the search came back unnarrowed.
+      it 'sends a condition given as strong parameters the same way' do
+        condition = StrongParameters.new('ticket.state_id' => StrongParameters.new(operator: 'is', value: [1]))
+        client.tickets.search('x', condition: condition).to_a
+
+        expect(a_request(:get, "#{ClientHelper::BASE_URL}api/v1/tickets/search")
+          .with(query: hash_including('condition' => { 'ticket.state_id' => { 'operator' => 'is', 'value' => ['1'] } })))
+          .to have_been_made
+      end
+
+      it 'refuses a condition given as strong parameters with nothing in them, as it does an empty Hash' do
+        expect { client.tickets.search('x', condition: StrongParameters.new({})) }.to raise_error(ArgumentError, /search was given condition/)
+      end
+
       it 'accepts a keyword spelled as a string' do
         expect(client.users.search('x', 'ids' => [1])).to be_a(ZammadAPI::Collection)
       end

@@ -62,18 +62,18 @@ module ZammadAPI
       def self.belongs_to: (Symbol name, class_name: String, ?foreign_key: Symbol) -> void
       def self.has_many: (Symbol name, class_name: String, path: ^(String) -> String) -> void
 
-      def initialize: (Transport, ?Hash[untyped, untyped]? attributes) -> void
+      def initialize: (Transport, ?hash[untyped, untyped]? attributes) -> void
       def new_record?: () -> bool
       def persisted?: () -> bool
       def destroyed?: () -> bool
       def changes: () -> Hash[Symbol, Array[untyped]]
       def changed?: () -> bool
       def related: () -> Associations::Proxy
-      def assign_attributes: (Hash[untyped, untyped] attributes) -> self
+      def assign_attributes: (hash[untyped, untyped] attributes) -> self
       def save: () -> bool
       def save!: () -> true
-      def update: (Hash[untyped, untyped] attributes) -> bool
-      def update!: (Hash[untyped, untyped] attributes) -> true
+      def update: (hash[untyped, untyped] attributes) -> bool
+      def update!: (hash[untyped, untyped] attributes) -> true
       def reload: () -> self
       def destroy: () -> true
       def inspect: () -> String
@@ -83,6 +83,7 @@ module ZammadAPI
       def initialize_copy: (self source) -> void
       def setup: (Transport, Hash[untyped, untyped] attributes) -> void
       def mark_persisted!: () -> void
+      def attribute_hash: (untyped given) -> Hash[untyped, untyped]
       def raise_if_destroyed!: (String action) -> void
       def raise_if_new!: (String operation) -> void
       def writable_attributes?: () -> bool

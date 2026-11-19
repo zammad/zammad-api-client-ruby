@@ -859,6 +859,23 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   one about `to_sym` for a Hash the constructor takes. The message names the class that was
   given and does not quote the value. Nil is refused rather than read as nothing to assign:
   an `update` that staged nothing would answer `true`.
+- Strong parameters are read as the Hash they convert to. `ActionController::Parameters` is
+  not a Hash, so `client.users.new(params.require(:user).permit(:login, :password))` built
+  a record holding the caller's own object: `inspect` and the debug log printed the
+  password, `save` sent the parameters as one JSON string holding their `to_s`, where 1.x
+  sent `params.to_json`, and a later change to the parameters changed the record. `update`
+  and `assign_attributes` raised `NoMethodError` for them, and a `condition:` given to
+  `search` that way was written as its `to_s`, which Zammad drops. Whatever answers
+  `to_hash` is now converted wherever a structure is handed over: as the attributes of
+  `new`, `create`, `update`, `assign_attributes` and `add_article`, as the value of an
+  attribute at any depth, in a search filter, and in the `query:` and `body:` of a raw
+  request. Parameters that were not permitted raise their own
+  `ActionController::UnfilteredParameters`. Anything else given as a set of attributes —
+  a String, an Array of pairs, a Struct — raises `ArgumentError` naming its class, where it
+  raised `NoMethodError` or was stored as it was; `new(nil)` is still a record with no
+  attributes. A `query:` that is not a Hash raises `ArgumentError` the same way.
+- The debug log prints the query of a request as it is sent, like its headers and its
+  body, so the line shows String keys and values: `query={"page" => "1"}`.
 
 ### Changed
 

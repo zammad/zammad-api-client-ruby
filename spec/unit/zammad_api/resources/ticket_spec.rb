@@ -92,6 +92,22 @@ RSpec.describe ZammadAPI::Resources::Ticket do
       expect(ticket.add_article(body: 'hello')).to be_persisted
     end
 
+    # `ticket.add_article(params.require(:article).permit(:body))`, which is
+    # taken apart here before the article is built from it.
+    it 'reads strong parameters as the Hash they convert to' do
+      stub = stub_request(:post, article_url)
+        .with(query: { 'expand' => 'true' }, body: '{"body":"hello","ticket_id":42}')
+        .to_return(json_response({ id: 9, body: 'hello', ticket_id: 42 }, status: 201))
+
+      ticket.add_article(StrongParameters.new(body: 'hello'))
+      expect(stub).to have_been_requested
+    end
+
+    it 'refuses what is no set of attributes, and sends nothing' do
+      expect { ticket.add_article('hello') }.to raise_error(ArgumentError, 'attributes need to be a Hash of names and values, got String')
+      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+    end
+
     # The article goes to the ticket it was added to, whatever the attributes
     # say. Given `ticket_id` under both spellings, the Symbol was replaced and
     # the String, coming later in the Hash, replaced it again when the article

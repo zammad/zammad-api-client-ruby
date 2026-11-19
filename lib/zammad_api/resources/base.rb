@@ -385,12 +385,16 @@ module ZammadAPI
       belongs_to :updated_by, class_name: 'User'
 
       # @param transport [Transport]
-      # @param attributes [Hash, nil]
+      # @param attributes [Hash, nil] or what converts to a Hash, such as
+      #   permitted `ActionController::Parameters`
       # @raise [Error] when an attribute cannot be staged, such as +id+
-      # @raise [ArgumentError] when an attribute is named twice, as a String
-      #   and as a Symbol, at any depth
+      # @raise [ArgumentError] when given something that is neither, or when
+      #   an attribute is named twice, as a String and as a Symbol, at any
+      #   depth
       def initialize(transport, attributes = {})
-        given = attributes || {}
+        # Nil alone is no attributes. Anything else is read as a Hash or
+        # refused: see {#attribute_hash}.
+        given = nil.equal?(attributes) ? {} : attribute_hash(attributes)
         # The same refusal the writers make, at the one door that did not make
         # it. `group.id = 99` is refused with a sentence about what an id is
         # for, and `client.groups.new(id: 99)` was accepted in silence - and
@@ -483,12 +487,14 @@ module ZammadAPI
       #   group.assign_attributes(name: 'Support 2', note: 'Renamed')
       #   group.changed? # => true
       #
-      # @param attributes [Hash] attribute names and their new values
+      # @param attributes [Hash] attribute names and their new values, or
+      #   what converts to a Hash, such as permitted
+      #   `ActionController::Parameters`
       # @return [self]
       # @raise [Error] when an attribute cannot be staged, such as +id+, or
       #   when the record was destroyed. Nothing is staged in either case, so
       #   the record is left as it was.
-      # @raise [ArgumentError] when given something that is not a Hash, nil
+      # @raise [ArgumentError] when given something that is neither, nil
       #   included, or when an attribute is named twice, as a String and as
       #   a Symbol. Nothing is staged then either.
       def assign_attributes(attributes)
@@ -500,7 +506,7 @@ module ZammadAPI
         # which is what the constructor makes of nil: a record built from
         # nothing says so by being empty, and an `update` that staged
         # nothing answers true as if it had stored something.
-        raise ArgumentError, "attributes need to be a Hash of names and values, got #{attributes.class}" if !attributes.is_a?(Hash)
+        attributes = attribute_hash(attributes)
 
         # Two spellings of one attribute are refused before anything is
         # written, for the reason the constructor refuses them - see
@@ -763,6 +769,27 @@ module ZammadAPI
 
       def mark_persisted!
         @new_record = false
+      end
+
+      # A set of attributes a caller handed over, as the Hash it is read as.
+      #
+      # A Hash, or what converts to one. `ActionController::Parameters` is
+      # not a Hash, and it is what `client.users.new(params.require(:user)
+      # .permit(:login, :password))` hands over: the constructor took it as
+      # it was - see {DeepCopy.frozen_object} for what became of the record -
+      # and {#assign_attributes} raised NoMethodError for it. Converted here,
+      # at the door, so that everything behind it is handed a Hash.
+      #
+      # Anything else is refused, and named by its class alone: what was
+      # given may hold a credential. It used to raise NoMethodError from
+      # whichever method of Hash was called on it first, or be taken, as an
+      # Array of pairs was.
+      #
+      # @param given [Object]
+      # @return [Hash]
+      # @raise [ArgumentError]
+      def attribute_hash(given)
+        Hash.try_convert(given) || raise(ArgumentError, "attributes need to be a Hash of names and values, got #{given.class}")
       end
 
       # Refuses an operation on a record Zammad never had.

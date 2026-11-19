@@ -110,6 +110,35 @@ RSpec.describe ZammadAPI::Transport do
         .to eq({ 'condition' => { 'open' => { 'active' => 'true', 'limit' => '5' } } })
     end
 
+    # `ActionController::Parameters` is not a Hash. Nested, it was written
+    # as its `to_s`; as the whole query it raised NoMethodError.
+    context 'with what converts to a Hash and is not one' do
+      it 'reads it as that Hash where it is a value' do
+        expect(described_class.stringify_query(condition: StrongParameters.new(open: StrongParameters.new(limit: 5))))
+          .to eq({ 'condition' => { 'open' => { 'limit' => '5' } } })
+      end
+
+      it 'reads it as that Hash where it is the query' do
+        expect(described_class.stringify_query(StrongParameters.new(page: 2))).to eq({ 'page' => '2' })
+      end
+
+      it 'refuses two spellings of one key in it, as in a Hash' do
+        expect { described_class.stringify_query(condition: StrongParameters.new(a: 1), 'condition' => 2) }.to raise_error(ArgumentError, /given twice/)
+      end
+
+      it 'sends it the way Rails reads a nested parameter back' do
+        stub = stub_request(:get, "#{url}/search").with(query: { 'condition' => { 'state' => { 'operator' => 'is' } } }).to_return(json_response([]))
+        unit_transport.get('api/v1/groups/search', operation: 'test', query: { condition: StrongParameters.new(state: { operator: 'is' }) })
+
+        expect(stub).to have_been_requested
+      end
+    end
+
+    it 'refuses a query that is no Hash, naming its class' do
+      expect { described_class.stringify_query('page=2') }
+        .to raise_error(ArgumentError, 'query needs to be a Hash of parameter names and values, got String')
+    end
+
     # Faraday's escaping raised Encoding::CompatibilityError for one.
     it 'sends a value given in UTF-16 as the same text in UTF-8' do
       stub = stub_request(:get, "#{url}/search").with(query: { 'query' => 'ä b' }).to_return(json_response([]))
@@ -523,6 +552,31 @@ RSpec.describe ZammadAPI::Transport do
         .to_return(json_response({ id: 1 }, status: 201))
       unit_transport.post('api/v1/groups', operation: 'test', body: '{"name":"Raw"}')
       expect(stub).to have_been_requested
+    end
+
+    # The generator has no spelling for `ActionController::Parameters` and
+    # writes its `to_s`, so the body was one JSON string holding a Ruby
+    # inspect of the parameters.
+    context 'with a body that converts to a Hash and is not one' do
+      before { stub_request(:post, url).to_return(json_response({ id: 1 }, status: 201)) }
+
+      it 'sends it as the JSON object it converts to' do
+        unit_transport.post('api/v1/groups', operation: 'test', body: StrongParameters.new(name: 'Support', preferences: StrongParameters.new(locale: 'de')))
+
+        expect(a_request(:post, url).with(body: '{"name":"Support","preferences":{"locale":"de"}}')).to have_been_made
+      end
+
+      it 'sends one that a Hash or an Array holds the same way' do
+        unit_transport.post('api/v1/groups', operation: 'test', body: { groups: [StrongParameters.new(name: 'Support')] })
+
+        expect(a_request(:post, url).with(body: '{"groups":[{"name":"Support"}]}')).to have_been_made
+      end
+
+      it 'sends nothing where it refuses to convert' do
+        expect { unit_transport.post('api/v1/groups', operation: 'test', body: StrongParameters.new({ name: 'Support' }, permitted: false)) }
+          .to raise_error(StrongParameters::Unfiltered)
+        expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+      end
     end
 
     # Faraday's JSON middleware raised JSON::GeneratorError from inside the
@@ -1553,6 +1607,31 @@ RSpec.describe ZammadAPI::Transport do
         transport.post('api/v1/groups', operation: 'test', body: { user: credentials })
 
         expect(a_request(:post, url).with(body: '{"user":{"login":"jane","password":"object-s3cret"}}')).to have_been_made
+      end
+    end
+
+    # The request line printed the `query:` the caller handed over, redacted
+    # by key through its Hashes. What it held that converts to a Hash, and
+    # is sent as one, was printed by `inspect` under the key it sat at.
+    context 'with a query that carries a credential' do
+      subject(:log) { log_device.string }
+
+      let(:log_device) { StringIO.new }
+      let(:transport)  { unit_transport(logger: Logger.new(log_device, level: Logger::DEBUG)) }
+
+      before { stub_request(:get, url).with(query: hash_including({})).to_return(json_response([])) }
+
+      it 'redacts it by key, in the query as it is sent' do
+        transport.get('api/v1/groups', operation: 'test', query: { page: 1, token: 'query-s3cret' })
+
+        expect(log).to include('Zammad API request: GET api/v1/groups query={"page" => "1", "token" => "[REDACTED]"}')
+      end
+
+      it 'redacts it in strong parameters the query holds' do
+        transport.get('api/v1/groups', operation: 'test', query: { filter: StrongParameters.new(page: 1, token: 'query-s3cret') })
+
+        expect(log).to include('query={"filter" => {"page" => "1", "token" => "[REDACTED]"}}')
+        expect(log).not_to include('query-s3cret')
       end
     end
 

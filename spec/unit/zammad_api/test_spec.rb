@@ -509,6 +509,22 @@ RSpec.describe ZammadAPI::Test do
       expect(zammad.requests.last.body).to be_frozen
     end
 
+    # The wire carries strong parameters as the Hash they convert to, so
+    # that is what the record of a request holds, and not the object.
+    it 'records strong parameters as the Hash they are sent as' do
+      zammad.stub(:post, 'api/v1/groups', body: { id: 2 })
+      client.post('api/v1/groups', body: { group: StrongParameters.new(name: 'Support') })
+
+      expect(zammad.requests.last.body).to eq({ group: { 'name' => 'Support' } })
+    end
+
+    it 'records a record built from them as the attributes it sends' do
+      zammad.stub(:post, 'api/v1/groups', body: { id: 2 })
+      client.groups.create(StrongParameters.new(name: 'Support'))
+
+      expect(zammad.requests.last.body).to eq({ name: 'Support' })
+    end
+
     it 'records the query parameters the client sent' do
       client.groups.find(1)
 
