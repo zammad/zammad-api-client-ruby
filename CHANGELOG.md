@@ -852,6 +852,13 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   printed in the log and in the message of an error the request raised. A credential that
   opens such a stretch is still blanked to the next `&`, since Rack 3, and Zammad since 7.1,
   reads a `;` as part of the value.
+- `assign_attributes`, `update` and `update!` raise `ArgumentError` for something that is
+  not a Hash, and take a key that cannot become a Symbol. `ticket.update(nil)` — which is
+  `update(params[:ticket])` with the key missing — raised `NoMethodError: undefined method
+  'each_with_object' for nil` from inside the gem, and `assign_attributes(1 => 'x')` raised
+  one about `to_sym` for a Hash the constructor takes. The message names the class that was
+  given and does not quote the value. Nil is refused rather than read as nothing to assign:
+  an `update` that staged nothing would answer `true`.
 
 ### Changed
 
