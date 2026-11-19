@@ -40,6 +40,8 @@ module ZammadAPI
 
     def self.redact_path: (untyped path) -> String
     def self.redact_query_pair: (String pair) -> String
+    def self.credential_parameter?: (String parameter) -> bool
+    def self.blank_query_value: (String parameter) -> String
     def self.redact: (untyped value) -> untyped
     def self.stringify_query: (Hash[untyped, untyped]) -> Hash[String, untyped]
     def self.stringify_query_hash: (Hash[untyped, untyped], String?) -> Hash[String, untyped]

@@ -669,11 +669,40 @@ module ZammadAPI
       "#{base}?#{query.split('&', -1).map { redact_query_pair(it) }.join('&')}"
     end
 
+    # One stretch of a query string between two +&+, as it may be printed.
+    #
+    # Usually that is one parameter. Rack 2 ends a parameter at a +;+ as
+    # well, though, and Zammad ran on it up to 7.0: there
+    # `?page=2;token=...` carries a token, and read as one parameter it was
+    # the tail of a value named +page+ and printed. Rack 3, and Zammad
+    # since 7.1, reads the +;+ as part of the value.
+    #
+    # Both readings are covered, since nothing here knows which server is
+    # asked. A credential the stretch opens with is blanked to its end, the
+    # +;+ and what follows included, which is the whole of its value as
+    # Rack 3 reads it. Any other is followed past each +;+, and a parameter
+    # named like a credential there is blanked as far as the next one,
+    # which is where Rack 2 ends it.
+    #
     # @api private
     # @return [String]
     def self.redact_query_pair(pair)
-      name, mark, = pair.partition('=')
-      return pair if mark.empty?
+      return blank_query_value(pair) if credential_parameter?(pair)
+
+      first, separator, later = pair.partition(';')
+      return pair if separator.empty?
+
+      "#{first};#{later.split(';', -1).map { credential_parameter?(it) ? blank_query_value(it) : it }.join(';')}"
+    end
+
+    # Whether +name=value+ is named like a credential. A name that cannot
+    # be decoded cannot be read, and counts as one.
+    #
+    # @api private
+    # @return [Boolean]
+    def self.credential_parameter?(parameter)
+      name, mark, = parameter.partition('=')
+      return false if mark.empty?
 
       decoded = begin
         URI.decode_www_form_component(name)
@@ -681,8 +710,12 @@ module ZammadAPI
         nil
       end
 
-      decoded && !SENSITIVE_KEY_PATTERN.match?(decoded) ? pair : "#{name}=#{REDACTED}"
+      decoded.nil? || SENSITIVE_KEY_PATTERN.match?(decoded)
     end
+
+    # @api private
+    # @return [String]
+    def self.blank_query_value(parameter) = "#{parameter.partition('=').first}=#{REDACTED}"
 
     # A structure as it may be printed: with the value under every key that
     # names a credential blanked, at any depth. See {SENSITIVE_KEY_PATTERN}

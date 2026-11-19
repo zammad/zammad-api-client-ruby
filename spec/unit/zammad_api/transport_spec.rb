@@ -316,6 +316,42 @@ RSpec.describe ZammadAPI::Transport do
     it 'blanks a value that holds a = of its own' do
       expect(described_class.redact_path('api/v1/x?token=a=b')).to eq('api/v1/x?token=[REDACTED]')
     end
+
+    # Rack 2 ends a parameter at a `;` as it does at an `&`, and Zammad ran
+    # on it up to 7.0. There `?page=2;token=s3cret` carries a token, and
+    # split at `&` alone it was the tail of a value named `page`.
+    context 'with parameters separated by a semicolon' do
+      it 'blanks the value of one named like a credential' do
+        expect(described_class.redact_path('api/v1/x?page=2;token=s3cret')).to eq('api/v1/x?page=2;token=[REDACTED]')
+      end
+
+      it 'keeps the parameters around it as they were written' do
+        expect(described_class.redact_path('api/v1/x?page=2;token=s3cret;q=a%20b&locale=de')).to eq('api/v1/x?page=2;token=[REDACTED];q=a%20b&locale=de')
+      end
+
+      it 'reads the name behind a parameter with no value' do
+        expect(described_class.redact_path('api/v1/x?expand;page=2;password=s3cret')).to eq('api/v1/x?expand;page=2;password=[REDACTED]')
+      end
+
+      it 'reads a name behind the space Rack skips after a separator' do
+        expect(described_class.redact_path('api/v1/x?page=2; token=s3cret')).to eq('api/v1/x?page=2; token=[REDACTED]')
+      end
+
+      it 'blanks a value whose name cannot be read' do
+        expect(described_class.redact_path('api/v1/x?page=2;%zz=s3cret')).to eq('api/v1/x?page=2;%zz=[REDACTED]')
+      end
+
+      # Rack 3 reads a `;` as part of the value, and so does every Zammad
+      # since 7.1. A credential is blanked to the next `&`, so that neither
+      # reading leaves the rest of it standing.
+      it 'blanks a credential that holds one to the end of its value' do
+        expect(described_class.redact_path('api/v1/x?token=s3;cret&page=2')).to eq('api/v1/x?token=[REDACTED]&page=2')
+      end
+
+      it 'leaves a query without a credential as it was written' do
+        expect(described_class.redact_path('api/v1/x?page=2;q=a;b&c;')).to eq('api/v1/x?page=2;q=a;b&c;')
+      end
+    end
   end
 
   # The question the test kit asks, so that it sends again what the wire
