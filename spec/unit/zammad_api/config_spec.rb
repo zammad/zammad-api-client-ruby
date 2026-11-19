@@ -210,10 +210,40 @@ RSpec.describe ZammadAPI::Config do
       end
     end
 
+    # `strip` raises for text holding a byte sequence that is invalid in its
+    # encoding, and the error was read as "no line break": the token was
+    # taken, and an adapter that checks nothing sent the second line.
+    it 'refuses one beside a byte sequence that is invalid in the encoding' do
+      expect { build(http_token: "secret-abc\xFF\nX-Injected: secret-def") }.to raise_error(ZammadAPI::ConfigurationError) { |error|
+        expect(error.message).to start_with('config http_token holds a line break, which a header cannot carry')
+        expect(error.message).not_to include('secret-def')
+      }
+    end
+
+    it 'refuses one in a token given as binary text' do
+      expect { build(http_token: "secret-abc\xFF\nsecret-def".b) }
+        .to raise_error(ZammadAPI::ConfigurationError, /\Aconfig http_token holds a line break/)
+    end
+
+    # It cannot be shown to hold no line break, and was passed as holding
+    # none.
+    it 'refuses UTF-16 text that cannot be converted, without quoting it or the error underneath' do
+      broken = "secret-abc\nsecret-def".encode('UTF-16LE').b[0..-2].force_encoding('UTF-16LE')
+
+      expect { build(user_agent: broken) }.to raise_error(ZammadAPI::ConfigurationError) { |error|
+        expect(error.message).to start_with('config user_agent was given as UTF-16LE text that cannot be converted to UTF-8')
+        expect(error.cause).to be_nil
+      }
+    end
+
     # Net::HTTP strips it, so a token read from a file with its newline on
     # worked, and still does.
     it 'takes a token that only ends in one' do
       expect(build(http_token: "secret\n").http_token).to eq("secret\n")
+    end
+
+    it 'takes a token that only ends in one after bytes that are invalid in the encoding' do
+      expect(build(http_token: "secret\xFF\n").http_token).to eq("secret\xFF\n")
     end
 
     it 'does not check a password, which basic authentication encodes' do
