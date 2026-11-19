@@ -46,7 +46,8 @@ module ZammadAPI
       ?body: untyped,
       ?headers: Hash[untyped, untyped]?,
       ?resource_class: Class?,
-      ?on_behalf_of: String?
+      ?on_behalf_of: String?,
+      ?config: Config
     ) -> Response
 
     private
@@ -71,10 +72,10 @@ module ZammadAPI
       include ::ZammadAPI::Transport::Verbs
 
       attr_reader test: Test
+      attr_reader config: Config
       attr_reader on_behalf_of: String?
 
-      def initialize: (Test test, ?on_behalf_of: (String | Integer)?) -> void
-      def config: () -> Config
+      def initialize: (Test test, ?on_behalf_of: (String | Integer)?, ?config: Config) -> void
       def with_on_behalf_of: ((String | Integer)? identifier) -> Test::Transport
       def with_config: (Config) -> Test::Transport
 

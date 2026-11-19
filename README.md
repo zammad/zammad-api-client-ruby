@@ -1253,7 +1253,8 @@ zammad.requests.size                # => 2
 A single failing stub answers every attempt, so the error is raised once the retries are
 spent, with three requests recorded under the default of two retries. There is no wait
 between attempts. A `Retry-After` longer than `timeout` ends them at once, as it does
-against Zammad. `ZammadAPI::Test.new(retries: 0)` raises for the first failure.
+against Zammad. `ZammadAPI::Test.new(retries: 0)` raises for the first failure, and so
+does a client derived with `zammad.client.with(retries: 0)`.
 
 A request that was not stubbed raises `ZammadAPI::Test::UnstubbedRequestError`, listing
 what is stubbed, rather than answering with something empty. It is deliberately not a

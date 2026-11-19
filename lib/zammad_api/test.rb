@@ -237,15 +237,22 @@ module ZammadAPI
     # real transport's own rule, so a +Retry-After+ longer than the timeout
     # ends the attempts here as it does there.
     #
-    # The count is this stand-in's, read from the options it was built
-    # with: `ZammadAPI::Test.new(retries: 0)` raises for the first failure.
+    # The count is the client's that sent the request, which is this
+    # stand-in's own unless the client was derived with {Client#with}:
+    # `ZammadAPI::Test.new(retries: 0)` raises for the first failure, and
+    # so does `zammad.client.with(retries: 0)`. It used to be read from the
+    # stand-in whichever client asked, so the derived one was asked three
+    # times here where the wire is asked once. The +timeout+ a
+    # +Retry-After+ is held against is read the same way.
     #
     # @api private
+    # @param config [Config] the configuration of the client that sent the
+    #   request
     # @return [Response]
     # @raise [ResponseError] for a stubbed non-2xx status, once the retries
     #   it is due are spent
     # @raise [UnstubbedRequestError] when no stub matches
-    def answer(method, path, operation:, query: nil, body: nil, headers: nil, resource_class: nil, on_behalf_of: nil)
+    def answer(method, path, operation:, query: nil, body: nil, headers: nil, resource_class: nil, on_behalf_of: nil, config: self.config)
       relative = ::ZammadAPI::Transport.relative_path(path)
       # Through the real transport's own stringification, so that {Request#query}
       # and {Request#headers} hold what a request would have carried rather
@@ -534,31 +541,37 @@ module ZammadAPI
     end
 
     # Routes the client's requests to {Test#answer}, and carries the
-    # +on_behalf_of+ scope the way the real transport does.
+    # +on_behalf_of+ scope and the configuration the way the real transport
+    # does.
     #
     # @api private
     class Transport
       include ::ZammadAPI::Transport::Verbs
 
-      attr_reader :test, :on_behalf_of
+      attr_reader :test, :config, :on_behalf_of
 
       # The scope is stringified, copied and checked by the real transport's
       # own rule, so that a recorded scope is what a request would have
       # carried. Here rather than in {#with_on_behalf_of} alone, which left
       # one built directly holding whatever it was given.
-      def initialize(test, on_behalf_of: nil)
+      def initialize(test, on_behalf_of: nil, config: test.config)
         @test         = test
+        @config       = config
         @on_behalf_of = ::ZammadAPI::Transport.stringify_on_behalf_of(on_behalf_of)
       end
 
-      def config = test.config
-
-      def with_on_behalf_of(identifier) = self.class.new(test, on_behalf_of: identifier)
+      def with_on_behalf_of(identifier) = self.class.new(test, on_behalf_of: identifier, config: config)
 
       # {Client#with} re-validates the options and hands them here. There is
-      # no connection to rebuild, and the derived client reports the derived
-      # config itself, so the stand-in keeps answering.
-      def with_config(_config) = self
+      # no connection to rebuild, and the same stand-in keeps answering, but
+      # the configuration is the transport's to carry as well as the
+      # client's. This returned self, and everything read from the transport
+      # stayed the stand-in's own: `client.with(retries: 0)` was asked as
+      # often as the stand-in retries, and a record found through
+      # `client.with(url:)` named the stand-in's URL as its installation, so
+      # it compared equal to the same id found through the client it was
+      # derived from.
+      def with_config(config) = self.class.new(test, on_behalf_of: on_behalf_of, config: config)
 
       def request(method, path, operation:, query: nil, body: nil, headers: nil, resource_class: nil)
         test.answer(
@@ -569,7 +582,8 @@ module ZammadAPI
           body:           body,
           headers:        headers,
           resource_class: resource_class,
-          on_behalf_of:   on_behalf_of
+          on_behalf_of:   on_behalf_of,
+          config:         config
         )
       end
     end
