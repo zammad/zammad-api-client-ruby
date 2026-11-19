@@ -1551,6 +1551,36 @@ RSpec.describe ZammadAPI::Transport do
       end
     end
 
+    # The names Zammad filters from its own log, in
+    # config/initializers/filter_parameter_logging.rb, that matched no word
+    # here: an LDAP source's bind password and a PGP key's passphrase were
+    # logged beside a redacted `key`.
+    describe 'the keys Zammad filters from its own log' do
+      %w[bind_pw passphrase privateKey sshKeys publicKeyId otp otp_code totp hotp salt pw_salt].each do |name|
+        it "redacts #{name}" do
+          expect(described_class.redact({ name => 's3cret' })).to eq({ name => '[REDACTED]' })
+        end
+      end
+
+      # Matched as words, so that a key merely containing the letters stays
+      # readable.
+      %w[footprint basalt hotKeyboard Keyboard monkey_id bind_user].each do |name|
+        it "leaves #{name} alone" do
+          expect(described_class.redact({ name => 'shown' })).to eq({ name => 'shown' })
+        end
+      end
+
+      it 'redacts a bind password inside the preferences of an LDAP source' do
+        expect(described_class.redact({ name: 'x', preferences: { bind_user: 'cn=admin', bind_pw: 'hunter2' } }))
+          .to eq({ name: 'x', preferences: { bind_user: 'cn=admin', bind_pw: '[REDACTED]' } })
+      end
+
+      it 'redacts them where they are written into a request path' do
+        expect(described_class.redact_path('api/v1/x?passphrase=opensesame&privateKey=abc&page=2'))
+          .to eq('api/v1/x?passphrase=[REDACTED]&privateKey=[REDACTED]&page=2')
+      end
+    end
+
     # A body handed over as a String is the caller's own encoding. Redaction
     # goes by key and found none in a String, so the payload line printed it
     # as it stood.

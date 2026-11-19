@@ -903,6 +903,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   followed the break as a header of its own. The bytes are read now. `http_token`,
   `oauth2_token` or `user_agent` given as UTF-16 text that cannot be converted raises
   `ConfigurationError`; it was passed as holding no line break.
+- The debug log and a record's `inspect` redact `bind_pw`, `passphrase`, `otp` and `salt`,
+  and a `key` spelled in camelCase such as `privateKey`. Zammad filters all of them from
+  its own log, and none matched here: creating an LDAP source logged the bind password
+  inside its `preferences`, importing a PGP key logged its passphrase beside the redacted
+  key, and a record of an LDAP source printed the password. `otp` and `salt` are matched
+  as words, as `key` is, with `totp` and `hotp` counted in.
 
 ### Changed
 
