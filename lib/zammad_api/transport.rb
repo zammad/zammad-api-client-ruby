@@ -867,16 +867,24 @@ module ZammadAPI
     # otherwise. A name that cannot be decoded cannot be read, so its value
     # is blanked rather than assumed to be harmless.
     #
+    # A fragment is blanked whole. What follows a +#+ is no part of the
+    # request, and Faraday leaves it out of what it sends, but it was
+    # printed with the path: `api/v1/x#token=...` has no +?+ to be read as a
+    # query from, and came back as it stood, and after a query the fragment
+    # was printed as the tail of the last value. Blanked and not dropped, so
+    # that what is printed still says the path was written with one.
+    #
     # Public for {Client}, which names a raw request by its path.
     #
     # @api private
     # @param path [Object]
     # @return [String]
     def self.redact_path(path)
-      base, mark, query = path.to_s.partition('?')
-      return base if mark.empty?
+      sent, hash, = path.to_s.partition('#')
+      base, mark, query = sent.partition('?')
+      printed = mark.empty? ? base : "#{base}?#{query.split('&', -1).map { redact_query_pair(it) }.join('&')}"
 
-      "#{base}?#{query.split('&', -1).map { redact_query_pair(it) }.join('&')}"
+      hash.empty? ? printed : "#{printed}##{REDACTED}"
     end
 
     # One stretch of a query string between two +&+, as it may be printed.
