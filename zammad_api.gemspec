@@ -56,4 +56,8 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency 'faraday', '~> 2.9'
   spec.add_dependency 'faraday-retry', '~> 2.2'
+  # Required by lib/zammad_api/config.rb. From Ruby 4.0 on it is a bundled
+  # gem, which Bundler makes loadable only where the bundle names it, and
+  # Faraday names it from 2.10.0 on: a bundle resolved to 2.9 had none.
+  spec.add_dependency 'logger', '~> 1.5'
 end

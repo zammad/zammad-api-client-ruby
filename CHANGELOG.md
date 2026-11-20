@@ -995,6 +995,10 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - `RateLimitError#retry_after` reads the header in base ten. A zero in front made the figure
   octal: `Retry-After: 010` was 8, and `08` was `nil`, so the `e.retry_after || 60` the
   README shows waited a minute. `0x10`, which was 16, is `nil` now.
+- The gem names `logger` among its dependencies. It requires it, and from Ruby 4.0 on
+  `logger` is a bundled gem, which Bundler makes loadable only where the bundle names it.
+  Faraday does from 2.10.0 on, so `require 'zammad_api'` worked by way of it, and raised
+  `LoadError` in a bundle resolved to Faraday 2.9, which the gem allows.
 
 ### Changed
 
