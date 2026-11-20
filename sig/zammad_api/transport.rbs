@@ -91,6 +91,7 @@ module ZammadAPI
     def inspect: () -> String
     def as_json: (*untyped) -> Hash[Symbol, untyped]
     def to_json: (?untyped state) -> String
+    def encode_with: (untyped coder) -> void
 
     def request: (Symbol method, String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?, ?resource_class: Class?) -> Response
 

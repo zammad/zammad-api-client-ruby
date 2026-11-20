@@ -2,6 +2,7 @@
 
 require 'bigdecimal'
 require 'pp'
+require 'yaml'
 
 RSpec.describe ZammadAPI::Transport do
   let(:url) { "#{ClientHelper::BASE_URL}api/v1/groups" }
@@ -1995,6 +1996,41 @@ RSpec.describe ZammadAPI::Transport do
 
     it 'writes that as a JSON object, with neither the token nor the proxy password' do
       expect(JSON.generate(transport: transport)).to eq('{"transport":{"url":"http://zammad.test/","auth":"http_token"}}')
+    end
+  end
+
+  # Psych writes an object as its instance variables too, and asks neither
+  # inspect nor as_json. Every record holds its transport.
+  describe 'serializing as YAML' do
+    let(:transport) do
+      unit_transport(http_token: 'tok-s3cret', proxy: 'http://puser:pproxy-s3cret@proxy.test:8080')
+    end
+
+    it 'is the instance and the authentication scheme, with neither the token nor the proxy password' do
+      expect(YAML.safe_load(transport.to_yaml)).to eq({ 'url' => 'http://zammad.test/', 'auth' => 'http_token' })
+    end
+
+    it 'names an on_behalf_of scope' do
+      expect(YAML.safe_load(transport.with_on_behalf_of('agent@example.com').to_yaml)).to include('on_behalf_of' => 'agent@example.com')
+    end
+
+    it 'writes no credential for a record, which holds it' do
+      written = ZammadAPI::Resources::Group.new(transport, { name: 'Users' }).to_yaml
+
+      expect(written).to include('name: Users')
+      expect(written).not_to match(/tok-s3cret|pproxy-s3cret/)
+    end
+
+    it 'writes none for a client or a collection either' do
+      client = unit_client(http_token: 'tok-s3cret', proxy: 'http://puser:pproxy-s3cret@proxy.test:8080')
+
+      expect(client.to_yaml + client.groups.to_yaml + client.groups.all.to_yaml).not_to match(/tok-s3cret|pproxy-s3cret/)
+    end
+
+    it 'makes no request' do
+      unit_client.groups.all.to_yaml
+
+      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
     end
   end
 

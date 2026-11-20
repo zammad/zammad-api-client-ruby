@@ -580,6 +580,14 @@ module ZammadAPI
 
       def with_on_behalf_of(identifier) = self.class.new(test, on_behalf_of: identifier, config: config)
 
+      # What the real transport writes for Psych, so that a record's YAML
+      # is the same under the stand-in and does not carry every stub and
+      # every recorded request with it.
+      #
+      # @param coder [Psych::Coder]
+      # @return [void]
+      def encode_with(coder) = coder.represent_object(nil, JSON.parse(::ZammadAPI::Transport.description(config, on_behalf_of).to_json))
+
       # {Client#with} re-validates the options and hands them here. There is
       # no connection to rebuild, and the same stand-in keeps answering, but
       # the configuration is the transport's to carry as well as the

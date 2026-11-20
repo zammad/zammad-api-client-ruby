@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'pp'
+require 'yaml'
 
 RSpec.describe ZammadAPI::Config do
   def build(url: 'https://zammad.example.com', http_token: 'token', **overrides)
@@ -573,6 +574,33 @@ RSpec.describe ZammadAPI::Config do
 
     it 'stays redacted nested inside another structure' do
       expect(JSON.generate(config: build(http_token: 'tok-s3cret'))).not_to include('tok-s3cret')
+    end
+  end
+
+  # Psych writes the members of a Data as they are and asks neither inspect
+  # nor as_json, so `config.to_yaml` held every credential in full. It is
+  # what Rails' `debug` view helper and a Delayed::Job handler write.
+  describe 'serializing as YAML' do
+    let(:config) { build(http_token: nil, user: 'u', password: 'pw-s3cret', proxy: 'http://puser:pproxy-s3cret@proxy.test:8080') }
+
+    it 'holds no credential in what it writes' do
+      expect(config.to_yaml).not_to match(/pw-s3cret|pproxy-s3cret/)
+    end
+
+    it 'writes neither token' do
+      expect(build(http_token: 'tok-s3cret').to_yaml + build(http_token: nil, oauth2_token: 'oauth-s3cret').to_yaml).not_to match(/tok-s3cret|oauth-s3cret/)
+    end
+
+    it 'writes what its JSON holds, as a mapping any loader reads' do
+      expect(YAML.safe_load(config.to_yaml)).to eq(JSON.parse(config.to_json))
+    end
+
+    it 'keeps the options that are no secret readable' do
+      expect(YAML.safe_load(build(timeout: 7).to_yaml)).to include('url' => 'https://zammad.example.com/', 'timeout' => 7, 'http_token' => '[REDACTED]', 'logger' => '#<Logger>')
+    end
+
+    it 'stays redacted nested inside another structure' do
+      expect({ config: config, list: [config] }.to_yaml).not_to match(/pw-s3cret|pproxy-s3cret/)
     end
   end
 

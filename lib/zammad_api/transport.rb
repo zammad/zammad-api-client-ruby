@@ -1265,6 +1265,19 @@ module ZammadAPI
     # @return [String] {#as_json} as a JSON object
     def to_json(state = nil) = as_json.to_json(state)
 
+    # What Psych writes for a transport: {#as_json}, as a plain mapping.
+    #
+    # Psych writes an object as its instance variables, as ActiveSupport
+    # does for JSON, and the connection among them holds the token in its
+    # middleware stack and the proxy password in its options. Every record
+    # holds its transport, so +record.to_yaml+ wrote both.
+    #
+    # @api private
+    # @param coder [Psych::Coder]
+    # @return [void]
+    # @see Config#encode_with
+    def encode_with(coder) = coder.represent_object(nil, JSON.parse(to_json))
+
     # Performs a request and raises on anything but a 2xx response.
     #
     # @param method [Symbol] +:get+, +:post+, +:put+ or +:delete+
