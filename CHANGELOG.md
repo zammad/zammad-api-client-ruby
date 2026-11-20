@@ -1054,6 +1054,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   already: `order(:state_id)` is sent as `sort_by=state_id,id`, and a stub of the test kit
   that is scoped to `sort_by` has to spell it that way. A search that is given no order is
   sent none, as before.
+- A url with nothing where the host belongs, such as `http://:3000/`, raises
+  `ZammadAPI::ConfigurationError`. It is what `"http://#{ENV['ZAMMAD_HOST']}:3000/"` comes to
+  with the variable unset, and it was accepted, as 1.x accepted it: the check asked only
+  that something follows the scheme. `Net::HTTP` connects to localhost for an empty host,
+  so the client sent every request, and the token with it, to whatever listened on that
+  port of the machine it ran on.
 
 ### Changed
 
