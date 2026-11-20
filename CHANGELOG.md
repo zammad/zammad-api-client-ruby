@@ -1068,6 +1068,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   before the first retry. The three take at most 100000000 seconds, a little over three
   years, which is the longest wait every platform takes: macOS refused a longer one, and
   that came back as a `ConnectionError` calling the instance unreachable.
+- A Hash with no value in it raises `ArgumentError` wherever it stands in the `query:` of a
+  raw request. A query string writes nothing for one, so
+  `client.get(path, query: {filter: {}, a: 1})` asked for `?a=1`, and Zammad answered as if
+  the parameter had been left out. A `nil` and an empty Hash inside a list were refused for
+  that reason already, and a `search` refused an empty `condition`; a condition holding an
+  empty Hash beside one that is written lost it in the same way, and is refused now too.
 
 ### Changed
 

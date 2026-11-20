@@ -1042,6 +1042,15 @@ RSpec.describe ZammadAPI::ResourceProxy do
           .to raise_error(ArgumentError, /search was given condition: \{"ticket.state_id" => \{\}\}/)
       end
 
+      # The keyword itself is written, by its other condition, and the one
+      # that holds nothing was dropped from the request.
+      it 'refuses a condition that holds an empty Hash beside one that is written' do
+        condition = { 'ticket.state_id' => {}, 'ticket.title' => { operator: 'contains', value: 'printer' } }
+
+        expect { client.tickets.search('printer', condition: condition) }
+          .to raise_error(ArgumentError, /query parameter condition\[ticket\.state_id\] is a Hash with no value in it/)
+      end
+
       it 'refuses group_ids naming a group with nothing under it' do
         expect { client.users.search('smith', group_ids: { 2 => {} }) }.to raise_error(ArgumentError, /search was given group_ids:/)
       end

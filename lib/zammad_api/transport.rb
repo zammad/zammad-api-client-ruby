@@ -272,12 +272,54 @@ module ZammadAPI
     # @return [Hash{String => String, Array<String>, Hash}]
     # @raise [ArgumentError] for a query that is not a Hash, for a nil
     #   value, for a value that is neither text, a number, a boolean, a
-    #   list nor a structure, for two keys that name the same parameter, or
-    #   for a list a query string cannot carry, the last four at any depth
+    #   list nor a structure, for two keys that name the same parameter,
+    #   for a list a query string cannot carry, or for a Hash with no value
+    #   in it, the last five at any depth
     def self.stringify_query(query)
       hash = Hash.try_convert(query) || raise(ArgumentError, "query needs to be a Hash of parameter names and values, got #{query.class}")
 
-      stringify_query_hash(hash, nil)
+      refuse_unwritten!(stringify_query_hash(hash, nil), nil)
+    end
+
+    # Refuses a Hash a query string says nothing of: one with no value in
+    # it, or with nothing but such Hashes.
+    #
+    # {QueryEncoder} writes a pair for each value and has none to write
+    # here, so the parameter was not in the request, and Zammad answered as
+    # if it had been left out: `client.get(path, query: {filter: {}, a:
+    # 1})` asked for `?a=1`, and a `condition` built from nothing searched
+    # unnarrowed. A nil is refused for the same reason, and so is an empty
+    # Hash inside a list. It is named by the outermost parameter nothing is
+    # written for.
+    #
+    # Apart from {.stringify_query_hash}, so that {ResourceProxy#search}
+    # can say it in its own words for a keyword of its own first.
+    #
+    # @api private
+    # @param query [Hash] as {.stringify_query_hash} leaves it
+    # @param prefix [String, nil] the parameter path the Hash sits at
+    # @return [Hash] the query
+    # @raise [ArgumentError]
+    def self.refuse_unwritten!(query, prefix)
+      query.each do |name, value|
+        path = prefix ? "#{prefix}[#{name}]" : name
+
+        case value
+        when Hash
+          raise ArgumentError, unwritten_query_message(path) if !QueryEncoder.written?(value)
+
+          refuse_unwritten!(value, path)
+        when Array
+          value.each_with_index { |element, index| refuse_unwritten!(element, "#{path}[#{index}]") if element.is_a?(Hash) }
+        end
+      end
+    end
+
+    # @api private
+    # @return [String]
+    def self.unwritten_query_message(path)
+      "query parameter #{path} is a Hash with no value in it, and a query string writes nothing for one: Zammad would " \
+        'answer as if the parameter had been left out. Pass a value, or leave the parameter out'
     end
 
     # Stringifies one level of a query, at whatever depth it sits.
