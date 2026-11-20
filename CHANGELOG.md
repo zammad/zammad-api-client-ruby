@@ -972,6 +972,11 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   with the id read from a decimal column, asked for `ids[]=0.5e1`, and user 5 was not among
   the hits. A `Rational` went as `1/2` and a `Complex` as `1+2i`. A `Float` that is `NaN` or
   infinite raises as well, where it was sent as that word.
+- `deep_dup` of anything that holds a record or an attachment works with ActiveSupport
+  loaded. A private helper of that name answered in place of the public one ActiveSupport
+  gives every object, so `{ticket: ticket}.deep_dup` raised
+  `NoMethodError: undefined attribute deep_dup`, and so did a list of records.
+  `config.presence` raised the same way, for a private helper called `presence`.
 
 ### Changed
 

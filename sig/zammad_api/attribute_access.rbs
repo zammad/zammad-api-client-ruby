@@ -35,6 +35,5 @@ module ZammadAPI
     def attribute_writable?: (Symbol key) -> bool
     def write_attribute: (Symbol, untyped) -> untyped
     def frozen_attributes: (untyped) -> untyped
-    def deep_dup: (untyped) -> untyped
   end
 end

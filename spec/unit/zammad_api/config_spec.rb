@@ -540,6 +540,20 @@ RSpec.describe ZammadAPI::Config do
     end
   end
 
+  # ActiveSupport gives every object a public `presence`. A private helper of
+  # that name here answered in its place, so `config.presence` raised
+  # NoMethodError. It is not loaded here: what is asked is that the name is
+  # left to it.
+  describe 'the names ActiveSupport gives every object' do
+    it 'defines no presence of its own' do
+      expect(described_class.private_method_defined?(:presence)).to be(false)
+    end
+
+    it 'still reads an empty option as one that was not given' do
+      expect(build(http_token: nil, user: 'u', password: 'p', oauth2_token: '', proxy: '')).to have_attributes(oauth2_token: nil, proxy: nil)
+    end
+  end
+
   # Faraday turns the userinfo of a URL into a Basic Authorization header, and
   # its authorization middleware leaves a header that is already set alone -
   # so the credentials in the URL were sent in place of the configured ones.
