@@ -56,6 +56,27 @@ RSpec.describe ZammadAPI::Config do
         .to raise_error(ZammadAPI::ConfigurationError, 'config url needs a host after the scheme, got "https://"')
     end
 
+    # What `"http://#{ENV['ZAMMAD_HOST']}:3000/"` comes to with the variable
+    # unset. Net::HTTP connects to localhost for an empty host, so every
+    # request went, token and all, to whatever listens on that port.
+    ['http://:3000/', 'http://:3000', 'https://:443/zammad/', 'http://:/'].each do |url|
+      it "rejects #{url}, which has a port where the host belongs" do
+        expect { build(url: url) }
+          .to raise_error(ZammadAPI::ConfigurationError, "config url needs a host after the scheme, got #{url.inspect}")
+      end
+    end
+
+    it 'rejects a url with a user and no host, without quoting the user' do
+      expect { build(url: 'http://admin:url-s3cret@:3000/') }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config url needs a host after the scheme, got "http://[REDACTED]@:3000/"')
+    end
+
+    ['http://localhost:3000/', 'http://[::1]:3000/', 'http://192.168.0.1:8080/api/', 'http://host:/'].each do |url|
+      it "accepts #{url}, which names one" do
+        expect(build(url: url).url).to eq(url)
+      end
+    end
+
     # The value was quoted as it stood, and what stands where the host
     # belongs may be credentials: a slash too many, and the userinfo is the
     # start of a path as far as the syntax goes.

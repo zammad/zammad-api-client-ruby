@@ -396,7 +396,7 @@ module ZammadAPI
       raise ConfigurationError, 'config url needs to start with http:// or https://' if !SCHEME_PATTERN.match?(value)
       # Quoted through the redaction: what follows the scheme here is not a
       # host, and may be the credentials of a url with a slash too many.
-      raise ConfigurationError, "config url needs a host after the scheme, got #{redact_userinfo(value).inspect}" if !URL_PATTERN.match?(value)
+      raise ConfigurationError, "config url needs a host after the scheme, got #{redact_userinfo(value).inspect}" if !URL_PATTERN.match?(value) || hostless?(value)
       raise ConfigurationError, inline_credentials_message(value) if inline_credentials?(value)
 
       # A trailing slash keeps Zammad installations served from a sub-path
@@ -410,6 +410,24 @@ module ZammadAPI
       # prints in every ConnectionError and TimeoutError message.
       path, separator, rest = value.partition(URL_SUFFIX_PATTERN)
       path.end_with?('/') ? value : "#{path}/#{separator}#{rest}"
+    end
+
+    # Whether what follows the scheme names no host, though something
+    # stands there: a port alone, as in +http://:3000/+.
+    #
+    # It is what `"http://#{ENV['ZAMMAD_HOST']}:3000/"` comes to where the
+    # variable is not set, and {URL_PATTERN} asks only for a character that
+    # ends no authority. Net::HTTP connects to localhost for an empty host,
+    # so the client was built and then sent every request, with the token
+    # in its header, to whatever listens on that port of the machine it
+    # runs on.
+    #
+    # Asked of URI for the reason {#inline_credentials?} is, and a URL that
+    # URI cannot read is left to the connection for the same one.
+    def hostless?(value)
+      URI.parse(value).host.to_s.empty?
+    rescue URI::InvalidURIError
+      false
     end
 
     # Whether the URL carries a +user:password@+ of its own.

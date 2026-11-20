@@ -79,6 +79,7 @@ module ZammadAPI
     def placeholder: (Symbol, untyped) -> String?
     def printable: (Symbol, untyped) -> untyped
     def normalize_url: (untyped) -> String
+    def hostless?: (String) -> bool
     def inline_credentials?: (String) -> bool
     def inline_credentials_message: (String) -> String
     def validate_credentials!: () -> void
