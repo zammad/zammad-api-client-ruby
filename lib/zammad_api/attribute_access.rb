@@ -175,19 +175,57 @@ module ZammadAPI
     # Named the way ActiveSupport and its encoders expect, so that a record
     # nested inside a structure being serialized renders as its attributes.
     #
+    # With the two options those encoders hand on, +only:+ and +except:+.
+    # They were dropped here: `user.as_json(except: [:password])` answered
+    # with the password, as did a record inside a Hash or a collection that
+    # was serialized with the option, while `user.to_json(except:
+    # [:password])` left it out under ActiveSupport, by way of the Hash it
+    # is written from. A name is taken as a Symbol or a String, the way
+    # ActiveModel takes one: the attributes are keyed by Symbols, and a name
+    # given as a String filtered nothing in {#to_json} either.
+    #
+    # @example
+    #   user.as_json(except: [:password])
+    #   user.as_json(only: %w[id login])
+    #
+    # @param options [Hash, nil] +only:+ or +except:+ with attribute names;
+    #   +only:+ is the one read where both are given
     # @return [Hash{Symbol => Object}]
-    def as_json(*) = to_h
+    def as_json(options = nil)
+      attributes = to_h
+      return attributes if !options.is_a?(Hash)
+
+      only  = options[:only]
+      given = only || options[:except]
+      return attributes if !given
+
+      names = Array(given) #: Array[untyped]
+      names = names.map { it.to_s.to_sym }
+      only ? attributes.slice(*names) : attributes.except(*names)
+    end
 
     # Without this, a record would serialize as its +to_s+, because that is
     # what +Object#to_json+ falls back to.
     #
+    # Written from {#as_json} where it is given options, so that the two
+    # leave out the same attributes whichever is asked. The two options are
+    # applied here and not handed on: they name attributes of the record,
+    # ActiveSupport would apply them again to every Hash an attribute holds,
+    # and the generator of the json gem refuses a keyword it does not know.
+    #
     # @example
     #   client.groups.find(1).to_json # => "{\"id\":1,\"name\":\"Support\"}"
     #
-    # @param state [JSON::State, nil] passed by +JSON.generate+ when a record
-    #   is nested in a structure it is serializing
+    # @param state [JSON::State, Hash, nil] passed by +JSON.generate+ when a
+    #   record is nested in a structure it is serializing, or the options
+    #   {#as_json} reads beside any the generator does
     # @return [String] the attributes as a JSON object
-    def to_json(state = nil) = to_h.to_json(state)
+    def to_json(state = nil)
+      return to_h.to_json(state) if !state.is_a?(Hash)
+
+      generator_options = state.except(:only, :except) #: untyped
+      as_json(state).to_json(generator_options)
+    end
 
     def method_missing(name, *args)
       identifier = name.to_s

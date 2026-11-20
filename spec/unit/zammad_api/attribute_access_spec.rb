@@ -442,6 +442,57 @@ RSpec.describe ZammadAPI::AttributeAccess do
     it 'hands #as_json a copy rather than the frozen attributes' do
       expect(record.as_json).not_to be_frozen
     end
+
+    # ActiveSupport hands them to every object it serializes, a record
+    # inside a Hash or a collection included, and they were dropped:
+    # `user.as_json(except: [:password])` answered with the password.
+    context 'with the options an ActiveSupport encoder hands on' do
+      it 'leaves out what except: names' do
+        expect(record.as_json(except: [:preferences])).to eq(id: 1, name: 'Support')
+      end
+
+      it 'keeps only what only: names' do
+        expect(record.as_json(only: [:id])).to eq(id: 1)
+      end
+
+      it 'takes one name as well as a list' do
+        expect(record.as_json(except: :preferences)).to eq(id: 1, name: 'Support')
+      end
+
+      # The attributes are keyed by Symbols, and a String matched none.
+      it 'takes a name given as a String' do
+        expect(record.as_json(except: ['preferences'])).to eq(id: 1, name: 'Support')
+        expect(record.as_json(only: %w[id name])).to eq(id: 1, name: 'Support')
+      end
+
+      it 'reads only: where both are given, as ActiveSupport does' do
+        expect(record.as_json(only: [:id], except: [:id])).to eq(id: 1)
+      end
+
+      it 'keeps nothing for an only: that names nothing' do
+        expect(record.as_json(only: [])).to eq({})
+      end
+
+      it 'returns every attribute for options that name neither, and for none' do
+        expect(record.as_json({})).to eq(record.to_h)
+        expect(record.as_json(nil)).to eq(record.to_h)
+      end
+
+      it 'still hands over a copy' do
+        expect(record.as_json(only: [:preferences])[:preferences]).not_to be_frozen
+      end
+
+      # The json gem raises for a keyword its generator does not know, so
+      # the two are applied and not handed on.
+      it 'leaves the same attributes out of #to_json' do
+        expect(JSON.parse(record.to_json(except: ['preferences']))).to eq('id' => 1, 'name' => 'Support')
+        expect(JSON.parse(record.to_json(only: [:id]))).to eq('id' => 1)
+      end
+
+      it 'still hands #to_json the options that are the generator\'s' do
+        expect(record.to_json(only: [:id], space: ' ')).to eq('{"id": 1}')
+      end
+    end
   end
 
   # ActiveSupport gives every object a public `deep_dup`, and calls it on

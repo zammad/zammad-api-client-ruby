@@ -1015,6 +1015,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   adapter set with `adapter:` was handed `"Token abc\n"`, and one that writes a header as it
   stands ends the line, or the headers, where the value does. `ZammadAPI::Test` recorded the
   scope with the break on it too.
+- `as_json` on a record reads `only:` and `except:`. It dropped its options, so
+  `user.as_json(except: [:password])` answered with the password, as did a record inside a
+  Hash or a collection that ActiveSupport serialized with the option, while
+  `user.to_json(except: [:password])` left it out. `to_json` is written from `as_json` now,
+  and both take a name as a Symbol or a String: `except: ['password']` filtered nothing in
+  either.
 
 ### Changed
 

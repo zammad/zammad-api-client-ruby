@@ -18,7 +18,7 @@ module ZammadAPI
     def ==: (untyped other) -> bool
     def eql?: (untyped other) -> bool
     def hash: () -> Integer
-    def as_json: (*untyped) -> Hash[Symbol, untyped]
+    def as_json: (?untyped options) -> Hash[Symbol, untyped]
     def to_json: (?untyped state) -> String
     def method_missing: (Symbol, *untyped) -> untyped
     def respond_to?: (untyped name, ?bool include_private) -> bool
