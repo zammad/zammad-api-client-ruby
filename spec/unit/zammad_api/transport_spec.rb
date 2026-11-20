@@ -1003,6 +1003,37 @@ RSpec.describe ZammadAPI::Transport do
         end
       end
 
+      # faraday-gzip writes the length of what it inflated as an Integer, and
+      # a regexp asked of one raised TypeError for every 2xx.
+      context 'with a Content-Length that a middleware left as an Integer' do
+        def counting(length)
+          lambda { |builder|
+            builder.use(Class.new(Faraday::Middleware) do
+              define_method(:on_complete) { |env| env.response_headers['Content-Length'] = length }
+            end)
+          }
+        end
+
+        before { stub_request(:get, url).to_return(status: 200, body: '0123456789') }
+
+        it 'returns a body as long as it' do
+          response = unit_transport(middleware: counting(10)).get('api/v1/groups', operation: 'test')
+
+          expect(response.raw_body).to eq('0123456789')
+        end
+
+        it 'serves the header as text' do
+          response = unit_transport(middleware: counting(10)).get('api/v1/groups', operation: 'test')
+
+          expect(response.headers['content-length']).to eq('10')
+        end
+
+        it 'still raises for a body that is shorter' do
+          expect { unit_transport(middleware: counting(1000)).get('api/v1/groups', operation: 'test') }
+            .to raise_error(ZammadAPI::ConnectionError, /990 bytes short of the 1000/)
+        end
+      end
+
       it 'does not judge a 204, which has no body whatever is announced beside it' do
         stub_request(:delete, url).to_return(status: 204, body: '', headers: { 'Content-Length' => '5' })
 

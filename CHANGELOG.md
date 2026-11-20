@@ -996,6 +996,11 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `logger` is a bundled gem, which Bundler makes loadable only where the bundle names it.
   Faraday does from 2.10.0 on, so `require 'zammad_api'` worked by way of it, and raised
   `LoadError` in a bundle resolved to Faraday 2.9, which the gem allows.
+- A response whose `Content-Length` a middleware left as an Integer is read. `faraday-gzip`
+  writes the length of what it inflated that way, and the check for a body cut short asked a
+  regexp of it: every successful request behind `c.request :gzip` raised a bare `TypeError`,
+  past a `rescue ZammadAPI::Error`. `Response#headers` has every value as a String now, as
+  it is documented to.
 
 ### Changed
 

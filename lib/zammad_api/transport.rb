@@ -1489,8 +1489,12 @@ module ZammadAPI
       end
     end
 
+    # The header values as text, as well as the names. Faraday keeps a value
+    # as whatever wrote it: faraday-gzip sets Content-Length to the Integer
+    # length of what it inflated, and {#missing_bytes} asked a regexp of that,
+    # so every 2xx behind such a middleware raised a bare TypeError.
     def decode(faraday_response)
-      headers    = faraday_response.headers.to_h.transform_keys { it.to_s.downcase }.freeze
+      headers    = faraday_response.headers.to_h.to_h { |name, value| [name.to_s.downcase, value.to_s] }.freeze
       raw_body   = raw_body!(faraday_response.body)
       body, json = Response.decode_body(headers['content-type'], raw_body)
 
