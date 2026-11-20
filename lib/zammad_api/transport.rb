@@ -183,10 +183,16 @@ module ZammadAPI
     RECORD_ID_TYPES = [Integer, String, Symbol].freeze
 
     # What a query value is written as, where it is not a list or a
-    # structure: text, a number or a boolean. Each has one spelling a query
-    # string can carry and Zammad reads back. No other object does, and
-    # `to_s` answers for all of them.
-    QUERY_VALUE_TYPES = [String, Symbol, Numeric, TrueClass, FalseClass].freeze
+    # structure: text, an Integer, a Float or a boolean. Each has one
+    # spelling a query string can carry and Zammad reads back. No other
+    # object does, and `to_s` answers for all of them.
+    #
+    # Not every Numeric, which is what this list named. A number of another
+    # kind prints as something else: `BigDecimal('5')`, an id read from a
+    # decimal column, as `0.5e1`, a Rational as `1/2` and a Complex as
+    # `1+2i`, and Zammad narrowed by that text. A Float that is not finite
+    # has no spelling either: see {.stringify_query_scalar}.
+    QUERY_VALUE_TYPES = [String, Symbol, Integer, Float, TrueClass, FalseClass].freeze
 
     # What a request body is made of, where it is not a list or a structure:
     # the values JSON has a type for, and a Symbol, which the generator
@@ -344,12 +350,31 @@ module ZammadAPI
       when nil                then raise ArgumentError, "query parameter #{key} is nil, and Zammad has no way to read that: pass a value, or leave the parameter out"
       when Hash               then stringify_query_hash(value, key)
       when Array              then stringify_query_list(key, value)
-      when *QUERY_VALUE_TYPES then wire_text(value, "query parameter #{key}")
+      when *QUERY_VALUE_TYPES then stringify_query_scalar(key, value)
       else
         converted = Hash.try_convert(value) || raise(ArgumentError, not_a_query_value_message(key, value))
 
         stringify_query_hash(converted, key)
       end
+    end
+
+    # One of {QUERY_VALUE_TYPES} as text.
+    #
+    # A Float that is not a number, or not a finite one, is refused. It is
+    # of a type the list names and prints as `NaN` or `Infinity`, which is
+    # the text Zammad then narrowed by - the result of a division nothing
+    # checked, sent as a filter.
+    #
+    # @api private
+    # @return [String]
+    # @raise [ArgumentError]
+    def self.stringify_query_scalar(key, value)
+      if value.is_a?(Float) && !value.finite?
+        raise ArgumentError, "query parameter #{key} is #{value}, and a query string has no spelling for a Float that is not finite: " \
+                             'it would be sent as that text, and Zammad would narrow by it. Pass a number, or leave the parameter out.'
+      end
+
+      wire_text(value, "query parameter #{key}")
     end
 
     # Names the class and does not quote the value, which for a record is
@@ -358,9 +383,10 @@ module ZammadAPI
     # @api private
     # @return [String]
     def self.not_a_query_value_message(key, value)
-      "query parameter #{key} was given as #{value.class}, and a query string carries text, numbers and booleans, alone " \
-        'or in an Array or a Hash: it would be sent as that object prints, and Zammad would narrow by that text. ' \
-        'Pass a Set or a Range as its to_a, a time as text Zammad reads, such as its iso8601, and a record as its id.'
+      "query parameter #{key} was given as #{value.class}, and a query string carries text, Integers, Floats and " \
+        'booleans, alone or in an Array or a Hash: it would be sent as that object prints, and Zammad would narrow by that ' \
+        'text. Pass a Set or a Range as its to_a, a number of another kind as an Integer or a Float, a time as text ' \
+        'Zammad reads, such as its iso8601, and a record as its id.'
     end
 
     # Stringifies a list, and refuses one Rails could not read back as the
