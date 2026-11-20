@@ -1021,6 +1021,11 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `user.to_json(except: [:password])` left it out. `to_json` is written from `as_json` now,
   and both take a name as a Symbol or a String: `except: ['password']` filtered nothing in
   either.
+- A fragment written into the path of a raw request is blanked where the path is printed:
+  in the log, in the message of a timeout and in the `operation` of an error.
+  `client.get('api/v1/x#token=...')` printed the token in all three, since only what
+  follows a `?` was read for credentials, and a fragment after a query was printed as the
+  tail of its last value. It is no part of the request, which is sent without it as before.
 
 ### Changed
 

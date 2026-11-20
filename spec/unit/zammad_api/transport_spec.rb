@@ -552,6 +552,51 @@ RSpec.describe ZammadAPI::Transport do
         expect(described_class.redact_path('api/v1/x?page=2;q=a;b&c;')).to eq('api/v1/x?page=2;q=a;b&c;')
       end
     end
+
+    # No part of the request, and printed with the path all the same. With
+    # no `?` before it, it was not read as a query, whatever it was named.
+    context 'with a fragment' do
+      it 'blanks one written straight after the path' do
+        expect(described_class.redact_path('api/v1/x#token=s3cret')).to eq('api/v1/x#[REDACTED]')
+      end
+
+      it 'blanks one that names nothing' do
+        expect(described_class.redact_path('api/v1/x#s3cret')).to eq('api/v1/x#[REDACTED]')
+      end
+
+      it 'blanks one after a query, which is still redacted by name' do
+        expect(described_class.redact_path('api/v1/x?page=2&token=abc#access_token=s3cret')).to eq('api/v1/x?page=2&token=[REDACTED]#[REDACTED]')
+      end
+
+      it 'does not print one as the tail of the value before it' do
+        expect(described_class.redact_path('api/v1/x?page=2#s3cret')).to eq('api/v1/x?page=2#[REDACTED]')
+      end
+
+      it 'reads a ? after the # as part of it' do
+        expect(described_class.redact_path('api/v1/x#a?page=2')).to eq('api/v1/x#[REDACTED]')
+      end
+
+      context 'when a raw request is written with one' do
+        let(:log) { StringIO.new }
+
+        before { stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/x").to_return(json_response({}, status: 404)) }
+
+        it 'keeps it out of the error the request raises' do
+          expect { unit_client.get('api/v1/x#token=s3cret') }
+            .to raise_error(ZammadAPI::NotFoundError) { |error|
+              expect(error.message).not_to include('s3cret')
+              expect(error.operation).to eq('GET api/v1/x#[REDACTED]')
+            }
+        end
+
+        it 'keeps it out of the log' do
+          expect { unit_client(logger: Logger.new(log)).get('api/v1/x#token=s3cret') }.to raise_error(ZammadAPI::NotFoundError)
+
+          expect(log.string).to include('Zammad API request: GET api/v1/x#[REDACTED]')
+          expect(log.string).not_to include('s3cret')
+        end
+      end
+    end
   end
 
   # The question the test kit asks, so that it sends again what the wire
