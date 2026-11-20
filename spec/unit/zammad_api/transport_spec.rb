@@ -931,9 +931,9 @@ RSpec.describe ZammadAPI::Transport do
           .to raise_error(ZammadAPI::Error, /Can't save object: the request body cannot be encoded as JSON/)
       end
 
-      it 'raises a ZammadAPI::Error for a Float that JSON has no spelling for' do
+      it 'raises a ZammadAPI::Error for a Float that JSON has no spelling for, naming its key' do
         expect { unit_transport.put('api/v1/groups/1', operation: 'save object', body: { weight: Float::NAN }) }
-          .to raise_error(ZammadAPI::Error, /NaN not allowed in JSON/)
+          .to raise_error(ZammadAPI::Error, /cannot be encoded as JSON \(its key weight was given as NaN, which JSON has no number for\)/)
       end
 
       it 'says what to do about binary data' do
@@ -960,7 +960,70 @@ RSpec.describe ZammadAPI::Transport do
 
       it 'is raised by a record save carrying such a value' do
         group = unit_client.groups.new(name: 'Support', weight: Float::INFINITY)
-        expect { group.save }.to raise_error(ZammadAPI::Error, /Infinity not allowed in JSON/)
+        expect { group.save }.to raise_error(ZammadAPI::Error, /its key weight was given as Infinity/)
+      end
+
+      # The generator quotes what it could not write, in its message or in
+      # the detailed message a backtrace prints for a cause, so the error
+      # for a body with a password in it carried the password.
+      context 'with a secret in the value that cannot be encoded' do
+        let(:secret) { { login: 'a', password: "hunter2\xFF" } }
+
+        def refusal(body)
+          unit_transport.post('api/v1/users', operation: 'save object', body: body)
+        rescue ZammadAPI::Error, ArgumentError => e
+          e
+        end
+
+        it 'says nothing of the value' do
+          expect(refusal(secret).full_message(highlight: false)).not_to include('hunter2')
+        end
+
+        it 'carries no cause that would' do
+          expect(refusal(secret)).to be_a(ZammadAPI::Error).and have_attributes(cause: nil)
+        end
+
+        it 'still says what a body has to be' do
+          expect(refusal(secret).message).to include('cannot be encoded as JSON. Every value has to be a JSON type')
+        end
+      end
+    end
+
+    # One key twice in JSON. json 3 raises for it and quotes the whole Hash,
+    # password and all, and json 2 wrote both and left the choice to Rails.
+    context 'with a body that names one key twice' do
+      let(:body) { { login: 'a', password: 'hunter2', 'login' => 'b' } }
+
+      it 'raises an ArgumentError naming both spellings' do
+        expect { unit_transport.post('api/v1/users', operation: 'save object', body: body) }
+          .to raise_error(ArgumentError, /body key login was given twice, as :login and as "login"/)
+      end
+
+      it 'says nothing of the values beside it' do
+        expect { unit_transport.post('api/v1/users', operation: 'save object', body: body) }
+          .to(raise_error { expect(it.full_message(highlight: false)).not_to include('hunter2') })
+      end
+
+      it 'raises for one further in, with the key it sits under' do
+        expect { unit_transport.post('api/v1/users', operation: 'save object', body: { users: [{ user: body }] }) }
+          .to raise_error(ArgumentError, /body key user\[login\] was given twice/)
+      end
+
+      it 'raises for two keys that are only written alike' do
+        expect { unit_transport.post('api/v1/users', operation: 'save object', body: { 1 => 'a', '1' => 'b' }) }
+          .to raise_error(ArgumentError, /body key 1 was given twice, as 1 and as "1"/)
+      end
+
+      it 'makes no request' do
+        expect { unit_transport.post('api/v1/users', operation: 'save object', body: body) }.to raise_error(ArgumentError)
+        expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+      end
+
+      it 'sends a body whose keys differ as it did' do
+        stub_request(:post, "#{ClientHelper::BASE_URL}api/v1/users").to_return(json_response({ id: 1 }, status: 201))
+        unit_transport.post('api/v1/users', operation: 'save object', body: { login: 'a', 'email' => 'a@b.c', 7 => [{ x: nil }] })
+
+        expect(a_request(:post, "#{ClientHelper::BASE_URL}api/v1/users").with(body: '{"login":"a","email":"a@b.c","7":[{"x":null}]}')).to have_been_made
       end
     end
   end

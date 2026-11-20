@@ -199,6 +199,12 @@ module ZammadAPI
     # writes as text.
     JSON_VALUE_TYPES = [NilClass, String, Symbol, Integer, Float, TrueClass, FalseClass].freeze
 
+    # A body value refused here, before the generator is handed it. Its
+    # message is this file's own: it names a key and a class and quotes no
+    # value, which is what tells {.encode_body} it may be printed.
+    class RefusedValue < StandardError; end
+    private_constant :RefusedValue
+
     # Objects that are no JSON type and go into a body as they print all the
     # same, because what they print is the value: Zammad reads a time or a
     # date attribute from that text. `date` is required above for this list.
@@ -970,6 +976,14 @@ module ZammadAPI
     # A String is passed through, as the middleware passes it: it is the
     # caller saying the body is already encoded.
     #
+    # The error says nothing the generator said, and has no cause. The
+    # generator quotes what it could not write: a value with invalid bytes
+    # as `Invalid object: "hunter2\xFF"` in the detailed message, which a
+    # backtrace prints for a cause too, and a Hash with one key twice whole,
+    # so a body with a password in it put the password into the log of
+    # whoever rescued the error. Only what {.json_value} refused itself is
+    # quoted, and that names a key and a class.
+    #
     # Public for the same reason as {.stringify_query}: {Test} refuses what
     # the wire would refuse.
     #
@@ -979,14 +993,16 @@ module ZammadAPI
     # @param resource_class [Class, nil] used in the error message
     # @return [String, nil] nil for a request without a body
     # @raise [Error] when the body cannot be encoded as JSON
+    # @raise [ArgumentError] for a Hash in it that names one key twice
     def self.encode_body(body, operation:, resource_class: nil)
       return body if body.nil? || body.is_a?(String)
 
       JSON.generate(json_value(body, nil))
-    rescue JSON::JSONError => e
-      raise Error, "Can't #{Error.subject_for(operation, resource_class)}: the request body cannot be encoded as JSON (#{e.message}). " \
+    rescue RefusedValue, JSON::JSONError => e
+      detail = " (#{e.message})" if e.is_a?(RefusedValue)
+      raise Error, "Can't #{Error.subject_for(operation, resource_class)}: the request body cannot be encoded as JSON#{detail}. " \
                    'Every value has to be a JSON type, and text has to be valid UTF-8: Base64-encode binary data such as an ' \
-                   'attachment, and leave out a Float that is NaN or infinite.'
+                   'attachment, and leave out a Float that is NaN or infinite.', cause: nil
     end
 
     # A body as the generator may be handed it: every value in it one JSON
@@ -999,20 +1015,45 @@ module ZammadAPI
     # what Zammad made of the text was the answer. It is what
     # {.stringify_query_value} refuses in a query, one request part over.
     #
+    # A Float that is not finite is refused here as well, by its key. The
+    # generator refuses it too, and names no key.
+    #
     # @api private
     # @param value [Object]
     # @param key [Object, nil] the key the value sits under, for the error
     #   message
     # @return [Object]
-    # @raise [JSON::GeneratorError] for a value JSON has no type for, which
+    # @raise [RefusedValue] for a value JSON has no type for, which
     #   {.encode_body} words like any other body that cannot be encoded
+    # @raise [ArgumentError] for a Hash that names one key twice
     def self.json_value(value, key)
       case value
+      when Float             then value.finite? ? value : raise(RefusedValue, not_a_json_value_message(value, key))
       when *JSON_VALUE_TYPES then value
-      when Hash              then value.to_h { |name, nested| [name, json_value(nested, name)] }
+      when Hash              then json_hash(value, key)
       when Array             then value.map { json_value(it, key) }
       else json_object(value, key)
       end
+    end
+
+    # A Hash with every key as the text the generator writes it as, which
+    # is its `to_s`, and two keys that are written alike refused.
+    #
+    # `{login: 'a', 'login' => 'b'}` is one key twice in JSON. json 3 raises
+    # for it and quotes the whole Hash, and json 2 wrote both and left the
+    # choice to the reader, which for Rails is the last. It is refused by
+    # name, as a query and a record's attributes refuse it: see
+    # {DuplicateKeys}.
+    #
+    # @api private
+    # @param hash [Hash]
+    # @param key [Object, nil] the key the Hash sits under
+    # @return [Hash{String => Object}]
+    # @raise [ArgumentError]
+    def self.json_hash(hash, key)
+      DuplicateKeys
+        .normalize(hash, prefix: key, noun: 'body key', &:to_s)
+        .to_h { |name, nested| [name, json_value(nested, name)] }
     end
 
     # What is none of the above, as what the object itself says it is, in
@@ -1038,7 +1079,7 @@ module ZammadAPI
     #
     # @api private
     # @return [Object]
-    # @raise [JSON::GeneratorError]
+    # @raise [RefusedValue]
     def self.json_object(value, key)
       converted = Hash.try_convert(value)
       return json_value(converted, key) if converted
@@ -1048,7 +1089,7 @@ module ZammadAPI
       case described
       when *JSON_VALUE_TYPES, Hash, Array then json_value(described, key)
       when *TEXT_VALUE_TYPES              then described
-      else raise JSON::GeneratorError, not_a_json_value_message(value, key)
+      else raise RefusedValue, not_a_json_value_message(value, key)
       end
     end
 
@@ -1073,7 +1114,10 @@ module ZammadAPI
     # @api private
     # @return [String]
     def self.not_a_json_value_message(value, key)
-      "#{key.nil? ? 'it' : "its key #{key}"} was given as #{value.class}, which is no JSON type and would be sent as that " \
+      subject = key.nil? ? 'it' : "its key #{key}"
+      return "#{subject} was given as #{value}, which JSON has no number for" if value.is_a?(Float)
+
+      "#{subject} was given as #{value.class}, which is no JSON type and would be sent as that " \
         'object prints: pass a Set or a Range as its to_a, a number as an Integer or a Float, and any other object as ' \
         'a Hash of what it holds'
     end

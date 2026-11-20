@@ -383,7 +383,9 @@ the encoder does with one: pass a `Set` or a `Range` as its `to_a`. An object th
 `to_json` writes itself, a `Time` or a `Date` is sent as its text, which Zammad reads, and
 what converts to a Hash, such as permitted `ActionController::Parameters`, is sent as that
 Hash. Where ActiveSupport is loaded, any other object is sent as its `as_json`, as its
-`to_json` there would write it.
+`to_json` there would write it. A Hash that names one key twice, as `login:` and as
+`'login'`, raises `ArgumentError`, as it does in a query. Neither error quotes a value of
+the body, so one with a password in it is safe to log.
 
 Each returns a `ZammadAPI::Response`, so the status and headers stay reachable:
 
