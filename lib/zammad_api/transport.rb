@@ -1169,7 +1169,8 @@ module ZammadAPI
     # @return [Response]
     # @raise [ResponseError] for non-2xx responses
     # @raise [TimeoutError] when the request timed out
-    # @raise [ConnectionError] when the instance was unreachable
+    # @raise [ConnectionError] when the instance was unreachable, or the
+    #   connection was closed before the body of a 2xx response had arrived
     #
     # @raise [Error] when the body cannot be encoded as JSON
     #
@@ -1187,7 +1188,7 @@ module ZammadAPI
       response = decode(perform(method, path, query, payload, headers))
       log_response(method, path, response, started)
 
-      return response if response.success?
+      return whole(response, operation) if response.success?
 
       raise ResponseError.build(response, operation: operation, resource_class: resource_class)
     rescue Faraday::TimeoutError, *TIMEOUT_ERRORS => e
@@ -1203,6 +1204,58 @@ module ZammadAPI
     end
 
     private
+
+    # A Content-Length that can be compared: one figure, and nothing else.
+    # Two that were sent arrive joined by a comma, and say nothing certain.
+    CONTENT_LENGTH = /\A\d+\z/
+    private_constant :CONTENT_LENGTH
+
+    # A 2xx response, once its body is known to have arrived: see
+    # {#missing_bytes}.
+    #
+    # @return [Response]
+    # @raise [ConnectionError]
+    def whole(response, operation)
+      missing = missing_bytes(response)
+      return response if missing.nil?
+
+      raise ConnectionError, "Can't #{operation}: the response from #{config.redacted_url} ended #{missing} bytes short of the " \
+                             "#{response.headers['content-length']} its Content-Length announces, so the connection was closed " \
+                             'before the body had arrived'
+    end
+
+    # How many bytes of its body a response stopped short by, where it did.
+    #
+    # A body framed by Content-Length ends where the count is reached, or
+    # where the connection does. Net::HTTP takes the second for the first
+    # without a word - its +ignore_eof+ is on by default - so a download
+    # the connection dropped under came back as the file:
+    # {Resources::TicketArticleAttachment#download} returned the first ten
+    # bytes of a thousand, and whatever wrote them to disk wrote a file that
+    # opens as a broken one. A chunked body cut short did raise, and a JSON
+    # one that no longer parses is refused where it is decoded, so this was
+    # the one response that came back wrong and looked right.
+    #
+    # Asked only where the bytes in hand are the bytes that were counted. A
+    # body under a Content-Encoding may have been decoded on the way here,
+    # by an adapter that leaves both headers as they arrived - Net::HTTP
+    # drops the one and corrects the other - and one under a
+    # Transfer-Encoding is not framed by the count at all. A 204 has no
+    # body whatever a header beside it says.
+    #
+    # Only a body that is short. One that is longer was not cut off.
+    #
+    # @return [Integer, nil] nil for a response that is whole, or that
+    #   cannot be told
+    def missing_bytes(response)
+      headers   = response.headers
+      announced = headers['content-length']
+      return nil if announced.nil? || !CONTENT_LENGTH.match?(announced)
+      return nil if response.status == 204 || headers.key?('content-encoding') || headers.key?('transfer-encoding')
+
+      missing = announced.to_i - response.raw_body.bytesize
+      missing.positive? ? missing : nil
+    end
 
     # Whether a connection failure is a timeout underneath.
     #

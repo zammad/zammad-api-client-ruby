@@ -25,6 +25,8 @@ module ZammadAPI
       #
       # @return [String] the file contents, in +ASCII-8BIT+ encoding
       # @raise [ResponseError] when Zammad rejected the request
+      # @raise [ConnectionError] when the connection was closed before the
+      #   whole file had arrived. The part that did arrive is not returned.
       def download
         segments = %i[ticket_id article_id id].map { Transport.escape_path_segment(fetch(it)) }
         response = @transport.get(
