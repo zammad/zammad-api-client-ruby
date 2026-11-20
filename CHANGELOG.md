@@ -1009,6 +1009,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   again, and a second `destroy` came back as a 404. The error is
   `ZammadAPI::IncompleteResponseError` now, a `ConnectionError` that carries the `response`
   as far as it arrived, so a raw `client.post` can tell from the status that it was applied.
+- A token, a user agent, an `on_behalf_of` scope or a raw request header that ends in a line
+  break is handed to the adapter without it. One read from a file usually ends in one, and
+  it is taken because `Net::HTTP` strips the value. That was left to `Net::HTTP`: an
+  adapter set with `adapter:` was handed `"Token abc\n"`, and one that writes a header as it
+  stands ends the line, or the headers, where the value does. `ZammadAPI::Test` recorded the
+  scope with the break on it too.
 
 ### Changed
 

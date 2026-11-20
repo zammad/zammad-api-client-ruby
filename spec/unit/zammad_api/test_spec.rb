@@ -677,6 +677,12 @@ RSpec.describe ZammadAPI::Test do
       expect(zammad.requests.last.on_behalf_of).to eq('42')
     end
 
+    it 'records a scope that ends in a line break the way the wire carries it' do
+      client.on_behalf_of("agent@example.com\n").groups.find(1)
+
+      expect(zammad.requests.last.on_behalf_of).to eq('agent@example.com')
+    end
+
     it 'records the scope a client was given, not what its string became afterwards' do
       login  = +'agent@example.com'
       scoped = client.on_behalf_of(login)

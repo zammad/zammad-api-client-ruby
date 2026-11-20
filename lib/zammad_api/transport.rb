@@ -541,7 +541,7 @@ module ZammadAPI
       text = wire_text(value, "header #{name}")
       raise ArgumentError, "header #{name} holds a line break, which a header cannot carry: #{LINE_BREAK_ADVICE}" if line_break?(text)
 
-      text
+      stripped(text)
     end
 
     # What to do about a line break in a header value, said wherever one is
@@ -574,6 +574,29 @@ module ZammadAPI
     # @param text [String]
     # @return [Boolean]
     def self.line_break?(text) = /[\r\n]/.match?(text.b.strip)
+
+    # A header value without what Net::HTTP strips from around it.
+    #
+    # {.line_break?} takes a value that only ends in a line break, because
+    # Net::HTTP strips one before it writes the header. That is the default
+    # adapter and not the only one, and the value was handed on with the
+    # break still on it: to an adapter that writes a header as it stands,
+    # the break ends the line, and `\r\n\r\n` ends the headers. Stripped
+    # here, every adapter is handed the value Net::HTTP sent.
+    #
+    # Of the bytes, as {.line_break?} asks of them and for its reason. Text
+    # in an encoding ASCII is no part of is left as it is: its bytes are not
+    # the ones a request carries, see {.wire_text}.
+    #
+    # @api private
+    # @param text [String]
+    # @return [String] the text itself where there is nothing to strip
+    def self.stripped(text)
+      return text if !text.encoding.ascii_compatible?
+
+      bare = text.b.strip
+      bare.bytesize == text.bytesize ? text : bare.force_encoding(text.encoding)
+    end
 
     # The +From+ scope as a transport holds it: text, and a copy of its own.
     #
@@ -615,7 +638,7 @@ module ZammadAPI
       return nil if identifier.nil?
       raise ArgumentError, not_an_identifier_message(identifier) if RECORD_ID_TYPES.none? { identifier.is_a?(it) }
 
-      text = wire_text(identifier, 'on_behalf_of')
+      text = stripped(wire_text(identifier, 'on_behalf_of'))
       raise ArgumentError, blank_on_behalf_of_message(identifier) if BLANK.match?(text)
       raise ArgumentError, "on_behalf_of holds a line break, which the From header cannot carry: #{LINE_BREAK_ADVICE}" if line_break?(text)
 
@@ -1345,7 +1368,7 @@ module ZammadAPI
         # The encoder is this gem's own: see {QueryEncoder} for the one
         # structure Faraday's writes so that Rails reads another.
         request: { timeout: config.timeout, open_timeout: config.open_timeout, params_encoder: QueryEncoder },
-        headers: { 'User-Agent' => config.user_agent, 'Accept' => 'application/json' }
+        headers: { 'User-Agent' => Transport.stripped(config.user_agent), 'Accept' => 'application/json' }
       ) do |faraday|
         apply_authentication(faraday)
         faraday.request :json
@@ -1489,10 +1512,12 @@ module ZammadAPI
     # which is kept wherever redaction finds nothing to change.
     def quoted_spellings(value) = [value, value.inspect[1...-1], value.dump[1...-1]].compact.uniq
 
+    # A token as every adapter is to be handed it: see {Transport.stripped}.
+    # A user and password are sent Base64-encoded, whatever is around them.
     def apply_authentication(faraday)
       case config.authentication_scheme
-      when :http_token   then faraday.request :authorization, 'Token', config.http_token
-      when :oauth2_token then faraday.request :authorization, 'Bearer', config.oauth2_token
+      when :http_token   then faraday.request :authorization, 'Token', Transport.stripped(config.http_token.to_s)
+      when :oauth2_token then faraday.request :authorization, 'Bearer', Transport.stripped(config.oauth2_token.to_s)
       else                    faraday.request :authorization, :basic, config.user, config.password
       end
     end
