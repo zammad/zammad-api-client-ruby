@@ -35,12 +35,9 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `per_page`. All of them now raise `ArgumentError` rather than being accepted.
 - `page(number, per_page)` with a block was replaced by `page(number, per_page: size)`, which
   returns a new collection. `page_next` and `page_prev` were removed.
-- `Collection#each_page` was renamed to `#in_batches`, which also takes the page size as
-  `in_batches(of: 500)`.
 - `Collection#[]` was removed. It cost a request per index and ignored the page a
   collection was limited to; use `first`, or `page(n, per_page: 1).first` for one record at an
   offset.
-- `Collection#per_page` and `#current_page` are no longer public. `inspect` reports both.
 - There is no `per`. The page size belongs to the call that reads: `find_each(batch_size:)`
   to walk, `in_batches(of:)` to batch, `page(number, per_page:)` for one page. Everything else
   fetches as many records as the endpoint serves.

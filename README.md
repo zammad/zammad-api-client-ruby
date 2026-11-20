@@ -1513,7 +1513,6 @@ If this is not the time to move, [1.x stays available](#staying-on-1x).
 | `collection.each` stopped after one page | `each` walks every page                          | Iterating truncated silently at the page size: 100 for `all`, 10 for `search` |
 | `collection.page(1, 3) { \|r\| ... }`    | `collection.page(1, per_page: 3).each { ... }`         | `page` now returns a collection instead of mutating and yielding    |
 | `collection.page_next` / `page_prev`     | `collection.page(n)` or `in_batches`             | Removed; they mutated shared state                                  |
-| `collection.each_page { ... }`           | `collection.in_batches { ... }`                  | Ruby already has a name for this                                    |
 | `collection[3]`                          | `collection.page(4, per_page: 1).first`                | An index that costs a request, and that ignored `page`, was a trap  |
 | `collection.find(1)`                     | `client.x.find(1)`, or `collection.detect { ... }` | On a collection `find` is `Enumerable#find`, whose argument is an ifnone callable — so an id answered with an Enumerator and made no request. It raises now |
 | `client.x.all(per_page: 50)`             | `client.x.all.page(1, per_page: 50)`, `find_each(batch_size: 50)` | `all` accepted the argument and discarded it; page size belongs to the call that reads |
