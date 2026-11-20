@@ -1195,8 +1195,9 @@ module ZammadAPI
     # @return [Response]
     # @raise [ResponseError] for non-2xx responses
     # @raise [TimeoutError] when the request timed out
-    # @raise [ConnectionError] when the instance was unreachable, or the
-    #   connection was closed before the body of a 2xx response had arrived
+    # @raise [ConnectionError] when the instance was unreachable
+    # @raise [IncompleteResponseError] when the connection was closed before
+    #   the body of a 2xx response had arrived
     #
     # @raise [Error] when the body cannot be encoded as JSON
     #
@@ -1239,15 +1240,22 @@ module ZammadAPI
     # A 2xx response, once its body is known to have arrived: see
     # {#missing_bytes}.
     #
+    # Raised with the response, as the one {ConnectionError} that has one:
+    # Zammad answered, so a write was applied, and {Resources::Base#save!}
+    # and {Resources::Base#destroy} have to hear that to settle the record.
+    #
     # @return [Response]
-    # @raise [ConnectionError]
+    # @raise [IncompleteResponseError]
     def whole(response, operation)
       missing = missing_bytes(response)
       return response if missing.nil?
 
-      raise ConnectionError, "Can't #{operation}: the response from #{config.redacted_url} ended #{missing} bytes short of the " \
-                             "#{response.headers['content-length']} its Content-Length announces, so the connection was closed " \
-                             'before the body had arrived'
+      raise IncompleteResponseError.new(
+        "Can't #{operation}: the response from #{config.redacted_url} ended #{missing} bytes short of the " \
+        "#{response.headers['content-length']} its Content-Length announces, so the connection was closed " \
+        'before the body had arrived',
+        response: response
+      )
     end
 
     # How many bytes of its body a response stopped short by, where it did.

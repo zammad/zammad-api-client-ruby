@@ -955,6 +955,18 @@ RSpec.describe ZammadAPI::Transport do
           .to raise_error(ZammadAPI::ConnectionError, %r{\ACan't download attachment: the response from http://zammad\.test/ ended 990 bytes short of the 1000})
       end
 
+      # The one ConnectionError raised for a request that was answered, and
+      # the status is what tells a caller its write was applied.
+      it 'raises it as an IncompleteResponseError that carries the response' do
+        cut_off({ 'Content-Type' => 'image/png' })
+
+        expect { unit_transport.get('api/v1/groups', operation: 'download attachment') }
+          .to raise_error(ZammadAPI::IncompleteResponseError) { |error|
+            expect(error.response.status).to eq(200)
+            expect(error.response.raw_body).to eq('0123456789')
+          }
+      end
+
       it 'raises for a JSON body that is short, and still parses' do
         cut_off({ 'Content-Type' => 'application/json' }, body: '[]')
 

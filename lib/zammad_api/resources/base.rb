@@ -573,6 +573,10 @@ module ZammadAPI
       #
       # @return [true]
       # @raise [ResponseError] when Zammad rejected the request
+      # @raise [IncompleteResponseError] when Zammad stored the record and the
+      #   connection was closed before its answer had arrived. The record is
+      #   persisted and holds what it sent; {#reload} brings in the rest, and
+      #   a record that was being created has no id to be reloaded by.
       # @see #save
       def save!
         raise_if_destroyed!('save')
@@ -599,7 +603,7 @@ module ZammadAPI
         sent = @attributes
 
         if new_record?
-          response = create_record(sent)
+          response = applied(sent) { create_record(sent) }
         else
           # An existing record is addressed by its id, so establish there is
           # one before anything here can report success. Only a record left
@@ -616,7 +620,7 @@ module ZammadAPI
           unsaved = unsaved_attributes(sent)
           return true if unsaved.empty?
 
-          response = update_record(unsaved)
+          response = applied(sent) { update_record(unsaved) }
         end
 
         replace_attributes!(response, operation: 'save object', sent: sent)
@@ -703,17 +707,27 @@ module ZammadAPI
       # served. `@baseline` is what the record arrived with, and every other
       # path through this state moves the two together.
       #
+      # Destroyed too where Zammad answered 2xx and the answer did not arrive
+      # whole, for the reason {#applied} gives: the record is gone, and one
+      # that still looked live sent a second DELETE, which came back as a 404.
+      #
       # @return [true]
       # @raise [Error] when the record was already destroyed
       # @raise [ResponseError] when Zammad rejected the request
+      # @raise [IncompleteResponseError] when Zammad destroyed the record and
+      #   the connection was closed before its answer had arrived. The record
+      #   is {#destroyed?} all the same.
       def destroy
         raise_if_destroyed!('destroy')
         raise_if_new!('destroy')
 
-        transport.delete(member_path, operation: 'destroy object', resource_class: self.class)
-        @destroyed  = true
-        @attributes = @baseline
-        reset_pending_state!
+        begin
+          transport.delete(member_path, operation: 'destroy object', resource_class: self.class)
+        rescue IncompleteResponseError
+          mark_destroyed!
+          raise
+        end
+        mark_destroyed!
         true
       end
 
@@ -769,6 +783,12 @@ module ZammadAPI
 
       def mark_persisted!
         @new_record = false
+      end
+
+      def mark_destroyed!
+        @destroyed  = true
+        @attributes = @baseline
+        reset_pending_state!
       end
 
       # A set of attributes a caller handed over, as the Hash it is read as.
@@ -848,13 +868,41 @@ module ZammadAPI
       # +sent+ is what a save was sent with, and is what tells one from a
       # read.
       def replace_attributes!(response, operation:, sent: nil)
+        mark_answered!(sent)
+        @attributes = frozen_attributes(response.decoded(:object, operation: operation, resource_class: self.class))
+        @baseline   = @attributes
+        reset_pending_state!
+      end
+
+      # What a 2xx settles before its body is read, and all it settles where
+      # the body cannot be: see {#replace_attributes!} and {#applied}.
+      def mark_answered!(sent)
         # First, while #new_record? still says whether this was a create.
         acknowledge_changes!(sent) if sent
         @new_record = false
         @saved      = !sent.nil?
-        @attributes = frozen_attributes(response.decoded(:object, operation: operation, resource_class: self.class))
-        @baseline   = @attributes
-        reset_pending_state!
+      end
+
+      # The request of a save, with the record settled where Zammad applied
+      # it and the answer did not arrive whole.
+      #
+      # A 2xx whose body stops short of its Content-Length is refused inside
+      # the transport, so it never came back to {#replace_attributes!}, which
+      # is where a 2xx that cannot be read settles the record. Raised past it,
+      # a create answered 201 left the record looking unsaved, and the retried
+      # `save` POSTed a second one; an update left its whole change set
+      # staged, so the next `save` sent a ticket's `article` again. The same
+      # response with a body that does not parse had done neither since
+      # {#acknowledge_changes!}.
+      #
+      # @yieldreturn [Response]
+      # @return [Response]
+      # @raise [IncompleteResponseError] once the record is settled
+      def applied(sent)
+        yield
+      rescue IncompleteResponseError
+        mark_answered!(sent)
+        raise
       end
 
       # The same argument, for what was staged: a 2xx is Zammad saying it

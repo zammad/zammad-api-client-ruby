@@ -15,6 +15,12 @@ module ZammadAPI
   class ConnectionError < TransportError
   end
 
+  class IncompleteResponseError < ConnectionError
+    attr_reader response: Response?
+
+    def initialize: (?String? message, ?response: Response?) -> void
+  end
+
   class TimeoutError < TransportError
   end
 
