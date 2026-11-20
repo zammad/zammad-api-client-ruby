@@ -19,6 +19,9 @@ group :development, :test do
 end
 
 group :development do
+  # For bin/console. A bundled gem from Ruby 4.0 on, which Bundler makes
+  # loadable only where the bundle names it.
+  gem 'irb', require: false
   # Static type checking against the signatures in sig/.
   gem 'rbs', require: false
   gem 'steep', require: false
