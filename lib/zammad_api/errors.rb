@@ -29,8 +29,29 @@ module ZammadAPI
 
   # Raised when the connection to the Zammad instance could not be
   # established (DNS, refused connection, TLS failure, ...), or was closed
-  # before the body of a response had arrived.
+  # before the body of a response had arrived: see {IncompleteResponseError}
+  # for the second.
   class ConnectionError < TransportError; end
+
+  # Raised when Zammad answered 2xx and the connection was closed before the
+  # body it announced had arrived.
+  #
+  # A {ConnectionError}, and caught as one. It has a class of its own for the
+  # one thing that sets it apart from the others: the request was received and
+  # answered. A write that raises this was applied, so it is not to be sent
+  # again, and a record that was being saved or destroyed is left as saved or
+  # destroyed.
+  class IncompleteResponseError < ConnectionError
+    # @return [Response, nil] the response as far as it arrived
+    attr_reader :response
+
+    # @param message [String, nil]
+    # @param response [Response, nil]
+    def initialize(message = nil, response: nil)
+      super(message)
+      @response = response
+    end
+  end
 
   # Raised when a request exceeded {Config#open_timeout} or {Config#timeout}.
   class TimeoutError < TransportError; end

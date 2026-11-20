@@ -83,6 +83,7 @@ module ZammadAPI
       def initialize_copy: (self source) -> void
       def setup: (Transport, Hash[untyped, untyped] attributes) -> void
       def mark_persisted!: () -> void
+      def mark_destroyed!: () -> void
       def attribute_hash: (untyped given) -> Hash[untyped, untyped]
       def raise_if_destroyed!: (String action) -> void
       def raise_if_new!: (String operation) -> void
@@ -90,6 +91,8 @@ module ZammadAPI
       def attribute_writable?: (Symbol key) -> bool
       def refuse_unwritable!: (Symbol key, untyped value) -> void
       def replace_attributes!: (Response, operation: String, ?sent: Hash[Symbol, untyped]?) -> void
+      def mark_answered!: (Hash[Symbol, untyped]? sent) -> void
+      def applied: (Hash[Symbol, untyped] sent) { () -> Response } -> Response
       def acknowledge_changes!: (Hash[Symbol, untyped] sent) -> void
       def reset_pending_state!: () -> void
       def forget_related_targets: () -> void

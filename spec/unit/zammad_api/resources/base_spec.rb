@@ -1732,4 +1732,130 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(other.changes).to eq({})
     end
   end
+
+  # The third answer a write can get that says Zammad applied it and tells
+  # nothing more: a 2xx whose body stops short of its Content-Length. The
+  # transport refuses it before the record sees a response, so the record
+  # was not settled the way it is for a body that does not parse.
+  describe 'a write whose success body was cut short' do
+    def cut_short(status)
+      { status: status, body: '{"id":1,"na', headers: { 'Content-Type' => 'application/json', 'Content-Length' => '30' } }
+    end
+
+    def swallow
+      yield
+    rescue ZammadAPI::IncompleteResponseError
+      nil
+    end
+
+    context 'when it was a create' do
+      subject(:group) { client.groups.new(name: 'Support') }
+
+      before { stub_request(:post, url).with(query: hash_including({})).to_return(cut_short(201)) }
+
+      it 'still reports the response as cut short, with the status Zammad answered' do
+        expect { group.save }.to raise_error(ZammadAPI::IncompleteResponseError, /19 bytes short of the 30/) { |error|
+          expect(error.response.status).to eq(201)
+        }
+      end
+
+      it 'is caught as the ConnectionError it was before' do
+        expect { group.save }.to raise_error(ZammadAPI::ConnectionError)
+      end
+
+      it 'does not leave the record looking unsaved' do
+        swallow { group.save }
+
+        expect(group.new_record?).to be(false)
+      end
+
+      it 'does not create a second record when the save is retried' do
+        2.times do
+          group.save
+        rescue ZammadAPI::Error
+          nil
+        end
+
+        expect(a_request(:post, url).with(query: hash_including({}))).to have_been_made.once
+      end
+
+      it 'refuses the retried save rather than reporting it stored' do
+        swallow { group.save }
+
+        expect { group.save }.to raise_error(ZammadAPI::Error, /was saved, but the response carried no id/)
+      end
+    end
+
+    context 'when it was an update' do
+      subject(:ticket) { client.tickets.find(1) }
+
+      let(:ticket_url) { "#{ClientHelper::BASE_URL}api/v1/tickets/1" }
+
+      before do
+        stub_request(:get, ticket_url).with(query: hash_including({})).to_return(json_response({ id: 1, title: 'Help', note: nil }))
+        stub_request(:put, ticket_url).with(query: hash_including({})).to_return(cut_short(200), json_response({ id: 1, title: 'Renamed' }))
+
+        ticket.article = { body: 'Reset link sent.', type: 'email', to: 'customer@example.com' }
+        swallow { ticket.save }
+      end
+
+      it 'no longer holds the changes Zammad acknowledged as staged' do
+        expect(ticket.changed?).to be(false)
+        expect(ticket.changes).to eq({})
+      end
+
+      it 'does not send the article again with the next save' do
+        ticket.title = 'Renamed'
+        ticket.save
+
+        expect(a_request(:put, ticket_url).with(query: hash_including({}), body: { title: 'Renamed' })).to have_been_made.once
+        expect(a_request(:put, ticket_url).with(query: hash_including({}), body: hash_including('article' => anything))).to have_been_made.once
+      end
+
+      it 'keeps the id it is addressed by' do
+        expect(ticket.attributes).to eq(id: 1, title: 'Help', note: nil)
+      end
+    end
+
+    context 'when it was a destroy' do
+      subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Support') }
+
+      before { stub_request(:delete, "#{url}/1").to_return(cut_short(200)) }
+
+      it 'still reports the response as cut short' do
+        expect { group.destroy }.to raise_error(ZammadAPI::IncompleteResponseError)
+      end
+
+      it 'leaves the record destroyed' do
+        swallow { group.destroy }
+
+        expect(group).to be_destroyed
+      end
+
+      it 'refuses a second destroy rather than surfacing Zammad\'s 404' do
+        swallow { group.destroy }
+
+        expect { group.destroy }.to raise_error(ZammadAPI::Error, /was destroyed, there is nothing to destroy/)
+        expect(a_request(:delete, "#{url}/1")).to have_been_made.once
+      end
+
+      it 'drops what was staged, as a destroy that was answered whole does' do
+        group.name = 'Renamed'
+        swallow { group.destroy }
+
+        expect(group.name).to eq('Support')
+        expect(group.changed?).to be(false)
+      end
+    end
+
+    # A read was not applied to anything, and settles nothing.
+    it 'leaves a record alone whose reload was cut short' do
+      group = ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Support')
+      stub_request(:get, "#{url}/1").with(query: hash_including({})).to_return(cut_short(200))
+      group.name = 'Renamed'
+      swallow { group.reload }
+
+      expect(group.changes).to eq(name: %w[Support Renamed])
+    end
+  end
 end

@@ -1001,6 +1001,14 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   regexp of it: every successful request behind `c.request :gzip` raised a bare `TypeError`,
   past a `rescue ZammadAPI::Error`. `Response#headers` has every value as a String now, as
   it is documented to.
+- A `save` or `destroy` that Zammad answered 2xx leaves the record saved or destroyed where
+  the answer was cut short of its `Content-Length`, as it does where the answer does not
+  parse. The error was raised before the record heard of the response: a create answered
+  201 left the record looking new, so a second `save` POSTed a second record, an update
+  kept its changes staged, so the next `save` sent a ticket's `article` and its e-mail
+  again, and a second `destroy` came back as a 404. The error is
+  `ZammadAPI::IncompleteResponseError` now, a `ConnectionError` that carries the `response`
+  as far as it arrived, so a raw `client.post` can tell from the status that it was applied.
 
 ### Changed
 

@@ -1128,7 +1128,8 @@ ZammadAPI::Error
 ├── ZammadAPI::ParseError            unexpected response shape
 ├── ZammadAPI::PaginationError       endpoint ignored the page parameter
 ├── ZammadAPI::TransportError
-│   ├── ZammadAPI::ConnectionError   unreachable host, TLS failure or a response cut short
+│   ├── ZammadAPI::ConnectionError   unreachable host or TLS failure
+│   │   └── ZammadAPI::IncompleteResponseError  answered 2xx, body cut short
 │   └── ZammadAPI::TimeoutError      exceeded timeout or open_timeout
 └── ZammadAPI::ResponseError         carries the HTTP response
     ├── ZammadAPI::ClientError       4xx
@@ -1157,6 +1158,13 @@ end
 `ResponseError` exposes `status`, `body`, `headers`, `server_message`, `operation` and
 `resource_class`. A proxy that returns an HTML error page instead of JSON produces a
 `ServerError` describing the status, not a JSON parse failure.
+
+A `TransportError` is a request with no whole answer, which is not the same as one Zammad
+never saw: a write that timed out may have been applied. `IncompleteResponseError` is the
+one case where that is known. Zammad answered 2xx, the connection closed before the body
+had arrived, and `e.response` holds the status and what did arrive. A record whose `save`
+or `destroy` raises it is left saved or destroyed, so the call is not to be repeated;
+`reload` brings in what the lost answer would have.
 
 ### Timeouts and retries
 

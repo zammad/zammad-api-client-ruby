@@ -59,7 +59,7 @@ rescue ZammadAPI::ClientError => e     # any 4xx
   puts "client error:     #{e.status}"
 rescue ZammadAPI::ServerError => e     # any 5xx, including an HTML proxy page
   puts "server error:     #{e.status}"
-rescue ZammadAPI::TransportError => e  # never reached the server, retries spent
+rescue ZammadAPI::TransportError => e  # no whole answer arrived, retries spent
   puts "transport error:  #{e.message}"
 end
 
