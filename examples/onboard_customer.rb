@@ -8,7 +8,7 @@
 # as a scoped client and as a block.
 #
 #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=... \
-#     ruby examples/onboard_customer.rb "Acme Inc" jane@acme.test Jane Doe
+#     bundle exec ruby examples/onboard_customer.rb "Acme Inc" jane@acme.test Jane Doe
 
 require 'zammad_api'
 

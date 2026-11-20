@@ -9,7 +9,7 @@
 # backoff before any error reaches this script.
 #
 #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=... \
-#     ruby examples/ticket_report.rb tickets.csv
+#     bundle exec ruby examples/ticket_report.rb tickets.csv
 
 require 'zammad_api'
 require 'csv'

@@ -9,7 +9,7 @@
 # index endpoints - unless a call asks for another size.
 #
 #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=... \
-#     ruby examples/pagination.rb
+#     bundle exec ruby examples/pagination.rb
 
 require 'zammad_api'
 

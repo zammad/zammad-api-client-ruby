@@ -6,7 +6,7 @@
 # Shows walking articles, attachment metadata, and binary-safe downloads.
 #
 #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=... \
-#     ruby examples/download_attachments.rb 12345 ./downloads
+#     bundle exec ruby examples/download_attachments.rb 12345 ./downloads
 
 require 'zammad_api'
 require 'fileutils'
