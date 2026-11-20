@@ -575,7 +575,7 @@ in {state: 'closed'}
   nil
 in {state: String => state, priority: '3 high'}
   escalate(state)
-in {group: {name: 'Support'}}
+in {group: 'Support'}
   notify_support
 end
 ```
