@@ -1060,6 +1060,14 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   that something follows the scheme. `Net::HTTP` connects to localhost for an empty host,
   so the client sent every request, and the token with it, to whatever listened on that
   port of the machine it ran on.
+- A `timeout`, `open_timeout` or `retry_interval` the HTTP stack cannot wait for raises
+  `ZammadAPI::ConfigurationError`. Any positive number was accepted, so `timeout:
+  Float::INFINITY`, the natural way to ask for the 1.x behaviour of no timeout, built a
+  client whose every request raised a bare `RangeError` from inside `Net::HTTP`, as did a
+  figure past what a C long holds, and an infinite `retry_interval` raised it from the wait
+  before the first retry. The three take at most 100000000 seconds, a little over three
+  years, which is the longest wait every platform takes: macOS refused a longer one, and
+  that came back as a `ConnectionError` calling the instance unreachable.
 
 ### Changed
 

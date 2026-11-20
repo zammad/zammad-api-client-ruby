@@ -376,6 +376,45 @@ RSpec.describe ZammadAPI::Config do
         .to raise_error(ZammadAPI::ConfigurationError, 'config timeout needs to be a positive number')
     end
 
+    # The natural way to ask for no timeout, which is what 1.x had. Accepted,
+    # every request raised a bare RangeError from inside Net::HTTP.
+    it 'rejects an infinite timeout' do
+      expect { build(timeout: Float::INFINITY) }
+        .to raise_error(ZammadAPI::ConfigurationError, /\Aconfig timeout needs to be at most 100000000 seconds, got Infinity\. No value stands for no timeout/)
+    end
+
+    it 'rejects an infinite open_timeout' do
+      expect { build(open_timeout: Float::INFINITY) }
+        .to raise_error(ZammadAPI::ConfigurationError, /config open_timeout needs to be at most 100000000 seconds, got Infinity/)
+    end
+
+    # It raised the same from the sleep before the first retry.
+    it 'rejects an infinite retry_interval' do
+      expect { build(retry_interval: Float::INFINITY) }
+        .to raise_error(ZammadAPI::ConfigurationError, /config retry_interval needs to be at most 100000000 seconds, got Infinity\. No value stands for no limit/)
+    end
+
+    it 'rejects a timeout too large for a C long' do
+      expect { build(timeout: 10**20) }
+        .to raise_error(ZammadAPI::ConfigurationError, /config timeout needs to be at most 100000000 seconds, got 100000000000000000000/)
+    end
+
+    # macOS refuses a wait on a socket that is longer, and that came back as
+    # a ConnectionError calling the instance unreachable.
+    it 'rejects a timeout one second past the longest every platform takes' do
+      expect { build(timeout: 100_000_001) }.to raise_error(ZammadAPI::ConfigurationError, /at most 100000000 seconds/)
+    end
+
+    it 'accepts the longest one' do
+      expect(build(timeout: 100_000_000, open_timeout: 100_000_000.0, retry_interval: Rational(100_000_000)))
+        .to have_attributes(timeout: 100_000_000, open_timeout: 100_000_000.0, retry_interval: Rational(100_000_000))
+    end
+
+    it 'still says a Float that is no number needs to be one' do
+      expect { build(timeout: Float::NAN) }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config timeout needs to be a positive number')
+    end
+
     it 'rejects negative retries' do
       expect { build(retries: -1) }
         .to raise_error(ZammadAPI::ConfigurationError, 'config retries needs to be a non-negative integer')
