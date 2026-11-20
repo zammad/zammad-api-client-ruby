@@ -954,6 +954,11 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   holds anything but letters, digits and the signs RFC 9110 allows raises `ArgumentError`
   before the request is sent or logged, and the test kit refuses it too. net-http from
   0.10.0 on refuses a line break or a colon itself, with an error that quotes the name.
+- `ZammadAPI::Test` answers with a stub declared after an earlier one for the same endpoint
+  has answered. The earlier one was served once more: stubbed open, read, stubbed closed
+  and read again, a ticket was open twice and closed only at the third read. A lone stub
+  stays in place to go on answering, and was taken for the first of the sequence the second
+  one began.
 
 ### Changed
 

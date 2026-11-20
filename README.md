@@ -1306,6 +1306,9 @@ client.groups.all.count # => 1
 client.groups.all.count # => 2
 ```
 
+The second stub may also be declared once the first has answered, between two steps of a
+test. It answers from the next request on.
+
 Name a `page` to say what each one holds, and the stub is served exactly as written:
 
 ```ruby
