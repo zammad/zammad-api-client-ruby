@@ -373,6 +373,14 @@ Names are case-insensitive, and two spellings of one header are refused rather t
 are for, the second is what `on_behalf_of` sets, and replacing either from a single request
 would leave the client reporting something it no longer does.
 
+A `body:` is sent as JSON, and so are the attributes a record is saved with. A value JSON
+has no type for raises `ZammadAPI::Error` rather than going out as it prints, which is all
+the encoder does with one: pass a `Set` or a `Range` as its `to_a`. An object that defines
+`to_json` writes itself, a `Time` or a `Date` is sent as its text, which Zammad reads, and
+what converts to a Hash, such as permitted `ActionController::Parameters`, is sent as that
+Hash. Where ActiveSupport is loaded, any other object is sent as its `as_json`, as its
+`to_json` there would write it.
+
 Each returns a `ZammadAPI::Response`, so the status and headers stay reachable:
 
 ```ruby

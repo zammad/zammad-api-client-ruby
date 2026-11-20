@@ -620,6 +620,131 @@ RSpec.describe ZammadAPI::Transport do
       end
     end
 
+    # The generator writes an object JSON has no type for as its `to_s`, so
+    # `role_ids: Set[1, 2]` went out as the String "Set[1, 2]" where the
+    # list belongs, and nothing raised.
+    context 'with a value JSON has no type for' do
+      let(:url) { "#{ClientHelper::BASE_URL}api/v1/users" }
+
+      before { stub_request(:post, url).to_return(json_response({ id: 1 }, status: 201)) }
+
+      { 'a Set' => Set[1, 2], 'a Range' => (1..3), 'a Struct' => Struct.new(:id).new(1), 'a Rational' => Rational(1, 2), 'any other object' => Object.new }.each do |kind, value|
+        it "raises a ZammadAPI::Error for #{kind}, which only prints as something" do
+          expect { unit_transport.post('api/v1/users', operation: 'save object', body: { role_ids: value }) }
+            .to raise_error(ZammadAPI::Error, /request body cannot be encoded as JSON \(its key role_ids was given as #{Regexp.escape(value.class.to_s)}, which is no JSON type/)
+        end
+      end
+
+      it 'raises for one further in' do
+        expect { unit_transport.post('api/v1/users', operation: 'save object', body: { users: [{ role_ids: Set[1] }] }) }
+          .to raise_error(ZammadAPI::Error, /its key role_ids was given as Set/)
+      end
+
+      it 'raises for one that is the whole body' do
+        expect { unit_transport.post('api/v1/users', operation: 'save object', body: Set[1]) }
+          .to raise_error(ZammadAPI::Error, /\(it was given as Set/)
+      end
+
+      it 'says what to pass in its place' do
+        expect { unit_transport.post('api/v1/users', operation: 'save object', body: { role_ids: Set[1, 2] }) }
+          .to raise_error(ZammadAPI::Error, /pass a Set or a Range as its to_a/)
+      end
+
+      it 'does not quote what it refuses' do
+        holder = Class.new { def initialize = @password = 'object-s3cret' }.new
+
+        expect { unit_transport.post('api/v1/users', operation: 'save object', body: { user: holder }) }
+          .to raise_error(ZammadAPI::Error) { |error| expect(error.message).not_to include('object-s3cret') }
+      end
+
+      it 'makes no request' do
+        expect { unit_transport.post('api/v1/users', operation: 'save object', body: { role_ids: Set[1, 2] }) }.to raise_error(ZammadAPI::Error)
+        expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+      end
+
+      it 'is raised by a record save carrying such a value' do
+        user = unit_client.users.new(login: 'jane', role_ids: Set[1, 2])
+        expect { user.save }.to raise_error(ZammadAPI::Error, /its key role_ids was given as Set/)
+      end
+
+      it 'sends a Symbol as text, as the generator writes it' do
+        unit_transport.post('api/v1/users', operation: 'test', body: { state: :open, 1 => nil })
+
+        expect(a_request(:post, url).with(body: '{"state":"open","1":null}')).to have_been_made
+      end
+
+      # Zammad reads a time or a date attribute from the text either prints.
+      it 'sends a Time and a Date as they print' do
+        unit_transport.post('api/v1/users', operation: 'test', body: { pending_time: Time.utc(2026, 1, 2, 3, 4, 5), due: Date.new(2026, 1, 2) })
+
+        expect(a_request(:post, url).with(body: '{"pending_time":"2026-01-02 03:04:05 UTC","due":"2026-01-02"}')).to have_been_made
+      end
+
+      # A member called `method` is in the way of asking the object where
+      # its `to_json` comes from, and is not asked.
+      it 'leaves an object with a to_json of its own to write itself' do
+        # rubocop:disable-next Lint/DataDefineOverride -- the member in the way is the point
+        point = Data.define(:method, :id) { def to_json(*) = to_h.to_json(*) }.new('get', 1)
+        unit_transport.post('api/v1/users', operation: 'test', body: { point: point, points: [point] })
+
+        expect(a_request(:post, url).with(body: '{"point":{"method":"get","id":1},"points":[{"method":"get","id":1}]}')).to have_been_made
+      end
+
+      it 'sends a record of this gem as its attributes' do
+        group = ZammadAPI::Resources::Group.from_response(unit_transport, { id: 1, name: 'Users' })
+        unit_transport.post('api/v1/users', operation: 'test', body: { group: group })
+
+        expect(a_request(:post, url).with(body: '{"group":{"id":1,"name":"Users"}}')).to have_been_made
+      end
+    end
+
+    # ActiveSupport gives every object an `as_json` and builds `to_json` on
+    # it, which is what 1.x sent a body with. `JSON.generate` does not ask
+    # it, so in a Rails app a Set was the list under 1.x and its `to_s`
+    # here, and `2.days` was "172800". Stood in for by objects that define
+    # the method, as ActiveSupport is not loaded here.
+    context 'with an object that says what it is as JSON' do
+      let(:as_json_class) { Struct.new(:described) { def as_json(*) = described } }
+
+      before { stub_request(:post, url).to_return(json_response({ id: 1 }, status: 201)) }
+
+      it 'sends what its as_json returns' do
+        unit_transport.post('api/v1/groups', operation: 'test', body: { ids: as_json_class.new([1, 2]), ttl: as_json_class.new(172_800) })
+
+        expect(a_request(:post, url).with(body: '{"ids":[1,2],"ttl":172800}')).to have_been_made
+      end
+
+      it 'sends one that is the whole body the same way' do
+        unit_transport.post('api/v1/groups', operation: 'test', body: as_json_class.new({ 'name' => 'Support' }))
+
+        expect(a_request(:post, url).with(body: '{"name":"Support"}')).to have_been_made
+      end
+
+      it 'asks what its as_json returns in turn' do
+        unit_transport.post('api/v1/groups', operation: 'test', body: { group: as_json_class.new({ 'ids' => as_json_class.new([1]) }) })
+
+        expect(a_request(:post, url).with(body: '{"group":{"ids":[1]}}')).to have_been_made
+      end
+
+      it 'raises where its as_json is no JSON type either' do
+        number = as_json_class.new(Rational(1, 2))
+
+        expect { unit_transport.post('api/v1/groups', operation: 'save object', body: { weight: number }) }
+          .to raise_error(ZammadAPI::Error, /its key weight was given as #{Regexp.escape(number.class.to_s)}, which is no JSON type/)
+      end
+
+      it 'prefers the to_json an object has of its own' do
+        both = Class.new do
+          def as_json(*) = { 'from' => 'as_json' }
+          def to_json(*) = '{"from":"to_json"}'
+        end
+
+        unit_transport.post('api/v1/groups', operation: 'test', body: { value: both.new })
+
+        expect(a_request(:post, url).with(body: '{"value":{"from":"to_json"}}')).to have_been_made
+      end
+    end
+
     # Faraday's JSON middleware raised JSON::GeneratorError from inside the
     # stack and nothing mapped it, so it went past the rescue of
     # ZammadAPI::Error every caller is told to write.
@@ -1720,13 +1845,23 @@ RSpec.describe ZammadAPI::Transport do
         expect(log).not_to include('object-s3cret')
       end
 
-      # JSON has no spelling for such an object, and the generator sends its
-      # `to_s`, which names the class and no more. `inspect` lists what it
-      # holds, so the log showed a value the request never carried.
-      it 'does not print what an object holds and the request does not carry' do
-        holder = Class.new { def initialize = @password = 'object-s3cret' }.new
-        transport.post('api/v1/groups', operation: 'test', body: { user: holder })
+      # An object that is sent as its `as_json` goes out as keys and values
+      # too, and `inspect` printed the object in their place.
+      it 'redacts a credential in one that is sent as its as_json' do
+        described = Struct.new(:password) { def as_json(*) = to_h.transform_keys(&:to_s) }.new('object-s3cret')
+        transport.post('api/v1/groups', operation: 'test', body: { user: described })
 
+        expect(log).to include('Zammad API payload: {"user" => {"password" => "[REDACTED]"}}')
+      end
+
+      # JSON has no type for such an object, and it is refused before the
+      # request is logged. It was sent as its `to_s`, which names the class
+      # and no more, while the log printed its `inspect`, which lists what
+      # it holds.
+      it 'does not print what an object holds and no request carries' do
+        holder = Class.new { def initialize = @password = 'object-s3cret' }.new
+
+        expect { transport.post('api/v1/groups', operation: 'test', body: { user: holder }) }.to raise_error(ZammadAPI::Error)
         expect(log).not_to include('object-s3cret')
       end
 

@@ -31,6 +31,8 @@ module ZammadAPI
     DOT_SEGMENTS: Array[String]
     RECORD_ID_TYPES: Array[Class]
     QUERY_VALUE_TYPES: Array[Class]
+    JSON_VALUE_TYPES: Array[Class]
+    TEXT_VALUE_TYPES: Array[Class]
     ABSOLUTE_URL: Regexp
     RESERVED_HEADERS: Hash[String, String]
 
@@ -66,6 +68,10 @@ module ZammadAPI
     def self.refuse_unreadable_path!: (String relative) -> void
     def self.unreadable_path_message: (String relative) -> String
     def self.encode_body: (untyped body, operation: String, ?resource_class: Class?) -> String?
+    def self.json_value: (untyped value, untyped key) -> untyped
+    def self.json_object: (untyped value, untyped key) -> untyped
+    def self.writes_own_json?: (untyped value) -> bool
+    def self.not_a_json_value_message: (untyped value, untyped key) -> String
     def self.retry_options: (Config config) -> Hash[Symbol, untyped]
     def self.retried?: (Config config, Symbol method, Response response) -> bool
 

@@ -931,6 +931,14 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - The signatures no longer declare `ZammadAPI::Response::TOTAL_COUNT_HEADER`, a constant
   the library does not have. Steep accepted code that named it, which then raised
   `NameError` when it ran.
+- A request body value JSON has no type for is no longer sent as its `to_s`.
+  `client.users.create(login: 'x', role_ids: Set[1, 2])` sent `"role_ids":"Set[1, 2]"`, a
+  String where the list belongs, and a Struct went as `#<struct ...>`. Where ActiveSupport
+  is loaded such an object is sent as its `as_json`, which is what 1.x sent there: the Set
+  as a list, `2.days` as `172800` and not as `"172800"`, a model as its attributes.
+  Elsewhere it raises `ZammadAPI::Error`, naming the key and the class and not the value. An
+  object with a `to_json` of its own still writes itself, and a `Time` or a `Date` is still
+  sent as its text, which Zammad reads.
 
 ### Changed
 
