@@ -72,6 +72,58 @@ RSpec.describe ZammadAPI::Transport do
     end
   end
 
+  # Only the value of a raw request's header was checked. The Net::HTTP that
+  # ships with Ruby 3.4 and 4.0 writes a name to the socket as it is, so one
+  # holding a line break sent header lines of its own, a From or an
+  # Authorization among them.
+  describe 'header names' do
+    it 'downcases a name, and takes it as text or as a Symbol' do
+      expect(described_class.stringify_headers('Accept-Language' => 'de', :'X-Trace' => 'abc')).to eq('accept-language' => 'de', 'x-trace' => 'abc')
+    end
+
+    it 'takes every sign a name may hold' do
+      expect(described_class.stringify_headers("X!#$%&'*+-.^_`|~9" => 'v')).to eq("x!#$%&'*+-.^_`|~9" => 'v')
+    end
+
+    it 'refuses a name with a line break in it, and header lines of its own after that' do
+      expect { described_class.stringify_headers("X-A: 1\r\nFrom: admin@example.com\r\nX-B" => 'v') }
+        .to raise_error(ArgumentError, /\Athe header name that begins "X-A" goes on with a character no header name carries/)
+    end
+
+    it 'does not quote what follows, which may be a credential' do
+      expect { described_class.stringify_headers("X-A: 1\r\nAuthorization: Token name-s3cret\r\nX-B" => 'v') }
+        .to raise_error(ArgumentError) { |error| expect(error.message).not_to include('name-s3cret') }
+    end
+
+    # Each passed the lookup that refuses a From header by name.
+    ['From ', ' From', "From\t", 'From:', "From\n"].each do |name|
+      it "refuses #{name.inspect}, which is no spelling of a header" do
+        expect { described_class.stringify_headers(name => 'agent@example.com') }.to raise_error(ArgumentError, /no header name carries/)
+      end
+    end
+
+    ['', nil, 'X Trace', 'Träce', 'X-Trace'.encode('UTF-16LE')].each do |name|
+      it "refuses #{name.inspect}" do
+        expect { described_class.stringify_headers(name => 'abc') }.to raise_error(ArgumentError, /no header name carries/)
+      end
+    end
+
+    # `downcase` raises for such text, with a message of its own.
+    it 'refuses a name with a byte sequence that is invalid in its encoding' do
+      expect { described_class.stringify_headers("X-\xFFTrace" => 'abc') }
+        .to raise_error(ArgumentError, /\Athe header name that begins "X-" goes on with a character no header name carries/)
+    end
+
+    it 'makes no request for one, and logs none' do
+      log = StringIO.new
+
+      expect { unit_transport(logger: Logger.new(log)).get('api/v1/groups', operation: 'test', headers: { "X-A\r\nFrom: x" => 'v' }) }
+        .to raise_error(ArgumentError)
+      expect(log.string).to be_empty
+      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+    end
+  end
+
   describe 'base url handling' do
     it 'keeps a sub-path prefix in front of the request path' do
       stub = stub_request(:get, 'http://zammad.test/helpdesk/api/v1/groups').to_return(json_response([]))

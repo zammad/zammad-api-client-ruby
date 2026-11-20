@@ -35,6 +35,7 @@ module ZammadAPI
     TEXT_VALUE_TYPES: Array[Class]
     ABSOLUTE_URL: Regexp
     RESERVED_HEADERS: Hash[String, String]
+    HEADER_NAME: Regexp
 
     attr_reader config: Config
     attr_reader on_behalf_of: String?
@@ -61,6 +62,8 @@ module ZammadAPI
     def self.stringify_on_behalf_of: ((String | Integer)? identifier) -> String?
     def self.not_an_identifier_message: (untyped identifier) -> String
     def self.blank_on_behalf_of_message: (untyped identifier) -> String
+    def self.header_name: (untyped name) -> String
+    def self.not_a_header_name_message: (String start) -> String
     def self.stringify_header_value: (String, untyped) -> String
     def self.escape_path_segment: (untyped) -> String
     def self.not_a_record_id_message: (untyped value) -> String

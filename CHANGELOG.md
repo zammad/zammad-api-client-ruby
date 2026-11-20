@@ -946,6 +946,14 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   So did a log line or an error report that serialized something holding either. A
   configuration is now written with what `inspect` blanks blanked, and a client as its URL,
   the way it authenticates and any `on_behalf_of` scope.
+- A raw request refuses a header name that is not one. Only the value was checked, and the
+  `Net::HTTP` that ships with Ruby 3.4 and 4.0 writes a name as it is given:
+  `headers: {"X-A: 1\r\nFrom: admin@example.com\r\nX-B" => 'v'}` sent a `From` header of
+  its own, the one refused by name, and an `Authorization` went the same way. `'From '`
+  passed that refusal as well, and an empty name was sent as `: v`. A name that is empty or
+  holds anything but letters, digits and the signs RFC 9110 allows raises `ArgumentError`
+  before the request is sent or logged, and the test kit refuses it too. net-http from
+  0.10.0 on refuses a line break or a colon itself, with an error that quotes the name.
 
 ### Changed
 
