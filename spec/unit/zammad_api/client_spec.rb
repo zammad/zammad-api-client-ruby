@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'zammad_api/test'
+
 RSpec.describe ZammadAPI::Client do
   let(:url) { "#{ClientHelper::BASE_URL}api/v1/users/1" }
 
