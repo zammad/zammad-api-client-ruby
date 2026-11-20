@@ -1093,6 +1093,14 @@ module ZammadAPI
     # with is reported as the error it is, with the figure still readable
     # from {RateLimitError#retry_after}.
     #
+    # It bounds the backoff and a +Retry-After+, and not the jitter: the
+    # middleware adds up to +interval_randomness+ of +interval+ once it has
+    # applied the ceiling. So a wait of its own is at most +timeout+ and
+    # half a +retry_interval+, which is a quarter of a second with the
+    # defaults and five on top of two for `timeout: 2, retry_interval: 10`.
+    # Lowering the ceiling by that much would refuse a +Retry-After+ that
+    # is within +timeout+, so the documentation says it instead.
+    #
     # Public for {.retried?}, which {Test} asks.
     #
     # @api private

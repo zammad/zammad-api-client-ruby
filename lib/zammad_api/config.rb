@@ -34,9 +34,11 @@ module ZammadAPI
   # @!attribute [r] retries
   #   @return [Integer] retry attempts for a request that only reads
   # @!attribute [r] retry_interval
-  #   @return [Numeric] seconds before the first retry, doubling after that.
-  #     A +Retry-After+ header takes its place, and no wait is longer than
-  #     {#timeout}.
+  #   @return [Numeric] seconds before the first retry, doubling after that
+  #     up to {#timeout}. A +Retry-After+ header takes its place where it
+  #     asks for longer, up to {#timeout} as well. Up to half of this is
+  #     added to a wait that is not a +Retry-After+, as jitter, so one can be
+  #     that much longer than {#timeout}.
   # @!attribute [r] ssl_verify
   #   @return [Boolean] whether TLS certificates are verified
   # @!attribute [r] proxy

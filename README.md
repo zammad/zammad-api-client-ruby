@@ -150,7 +150,7 @@ client = ZammadAPI::Client.from_env(timeout: 300)
 | `timeout`        | `60`               | Seconds to wait for a response.                                    |
 | `open_timeout`   | `10`               | Seconds to wait for the connection.                                |
 | `retries`        | `2`                | Retry attempts for a `GET` that failed transiently. `0` disables retrying. |
-| `retry_interval` | `0.5`              | Seconds before the first retry; doubles on each attempt. No wait is longer than `timeout`. |
+| `retry_interval` | `0.5`              | Seconds before the first retry; doubles on each attempt, up to `timeout`. Up to half of it is added to each wait as jitter. |
 | `ssl_verify`     | `true`             | Set to `false` only against a server with a self-signed certificate. |
 | `proxy`          | `nil`              | Proxy URL.                                                         |
 | `user_agent`     | `zammad_api-ruby/<version>` | Value of the `User-Agent` header.                         |

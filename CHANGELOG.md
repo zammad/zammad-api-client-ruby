@@ -639,7 +639,8 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   price is a URL with a port and an `@` further on, such as `https://host:8443/a@b`, which
   renders with its host blanked: a colon cannot tell a port from a password, and that is the
   mistake that leaks nothing.
-- A wait before a retry is never longer than `timeout`. The retry middleware sleeps for
+- A wait before a retry is bounded by `timeout`, with only the jitter on top of it, at most
+  half a `retry_interval`. The retry middleware sleeps for
   whatever a `Retry-After` header says and has no ceiling of its own by default, so a
   maintenance page answering 503 or a rate limiter answering 429 with `Retry-After: 3600`
   held the calling thread for an hour per retry — two by default — before raising the error,
