@@ -490,6 +490,56 @@ RSpec.describe ZammadAPI::Config do
     end
   end
 
+  # ActiveSupport gives a Data an as_json that is its members as they are,
+  # and builds to_json on it, so in a Rails app `config.to_json` wrote the
+  # credentials in full. It is not loaded here: what is asked is what it
+  # asks, and that the answer is this class's own.
+  describe 'serializing as JSON' do
+    it 'answers as_json itself, where ActiveSupport would answer for a Data' do
+      expect(described_class.instance_method(:as_json).owner).to be(described_class)
+    end
+
+    it 'redacts the password' do
+      expect(build(http_token: nil, user: 'u', password: 'pw-s3cret').as_json).to include(user: 'u', password: '[REDACTED]')
+    end
+
+    it 'redacts the access token' do
+      expect(build(http_token: 'tok-s3cret').as_json).to include(http_token: '[REDACTED]', password: nil)
+    end
+
+    it 'redacts the OAuth2 token' do
+      expect(build(http_token: nil, oauth2_token: 'oauth-s3cret').as_json).to include(oauth2_token: '[REDACTED]')
+    end
+
+    it 'redacts the proxy credentials' do
+      expect(build(proxy: 'http://puser:pproxy-s3cret@proxy.test:8080').as_json).to include(proxy: 'http://[REDACTED]@proxy.test:8080')
+    end
+
+    it 'names the logger and the middleware, and does not hand them to the encoder' do
+      expect(build(middleware: ->(faraday) { faraday }).as_json).to include(logger: '#<Logger>', middleware: '#<Proc>')
+    end
+
+    it 'keeps every other option as it is' do
+      expect(build(timeout: 7, adapter: :net_http).as_json).to include(url: 'https://zammad.example.com/', timeout: 7, adapter: :net_http, ssl_verify: true)
+    end
+
+    it 'writes that as a JSON object' do
+      written = JSON.parse(build(http_token: 'tok-s3cret', timeout: 7).to_json)
+
+      expect(written).to include('url' => 'https://zammad.example.com/', 'http_token' => '[REDACTED]', 'timeout' => 7, 'logger' => '#<Logger>')
+    end
+
+    it 'holds no credential in what it writes' do
+      config = build(http_token: nil, user: 'u', password: 'pw-s3cret', proxy: 'http://puser:pproxy-s3cret@proxy.test:8080')
+
+      expect(config.to_json).not_to match(/pw-s3cret|pproxy-s3cret/)
+    end
+
+    it 'stays redacted nested inside another structure' do
+      expect(JSON.generate(config: build(http_token: 'tok-s3cret'))).not_to include('tok-s3cret')
+    end
+  end
+
   # Faraday turns the userinfo of a URL into a Basic Authorization header, and
   # its authorization middleware leaves a header that is already set alone -
   # so the credentials in the URL were sent in place of the configured ones.

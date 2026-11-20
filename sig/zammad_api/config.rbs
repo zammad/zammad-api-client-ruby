@@ -65,6 +65,8 @@ module ZammadAPI
     def inspect: () -> String
     def to_s: () -> String
     def pretty_print: (untyped printer) -> void
+    def as_json: (*untyped) -> Hash[Symbol, untyped]
+    def to_json: (?untyped state) -> String
     def to_h: () -> Hash[Symbol, untyped]
 
     private
@@ -73,6 +75,8 @@ module ZammadAPI
     def normalize_proxy: (untyped) -> String?
     def normalize_adapter: (untyped) -> Symbol?
     def render: (Symbol, untyped) -> String
+    def placeholder: (Symbol, untyped) -> String?
+    def printable: (Symbol, untyped) -> untyped
     def normalize_url: (untyped) -> String
     def inline_credentials?: (String) -> bool
     def inline_credentials_message: (String) -> String

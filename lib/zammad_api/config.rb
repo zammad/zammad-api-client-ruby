@@ -260,6 +260,28 @@ module ZammadAPI
     # @return [void]
     def pretty_print(printer) = printer.text(inspect)
 
+    # The configuration for a JSON encoder: every option, with what
+    # {#inspect} blanks blanked.
+    #
+    # ActiveSupport gives a Data an +as_json+ that is its members as they
+    # are, and builds +to_json+ on it. So in a Rails app +config.to_json+
+    # wrote the token, the password and the credentials of a proxy in full,
+    # and so did a log line or an error report that serialized something
+    # holding the configuration - the third way out of the class documented
+    # as safe to log, after {#inspect} and +pp+, and the one a structured
+    # logger takes.
+    #
+    # @return [Hash{Symbol => Object}]
+    def as_json(*) = to_h.to_h { |key, value| [key, placeholder(key, value) || printable(key, value)] }
+
+    # Without this, +JSON.generate+ would write the configuration as one
+    # String, its {#to_s}, and ActiveSupport would not come by {#as_json}
+    # where +to_json+ is what is called.
+    #
+    # @param state [JSON::State, nil] passed by +JSON.generate+
+    # @return [String] {#as_json} as a JSON object
+    def to_json(state = nil) = as_json.to_json(state)
+
     private
 
     # Blanks the +user:password@+ part of a URL, keeping the host visible.
@@ -306,16 +328,32 @@ module ZammadAPI
       "#{scheme}#{REDACTION}#{rest[boundary..]}"
     end
 
-    def render(key, value)
-      return REDACTION if REDACTED_ATTRIBUTES.include?(key) && value
-      # Loggers and procs have verbose default inspect output that would drown
-      # out the rest of the configuration.
-      return "#<#{value.class}>" if key == :logger
-      return "#<#{value.class}>" if key == :middleware && value
-      return redacted_url.inspect if key == :url
-      return redact_userinfo(value).inspect if key == :proxy && value
+    # One option as {#inspect} prints it. What stands in for a value is
+    # printed bare, and a value as it inspects.
+    def render(key, value) = placeholder(key, value) || printable(key, value).inspect
 
-      value.inspect
+    # What is shown in place of an option that is not shown itself, where it
+    # is one of those. One rule for {#inspect} and {#as_json}: a second
+    # copy of which options are credentials is the copy that misses the
+    # next one.
+    #
+    # @return [String, nil]
+    def placeholder(key, value)
+      return REDACTION if REDACTED_ATTRIBUTES.include?(key) && value
+
+      # Loggers and procs have verbose default inspect output that would drown
+      # out the rest of the configuration, and an encoder walks into whatever
+      # they hold.
+      "#<#{value.class}>" if key == :logger || (key == :middleware && value)
+    end
+
+    # An option that is shown, as it may be: a URL without the credentials
+    # it carries.
+    def printable(key, value)
+      return redacted_url if key == :url
+      return redact_userinfo(value) if key == :proxy && value
+
+      value
     end
 
     # The type check comes before the pattern, because every check after it

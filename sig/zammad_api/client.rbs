@@ -41,6 +41,8 @@ module ZammadAPI
     def on_behalf_of: (String | Integer identifier) -> Client
                     | [T] (String | Integer identifier) { (Client) -> T } -> T
     def inspect: () -> String
+    def as_json: (*untyped) -> Hash[Symbol, untyped]
+    def to_json: (?untyped state) -> String
     def method_missing: (Symbol, *untyped) -> untyped
     def respond_to_missing?: (Symbol, ?bool) -> bool
 
