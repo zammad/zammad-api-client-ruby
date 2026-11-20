@@ -74,11 +74,14 @@ module ZammadAPI
     def self.not_a_json_value_message: (untyped value, untyped key) -> String
     def self.retry_options: (Config config) -> Hash[Symbol, untyped]
     def self.retried?: (Config config, Symbol method, Response response) -> bool
+    def self.description: (Config config, String? on_behalf_of) -> Hash[Symbol, untyped]
 
     def initialize: (Config) -> void
     def with_on_behalf_of: ((String | Integer)? identifier) -> Transport
     def with_config: (Config) -> Transport
     def inspect: () -> String
+    def as_json: (*untyped) -> Hash[Symbol, untyped]
+    def to_json: (?untyped state) -> String
 
     def request: (Symbol method, String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?, ?resource_class: Class?) -> Response
 

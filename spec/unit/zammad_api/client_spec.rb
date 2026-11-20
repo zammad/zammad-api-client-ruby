@@ -1068,6 +1068,48 @@ RSpec.describe ZammadAPI::Client do
     end
   end
 
+  # ActiveSupport serializes an object as its instance variables. For a
+  # client that was the configuration and the transport, credentials
+  # included, and then every record of every resource: a proxy is
+  # Enumerable, which is serialized as its elements. It is not loaded here:
+  # what is asked is what it asks, and that the answer is this class's own.
+  describe 'serializing as JSON' do
+    it 'answers as_json itself, where ActiveSupport would answer for any object' do
+      expect(described_class.instance_method(:as_json).owner).to be(described_class)
+    end
+
+    it 'is the url and the auth scheme' do
+      expect(unit_client.as_json).to eq({ url: 'http://zammad.test/', auth: :http_token })
+    end
+
+    it 'names the user a scoped client acts for' do
+      expect(unit_client.on_behalf_of('agent@example.com').as_json).to include(on_behalf_of: 'agent@example.com')
+    end
+
+    it 'writes that as a JSON object' do
+      expect(unit_client.to_json).to eq('{"url":"http://zammad.test/","auth":"http_token"}')
+    end
+
+    it 'does not leak the token' do
+      expect(unit_client(http_token: 'super-secret').to_json).not_to include('super-secret')
+    end
+
+    it 'stays that nested inside another structure' do
+      expect(JSON.generate(event: 'sync', client: unit_client(http_token: 'super-secret')))
+        .to eq('{"event":"sync","client":{"url":"http://zammad.test/","auth":"http_token"}}')
+    end
+
+    it 'makes no request' do
+      unit_client.to_json
+
+      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+    end
+
+    it 'does not ask the transport, which may be the test kit\'s' do
+      expect(ZammadAPI::Test.new.client.as_json).to eq({ url: 'https://zammad.test/', auth: :http_token })
+    end
+  end
+
   # A proxy holds nothing but the client's transport and the resource class,
   # and `client.tickets` is the idiom every call starts with - each one used to
   # allocate a fresh one.

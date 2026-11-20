@@ -1590,6 +1590,31 @@ RSpec.describe ZammadAPI::Transport do
     end
   end
 
+  # ActiveSupport serializes an object as its instance variables, and one of
+  # a transport's is the Faraday connection. It is not loaded here: what is
+  # asked is what it asks, and that the answer is this class's own.
+  describe 'serializing as JSON' do
+    let(:transport) do
+      unit_transport(http_token: 'tok-s3cret', proxy: 'http://puser:pproxy-s3cret@proxy.test:8080')
+    end
+
+    it 'answers as_json itself, where ActiveSupport would answer for any object' do
+      expect(described_class.instance_method(:as_json).owner).to be(described_class)
+    end
+
+    it 'is the instance and the authentication scheme' do
+      expect(transport.as_json).to eq({ url: 'http://zammad.test/', auth: :http_token })
+    end
+
+    it 'names an on_behalf_of scope' do
+      expect(transport.with_on_behalf_of('agent@example.com').as_json).to include(on_behalf_of: 'agent@example.com')
+    end
+
+    it 'writes that as a JSON object, with neither the token nor the proxy password' do
+      expect(JSON.generate(transport: transport)).to eq('{"transport":{"url":"http://zammad.test/","auth":"http_token"}}')
+    end
+  end
+
   describe '#with_config' do
     it 'applies the new configuration' do
       expect(unit_transport.with_config(ZammadAPI::Config.new(**unit_config(timeout: 7))).config.timeout).to eq(7)

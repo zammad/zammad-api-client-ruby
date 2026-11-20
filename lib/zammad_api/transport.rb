@@ -1034,6 +1034,18 @@ module ZammadAPI
       !Faraday::Retry::Middleware.new(nil, options).calculate_sleep_amount(1, { response_headers: Faraday::Utils::Headers.new(response.headers) }).nil?
     end
 
+    # What {#inspect} says of a transport or of a client, for a JSON
+    # encoder. Public for {Client#as_json}, whose transport may be another
+    # kind than this one.
+    #
+    # @api private
+    # @param config [Config]
+    # @param on_behalf_of [String, nil]
+    # @return [Hash{Symbol => Object}]
+    def self.description(config, on_behalf_of)
+      { url: config.redacted_url, auth: config.authentication_scheme, on_behalf_of: on_behalf_of }.compact
+    end
+
     # @param config [Config]
     def initialize(config)
       @config       = config
@@ -1082,6 +1094,20 @@ module ZammadAPI
     def inspect
       "#<#{self.class.name} url=#{config.redacted_url.inspect} auth=#{config.authentication_scheme}#{" on_behalf_of=#{on_behalf_of.inspect}" if on_behalf_of}>"
     end
+
+    # The transport for a JSON encoder: what {#inspect} says, and nothing
+    # else.
+    #
+    # ActiveSupport serializes an object as its instance variables, and
+    # here one of them is the Faraday connection, for which {#inspect} has
+    # said why it is not printed. Every record holds its transport.
+    #
+    # @return [Hash{Symbol => Object}]
+    def as_json(*) = Transport.description(config, on_behalf_of)
+
+    # @param state [JSON::State, nil] passed by +JSON.generate+
+    # @return [String] {#as_json} as a JSON object
+    def to_json(state = nil) = as_json.to_json(state)
 
     # Performs a request and raises on anything but a 2xx response.
     #

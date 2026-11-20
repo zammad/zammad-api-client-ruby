@@ -939,6 +939,13 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   Elsewhere it raises `ZammadAPI::Error`, naming the key and the class and not the value. An
   object with a `to_json` of its own still writes itself, and a `Time` or a `Date` is still
   sent as its text, which Zammad reads.
+- `to_json` and `as_json` of a configuration, a client and a transport hold no credential.
+  With ActiveSupport loaded, which serializes an object as what it holds, `config.to_json`
+  wrote the token, the password and the proxy credentials in full, and `client.to_json`
+  did the same and then requested every page of every resource, a proxy being Enumerable.
+  So did a log line or an error report that serialized something holding either. A
+  configuration is now written with what `inspect` blanks blanked, and a client as its URL,
+  the way it authenticates and any `on_behalf_of` scope.
 
 ### Changed
 

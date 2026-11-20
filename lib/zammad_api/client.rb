@@ -376,6 +376,23 @@ module ZammadAPI
       "#<#{self.class.name} url=#{config.redacted_url.inspect} auth=#{config.authentication_scheme}#{" on_behalf_of=#{scope.inspect}" if scope}>"
     end
 
+    # The client for a JSON encoder: what {#inspect} says, and nothing else.
+    #
+    # ActiveSupport gives every object an +as_json+ that is its instance
+    # variables, and builds +to_json+ on it. For a client those are the
+    # configuration, the transport and the resource proxies, so in a Rails
+    # app +client.to_json+ - or a log line or an error report serializing
+    # something that holds the client - wrote the credentials through the
+    # first two, and then read every record of every resource through the
+    # third: a proxy is Enumerable, which is serialized as its elements.
+    #
+    # @return [Hash{Symbol => Object}]
+    def as_json(*) = Transport.description(config, @transport.on_behalf_of)
+
+    # @param state [JSON::State, nil] passed by +JSON.generate+
+    # @return [String] {#as_json} as a JSON object
+    def to_json(state = nil) = as_json.to_json(state)
+
     def method_missing(name, *args)
       return super if CONVERSION_METHODS.include?(name) || name.to_s.end_with?('=', '!', '?')
 
