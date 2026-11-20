@@ -486,36 +486,73 @@ RSpec.describe ZammadAPI::Collection do
 
     it 'sorts ascending by an attribute named on its own' do
       collection.order(:name).to_a
-      expect(sorted_request('name', 'asc')).to have_been_made
+      expect(sorted_request('name,id', 'asc,asc')).to have_been_made
     end
 
     it 'sorts the way a keyword says' do
       collection.order(name: :desc).to_a
-      expect(sorted_request('name', 'desc')).to have_been_made
+      expect(sorted_request('name,id', 'desc,asc')).to have_been_made
     end
 
     # Zammad pairs the two lists by position and skips an attribute that has
     # no direction, so each attribute is sent with one.
     it 'sorts by several attributes, each with a direction' do
       collection.order(:active, name: :desc).to_a
-      expect(sorted_request('active,name', 'asc,desc')).to have_been_made
+      expect(sorted_request('active,name,id', 'asc,desc,asc')).to have_been_made
     end
 
     it 'takes an attribute and a direction as strings' do
       collection.order('active', 'name' => 'DESC').to_a
-      expect(sorted_request('active,name', 'asc,desc')).to have_been_made
+      expect(sorted_request('active,name,id', 'asc,desc,asc')).to have_been_made
     end
 
     it 'sorts within an earlier order when chained' do
       collection.order(:active).order(name: :desc).to_a
-      expect(sorted_request('active,name', 'asc,desc')).to have_been_made
+      expect(sorted_request('active,name,id', 'asc,desc,asc')).to have_been_made
     end
 
     it 'keeps the sort on every page it walks' do
       stub_request(:get, url).with(query: hash_including('page' => '1')).to_return(json_response(full_page))
 
       collection.order(:name).to_a
-      expect(sorted_request('name', 'asc').with(query: hash_including('page' => '2'))).to have_been_made
+      expect(a_request(:get, url).with(query: hash_including('sort_by' => 'name,id', 'order_by' => 'asc,asc', 'page' => '2'))).to have_been_made
+    end
+
+    # Zammad orders by the columns it is given and by nothing after them, and
+    # PostgreSQL does not hand rows that tie back in the same order from one
+    # LIMIT and OFFSET to the next. Seen against a Zammad that searches
+    # through SQL: 214 tickets sorted by state_id and walked ten at a time
+    # came back as 214 records and 151 tickets.
+    context 'with records that tie on what they are sorted by' do
+      it 'sorts them by id last, so that they keep one order from page to page' do
+        collection.order(:active).to_a
+        expect(sorted_request('active,id', 'asc,asc')).to have_been_made
+      end
+
+      it 'does so for a single page, whose number means nothing otherwise' do
+        collection.order(:active).page(3, per_page: 10).to_a
+        expect(a_request(:get, url).with(query: hash_including('sort_by' => 'active,id', 'order_by' => 'asc,asc', 'page' => '3'))).to have_been_made
+      end
+
+      it 'adds nothing to a sort by id' do
+        collection.order(id: :desc).to_a
+        expect(sorted_request('id', 'desc')).to have_been_made
+      end
+
+      it 'adds nothing where id is named among the attributes, wherever it stands' do
+        collection.order(:id, name: :desc).to_a
+        expect(sorted_request('id,name', 'asc,desc')).to have_been_made
+      end
+
+      it 'leaves a further order by id to the caller' do
+        collection.order(:active).order(id: :desc).to_a
+        expect(sorted_request('active,id', 'asc,desc')).to have_been_made
+      end
+
+      it 'sends no sort for a collection that asked for none' do
+        collection.to_a
+        expect(a_request(:get, url).with(query: hash_including({})) { !it.uri.query.match?(/sort_by|order_by/) }).to have_been_made
+      end
     end
 
     it 'keeps the sort on an explicit page' do
@@ -605,8 +642,16 @@ RSpec.describe ZammadAPI::Collection do
       it 'sorts, though the index of the same resource does not' do
         client.tickets.search('printer').order(created_at: :desc).to_a
 
-        expect(a_request(:get, search_url).with(query: hash_including('query' => 'printer', 'sort_by' => 'created_at', 'order_by' => 'desc')))
+        expect(a_request(:get, search_url).with(query: hash_including('query' => 'printer', 'sort_by' => 'created_at,id', 'order_by' => 'desc,asc')))
           .to have_been_made
+      end
+
+      # What a search sorts by where it is not told differs by resource, so a
+      # column named here would replace that order.
+      it 'sends no sort for a search that asked for none' do
+        client.tickets.search('printer').to_a
+
+        expect(a_request(:get, search_url).with(query: hash_including({})) { !it.uri.query.match?(/sort_by|order_by/) }).to have_been_made
       end
     end
 

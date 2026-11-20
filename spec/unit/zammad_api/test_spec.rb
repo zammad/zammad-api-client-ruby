@@ -449,19 +449,19 @@ RSpec.describe ZammadAPI::Test do
 
     describe 'query matching' do
       it 'matches a stub that names a subset of the parameters' do
-        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name' })
+        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name,id' })
 
         expect(client.groups.order(:name).first.id).to eq(1)
       end
 
       it 'does not answer a request without those parameters' do
-        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name' })
+        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name,id' })
 
         expect { client.groups.all.to_a }.to raise_error(described_class::UnstubbedRequestError)
       end
 
       it 'ignores the parameters the client adds itself' do
-        zammad.stub(:get, 'api/v1/groups', body: [], query: { sort_by: 'name' })
+        zammad.stub(:get, 'api/v1/groups', body: [], query: { sort_by: 'name,id' })
 
         expect { client.groups.order(:name).to_a }.not_to raise_error
       end
@@ -510,8 +510,8 @@ RSpec.describe ZammadAPI::Test do
       end
 
       it 'still sequences two stubs that share a scope' do
-        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name' })
-        zammad.stub(:get, 'api/v1/groups', body: [{ id: 2 }], query: { sort_by: 'name' })
+        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name,id' })
+        zammad.stub(:get, 'api/v1/groups', body: [{ id: 2 }], query: { sort_by: 'name,id' })
 
         expect(client.groups.all.order(:name).page(1, per_page: 1).map(&:id)).to eq([1])
         expect(client.groups.all.order(:name).page(1, per_page: 1).map(&:id)).to eq([2])

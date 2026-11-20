@@ -825,9 +825,35 @@ module ZammadAPI
     def page_query(page, per_page)
       return @query if !@paginated
 
-      query = @query.merge(page: page, per_page: per_page)
+      query = tie_broken.merge(page: page, per_page: per_page)
 
       @search && @page.nil? ? query.merge(with_total_count: true) : query
+    end
+
+    # The query with +id+ as the last column of the sort it names.
+    #
+    # Zammad orders by the columns it is given and by nothing after them,
+    # an index and a search alike, and PostgreSQL does not hand rows that
+    # tie back in the same order from one LIMIT and OFFSET to the next. So
+    # the pages of `order(:state_id)` did not add up to the records: a
+    # ticket could be on two of them and another on none. A search of 214
+    # tickets walked ten at a time came back as 214 records and 151
+    # tickets, and no page repeated another, so nothing raised.
+    #
+    # Only the request is given the column. What {#order} recorded is what
+    # the caller wrote, and `order(:name).order(:id)` is still theirs to
+    # write. A sort that names +id+ anywhere has no ties left to break.
+    #
+    # A collection that names no sort is sent none. An index is served by
+    # id then, and what a search sorts by where it is not told differs by
+    # resource, so naming a column here would replace that order.
+    #
+    # @return [Hash{Symbol => Object}]
+    def tie_broken
+      columns = sorted_by
+      return @query if columns.empty? || columns.key?('id')
+
+      @query.merge(sort_by: [*columns.keys, 'id'].join(','), order_by: [*columns.values, 'asc'].join(','))
     end
 
     # What the repeated-page guard compares two pages by: which records they

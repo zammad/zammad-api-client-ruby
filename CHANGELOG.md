@@ -1044,6 +1044,16 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   the mapping its JSON holds, and a transport as its URL and the way it authenticates, the
   test kit's included. `Marshal.dump` still holds the credentials: it is what a copy is
   rebuilt from.
+- A walk sorted by an attribute that records share hands each record over once. `order`
+  sent the columns it was given, and Zammad sorts by those and by nothing after them, an
+  index and a search alike, so PostgreSQL was free to hand rows that tie back in another
+  order for each page. Against a Zammad that searches through SQL,
+  `client.tickets.search('*').order(:state_id)` over 214 tickets came back as 214 records
+  and 151 tickets at every page size tried, and no page repeated another, so nothing
+  raised. Every sorted request names `id` as its last column now, unless the order names it
+  already: `order(:state_id)` is sent as `sort_by=state_id,id`, and a stub of the test kit
+  that is scoped to `sort_by` has to spell it that way. A search that is given no order is
+  sent none, as before.
 
 ### Changed
 

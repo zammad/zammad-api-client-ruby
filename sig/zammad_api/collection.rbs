@@ -83,6 +83,7 @@ module ZammadAPI
     def hits_past?: (Integer covered, Integer? total) -> bool
     def fetch: (Integer, Integer) -> [ Array[R], Integer, Integer? ]
     def page_query: (Integer page, Integer per_page) -> Hash[Symbol, untyped]
+    def tie_broken: () -> Hash[Symbol, untyped]
     def page_digest: (Array[Hash[Symbol, untyped]] decoded) -> Integer
     def total_count: () -> Integer?
     def clamp_per_page: (untyped) -> Integer

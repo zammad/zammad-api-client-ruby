@@ -563,7 +563,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
   describe '#order' do
     it 'returns a sorted collection of every record' do
       stub = stub_request(:get, url)
-        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => default_per_page.to_s, 'sort_by' => 'name', 'order_by' => 'desc' })
+        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => default_per_page.to_s, 'sort_by' => 'name,id', 'order_by' => 'desc,asc' })
         .to_return(json_response([]))
 
       proxy.order(name: :desc).to_a
@@ -875,7 +875,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
           ids << 2
           search.to_a
 
-          expect(a_request(:get, users_search).with(query: hash_including('ids' => ['1'], 'page' => '2', 'sort_by' => 'login')))
+          expect(a_request(:get, users_search).with(query: hash_including('ids' => ['1'], 'page' => '2', 'sort_by' => 'login,id')))
             .to have_been_made
         end
 
@@ -1129,7 +1129,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
 
     it 'sorts through order on the collection it returns' do
       stub = stub_request(:get, "#{url}/search")
-        .with(query: hash_including('query' => 'support', 'sort_by' => 'name', 'order_by' => 'asc'))
+        .with(query: hash_including('query' => 'support', 'sort_by' => 'name,id', 'order_by' => 'asc,asc'))
         .to_return(json_response([]))
 
       proxy.search('support').order(:name).to_a

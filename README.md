@@ -811,6 +811,14 @@ An attribute on its own sorts ascending and a keyword says which way one runs, a
 ActiveRecord. A second `order` sorts within the first, so
 `order(:active).order(name: :desc)` is the third line above.
 
+Every sorted request names `id` as its last column as well, unless the order names it
+already: `order(:active)` is sent as `sort_by=active,id`, which is also what the test kit
+records. Zammad sorts by the columns it is given and by nothing after them, so records that
+tie changed places from one page to the next, and a walk handed one over twice and passed
+another by. A search that is given no order is sent none and keeps Zammad's own, latest
+`updated_at` first for most resources, which breaks no tie either: give a search an `order`
+before walking records that a bulk update left with the same `updated_at`.
+
 Not every endpoint sorts. `/api/v1/tickets` and `/api/v1/users` are always served in id
 order — their controllers hardcode it and drop `sort_by` along with everything else they
 do not read — so `order` on those raises `ArgumentError` rather than handing back records
