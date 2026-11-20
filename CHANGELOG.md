@@ -989,6 +989,9 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `Content-Encoding` is not checked: a text attachment of 180 kB came back as its first
   16 kB. A server that compresses the file all the same is asked a second time without the
   header, and what it sends is decoded and not checked, as before.
+- `Client.new` without a `url:` raises `ZammadAPI::ConfigurationError`, as it does for one
+  that is `nil` or empty and as 1.x did. It raised `ArgumentError: missing keyword: :url`,
+  past a `rescue ZammadAPI::ConfigurationError` written for an incomplete configuration.
 
 ### Changed
 

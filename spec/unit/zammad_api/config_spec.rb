@@ -26,6 +26,11 @@ RSpec.describe ZammadAPI::Config do
         .to raise_error(ZammadAPI::ConfigurationError, 'missing url in config')
     end
 
+    it 'rejects a url that was left out' do
+      expect { described_class.new(http_token: 'token') }
+        .to raise_error(ZammadAPI::ConfigurationError, 'missing url in config')
+    end
+
     it 'rejects a non-http scheme' do
       expect { build(url: 'ftp://example.com') }
         .to raise_error(ZammadAPI::ConfigurationError, 'config url needs to start with http:// or https://')

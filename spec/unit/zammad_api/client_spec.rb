@@ -13,8 +13,11 @@ RSpec.describe ZammadAPI::Client do
       expect(described_class.new(url: 'http://zammad.test/', http_token: 'token')).to be_a(described_class)
     end
 
+    # A required keyword, this was Ruby's `ArgumentError: missing keyword`,
+    # past the rescue written for an incomplete configuration.
     it 'surfaces configuration errors' do
-      expect { described_class.new(http_token: 'token') }.to raise_error(ArgumentError)
+      expect { described_class.new(http_token: 'token') }
+        .to raise_error(ZammadAPI::ConfigurationError, 'missing url in config')
     end
 
     it 'rejects a missing url' do

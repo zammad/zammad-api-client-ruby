@@ -149,8 +149,13 @@ module ZammadAPI
       options.except(*replaced).merge(overrides)
     end
 
+    # `url:` has a default so that leaving it out is answered by
+    # {#normalize_url}, with the ConfigurationError that building a client is
+    # documented to raise and that 1.x raised. As a required keyword it was
+    # Ruby that answered, with `ArgumentError: missing keyword: :url`, past
+    # the rescue a caller had written for an incomplete configuration.
     def initialize(
-      url:,
+      url: nil,
       user: nil,
       password: nil,
       http_token: nil,
