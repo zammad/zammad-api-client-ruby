@@ -91,6 +91,7 @@ module ZammadAPI
     def validate_ssl_verify!: () -> void
     def validate_middleware!: () -> void
     def validate_logger!: () -> void
+    def debug_needs_argument?: () -> bool
     def non_empty: (untyped) -> untyped
     def immutable: (untyped) -> untyped
   end

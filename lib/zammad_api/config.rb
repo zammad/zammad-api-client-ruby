@@ -50,7 +50,9 @@ module ZammadAPI
   #     adapter is given arguments; one named in +adapter+ as well is
   #     refused when the connection is built
   # @!attribute [r] logger
-  #   @return [Logger] where debug output goes
+  #   @return [Logger] where debug output goes. Any object will do whose
+  #     +debug+ can be called with a block and no argument, which is how
+  #     each line is handed over
   Config = Data.define(
     :url,
     :user,
@@ -541,10 +543,26 @@ module ZammadAPI
     # In 1.x this option was a flag, so `logger: true` is a plausible thing to
     # carry over. Without this it would be accepted here and raise NoMethodError
     # at the first request instead.
+    #
+    # Answering `debug` is not the whole of it. The transport calls it the
+    # way a Logger is called for a line that costs something to build, with
+    # a block and no argument, so a logger written as `def debug(message)`
+    # was accepted here and raised a bare ArgumentError at every request.
     def validate_logger!
-      return if logger.respond_to?(:debug)
+      raise ConfigurationError, 'config logger needs to respond to debug' if !logger.respond_to?(:debug)
+      return if !debug_needs_argument?
 
-      raise ConfigurationError, 'config logger needs to respond to debug'
+      raise ConfigurationError, 'config logger needs a debug that can be called with a block and no argument, as Logger#debug is: ' \
+                                'this one requires an argument'
+    end
+
+    # A logger that answers `respond_to?` for a method it does not have -
+    # one that forwards through `method_missing` and says so nowhere else -
+    # cannot be asked, and is taken at its word.
+    def debug_needs_argument?
+      logger.method(:debug).parameters.any? { |kind, _| %i[req keyreq].include?(kind) }
+    rescue NameError
+      false
     end
 
     # Not called `presence`: that is the name of a public method ActiveSupport

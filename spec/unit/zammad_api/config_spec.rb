@@ -292,6 +292,37 @@ RSpec.describe ZammadAPI::Config do
       expect { build(logger: true) }
         .to raise_error(ZammadAPI::ConfigurationError, 'config logger needs to respond to debug')
     end
+
+    # Each line is handed over as a block, so this was accepted and raised
+    # a bare ArgumentError at every request.
+    it 'rejects a debug that requires an argument' do
+      logger = Class.new { def debug(message) = message }.new
+
+      expect { build(logger: logger) }
+        .to raise_error(ZammadAPI::ConfigurationError, /\Aconfig logger needs a debug that can be called with a block and no argument/)
+    end
+
+    it 'rejects a debug that requires a keyword' do
+      logger = Class.new { def debug(message = nil, level:) = [message, level] }.new
+
+      expect { build(logger: logger) }.to raise_error(ZammadAPI::ConfigurationError, /requires an argument/)
+    end
+
+    it 'accepts a debug that takes its message as an option, as Logger#debug does' do
+      logger = Class.new { def debug(message = nil) = message || yield }.new
+
+      expect(build(logger: logger).logger).to be(logger)
+    end
+
+    # Such a logger cannot be asked what its debug takes.
+    it 'accepts a logger that forwards debug without having the method' do
+      logger = Class.new do
+        def respond_to?(name, *) = name == :debug || super
+        def method_missing(name, *) = name == :debug ? nil : super # rubocop:disable Style/MissingRespondToMissing
+      end.new
+
+      expect(build(logger: logger).logger).to be(logger)
+    end
   end
 
   describe 'numeric validation' do
