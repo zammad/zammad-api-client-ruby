@@ -1074,6 +1074,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   the parameter had been left out. A `nil` and an empty Hash inside a list were refused for
   that reason already, and a `search` refused an empty `condition`; a condition holding an
   empty Hash beside one that is written lost it in the same way, and is refused now too.
+- An `http_token` or `oauth2_token` of nothing but whitespace is taken for unset, as an
+  empty one is, and one that is no String raises `ZammadAPI::ConfigurationError`. Reading an
+  empty token file gives `"\n"`, and with it the client was built, reported
+  `auth=http_token` and sent `Authorization: Token` with nothing after it. `http_token:
+  12345`, `:abc` and `['a']` were sent as they print, and a Symbol was never asked for the
+  line break a String is refused for.
 
 ### Changed
 

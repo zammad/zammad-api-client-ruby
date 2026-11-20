@@ -167,6 +167,55 @@ RSpec.describe ZammadAPI::Config do
       expect { build(http_token: '', oauth2_token: '', user: '', password: '') }
         .to raise_error(ZammadAPI::ConfigurationError, 'missing user in config')
     end
+
+    # What reading an empty token file gives. The transport takes the
+    # whitespace off the token it sends, so the client was built, reported
+    # auth=http_token and sent `Authorization: Token` with nothing after it.
+    context 'with a token of nothing but whitespace' do
+      ["  \n", "\t", "\r\n", ' '].each do |blank|
+        it "treats #{blank.inspect} as absent, for either token" do
+          expect { build(http_token: blank) }.to raise_error(ZammadAPI::ConfigurationError, 'missing user in config')
+          expect { build(http_token: nil, oauth2_token: blank) }.to raise_error(ZammadAPI::ConfigurationError, 'missing user in config')
+        end
+      end
+
+      it 'does not count it as a second way to authenticate' do
+        expect(build(http_token: "\n", user: 'u', password: 'p').authentication_scheme).to eq(:basic)
+      end
+
+      it 'leaves the scheme it would have replaced in an override alone' do
+        expect(build(http_token: nil, user: 'u', password: 'p').with(http_token: "  \n")).to have_attributes(http_token: nil, user: 'u', password: 'p')
+      end
+
+      it 'still replaces the scheme for a token with something in it' do
+        expect(build(http_token: nil, user: 'u', password: 'p').with(http_token: " abc\n")).to have_attributes(http_token: " abc\n", user: nil, password: nil)
+      end
+
+      it 'keeps a password of spaces, which basic authentication carries as it is' do
+        expect(build(http_token: nil, user: 'u', password: '   ').password).to eq('   ')
+      end
+    end
+
+    # It was sent as it prints, and a Symbol holding a line break passed the
+    # check that asks a String for one.
+    context 'with a token that is no String' do
+      { 12_345 => 'Integer', :abc => 'Symbol', ['a'] => 'Array', true => 'TrueClass' }.each do |value, kind|
+        it "rejects #{kind == 'Integer' ? 'an' : 'a'} #{kind}" do
+          expect { build(http_token: value) }
+            .to raise_error(ZammadAPI::ConfigurationError, "config http_token needs to be a string, got #{kind}")
+        end
+      end
+
+      it 'rejects one for oauth2_token' do
+        expect { build(http_token: nil, oauth2_token: 99) }
+          .to raise_error(ZammadAPI::ConfigurationError, 'config oauth2_token needs to be a string, got Integer')
+      end
+
+      it 'rejects a Symbol that holds a line break, which was never asked for one' do
+        expect { build(http_token: :"abc\r\nX-Injected: 1") }
+          .to raise_error(ZammadAPI::ConfigurationError, 'config http_token needs to be a string, got Symbol')
+      end
+    end
   end
 
   describe 'defaults' do
