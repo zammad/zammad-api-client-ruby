@@ -876,7 +876,7 @@ client.tickets.search('printer', condition: {
 A query string does not mark where one element of a list ends, and Rails begins a new one
 only at a key the element before it has too. The elements above all carry `operator`, and
 the client writes that first, so they arrive as written. A list whose elements share no
-such key, a list directly inside a list, an empty Hash inside a list and a key with an empty
+such key, a list directly inside a list, a Hash with no value in it and a key with an empty
 name cannot be carried at all and raise `ArgumentError`; the JSON body of `client.post` takes
 any structure.
 

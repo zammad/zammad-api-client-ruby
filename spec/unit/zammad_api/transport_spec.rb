@@ -435,6 +435,52 @@ RSpec.describe ZammadAPI::Transport do
       end
     end
 
+    # The encoder writes a pair for each value and has none to write for a
+    # Hash without one, so the parameter was not in the request and Zammad
+    # answered as if it had been left out: `query: {filter: {}, a: 1}` asked
+    # for `?a=1`.
+    context 'with a Hash that holds no value' do
+      it 'refuses one under a parameter, by its name' do
+        expect { described_class.stringify_query(filter: {}, a: 1) }
+          .to raise_error(ArgumentError, /query parameter filter is a Hash with no value in it.*as if the parameter had been left out/)
+      end
+
+      it 'refuses one that holds nothing but such Hashes, which is not written either' do
+        expect { described_class.stringify_query(filter: { a: { b: {} } }) }
+          .to raise_error(ArgumentError, /query parameter filter is a Hash with no value in it/)
+      end
+
+      it 'refuses one further in, beside a value that is written' do
+        expect { described_class.stringify_query(filter: { a: { b: {} }, c: 1 }) }
+          .to raise_error(ArgumentError, /query parameter filter\[a\] is a Hash with no value in it/)
+      end
+
+      it 'refuses one inside an element of a list' do
+        expect { described_class.stringify_query(list: [{ operator: 'is', value: {} }]) }
+          .to raise_error(ArgumentError, /query parameter list\[0\]\[value\] is a Hash with no value in it/)
+      end
+
+      it 'refuses what converts to one' do
+        expect { described_class.stringify_query(filter: StrongParameters.new({})) }
+          .to raise_error(ArgumentError, /query parameter filter is a Hash with no value in it/)
+      end
+
+      it 'takes a query with no parameter at all' do
+        expect(described_class.stringify_query({})).to eq({})
+      end
+
+      it 'takes an empty list and an empty String, which are written' do
+        expect(described_class.stringify_query(filter: { ids: [], name: '' })).to eq('filter' => { 'ids' => [], 'name' => '' })
+      end
+
+      it 'makes no request for one' do
+        stub = stub_request(:get, url).with(query: hash_including({})).to_return(json_response([]))
+
+        expect { unit_transport.get('api/v1/groups', operation: 'test', query: { filter: {}, a: 1 }) }.to raise_error(ArgumentError)
+        expect(stub).not_to have_been_requested
+      end
+    end
+
     # A query string has no way to write a key with an empty name: `[]`
     # inside a structure, which Rails reads as a list, and nothing but the
     # value at the top level, which Rails drops.

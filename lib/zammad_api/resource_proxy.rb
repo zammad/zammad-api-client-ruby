@@ -525,11 +525,13 @@ module ZammadAPI
 
     # The keywords of a search, checked at the call that wrote them.
     #
-    # Through {Transport.stringify_query} for the refusals it makes at any
-    # depth - a nil value, two spellings of one key inside a +condition+,
-    # and a list of conditions a query string cannot keep apart - because
-    # left to the request they would be reported when the collection is
-    # first enumerated, some lines away from the search that wrote them.
+    # Through what {Transport.stringify_query} is made of, for the refusals
+    # it makes at any depth - a nil value, two spellings of one key inside a
+    # +condition+, a list of conditions a query string cannot keep apart
+    # and, once the keywords themselves were asked, a Hash further in that
+    # holds no value - because left to the request they would be reported
+    # when the collection is first enumerated, some lines away from the
+    # search that wrote them.
     # What it returns is what each keyword is asked about below, and not what
     # is sent: the collection sends the values as they were given - a copy of
     # them, see {#search} - and the transport stringifies them then, the
@@ -542,10 +544,11 @@ module ZammadAPI
       unknown    = normalized.keys - search_filter_keys
       raise ArgumentError, unknown_search_filter_message(unknown) if !unknown.empty?
 
-      sent  = Transport.stringify_query(normalized)
+      sent  = Transport.stringify_query_hash(normalized, nil)
       empty = normalized.select { |name, _| empty_search_filter?(sent.fetch(name.to_s)) }
       raise ArgumentError, empty_search_filter_message(empty) if !empty.empty?
 
+      Transport.refuse_unwritten!(sent, nil)
       normalized
     end
 

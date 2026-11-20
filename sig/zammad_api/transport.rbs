@@ -51,6 +51,8 @@ module ZammadAPI
     def self.blank_query_value: (String parameter) -> String
     def self.redact: (untyped value) -> untyped
     def self.stringify_query: (untyped) -> Hash[String, untyped]
+    def self.refuse_unwritten!: (Hash[String, untyped] query, String? prefix) -> Hash[String, untyped]
+    def self.unwritten_query_message: (String path) -> String
     def self.stringify_query_hash: (Hash[untyped, untyped], String?) -> Hash[String, untyped]
     def self.stringify_query_value: (String, untyped) -> untyped
     def self.stringify_query_scalar: (String key, untyped value) -> String

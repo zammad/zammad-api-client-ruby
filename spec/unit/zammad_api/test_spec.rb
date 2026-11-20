@@ -660,6 +660,11 @@ RSpec.describe ZammadAPI::Test do
         .to raise_error(ArgumentError, /query parameter sort_by is nil/)
     end
 
+    it 'rejects a query value with nothing in it the way the transport does' do
+      expect { client.get('api/v1/groups', query: { filter: {} }) }
+        .to raise_error(ArgumentError, /query parameter filter is a Hash with no value in it/)
+    end
+
     it 'records requests oldest first' do
       client.groups.find(1).update!(name: 'Renamed')
 
