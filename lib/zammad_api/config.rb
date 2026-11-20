@@ -169,11 +169,11 @@ module ZammadAPI
       # steep:ignore:start
       super(
         url:            immutable(normalize_url(url)),
-        user:           immutable(presence(user)),
-        password:       immutable(presence(password)),
-        http_token:     immutable(presence(http_token)),
-        oauth2_token:   immutable(presence(oauth2_token)),
-        user_agent:     immutable(presence(user_agent) || DEFAULT_USER_AGENT),
+        user:           immutable(non_empty(user)),
+        password:       immutable(non_empty(password)),
+        http_token:     immutable(non_empty(http_token)),
+        oauth2_token:   immutable(non_empty(oauth2_token)),
+        user_agent:     immutable(non_empty(user_agent) || DEFAULT_USER_AGENT),
         timeout:        timeout,
         open_timeout:   open_timeout,
         retries:        retries,
@@ -362,7 +362,7 @@ module ZammadAPI
     # `end_with?` and die there as a NoMethodError, past the ConfigurationError
     # a caller had wrapped the constructor in.
     def normalize_url(value)
-      raise ConfigurationError, 'missing url in config' if presence(value).nil?
+      raise ConfigurationError, 'missing url in config' if non_empty(value).nil?
       raise ConfigurationError, "config url needs to be a string, got #{value.class}" if !value.is_a?(String)
       raise ConfigurationError, 'config url needs to start with http:// or https://' if !SCHEME_PATTERN.match?(value)
       # Quoted through the redaction: what follows the scheme here is not a
@@ -500,7 +500,7 @@ module ZammadAPI
     # moment something tried to log it. The same mistake {#normalize_url}
     # already refuses for the instance URL.
     def normalize_proxy(value)
-      return nil if presence(value).nil?
+      return nil if non_empty(value).nil?
       raise ConfigurationError, "config proxy needs to be a string, got #{value.class}" if !value.is_a?(String)
 
       value
@@ -512,7 +512,7 @@ module ZammadAPI
     # client is documented to need, from inside the constructor, before any
     # of the validators below ran.
     def normalize_adapter(value)
-      return nil if presence(value).nil?
+      return nil if non_empty(value).nil?
       raise ConfigurationError, "config adapter needs to be a symbol or a string, got #{value.class}" if !value.is_a?(Symbol) && !value.is_a?(String)
 
       value.to_sym
@@ -547,7 +547,10 @@ module ZammadAPI
       raise ConfigurationError, 'config logger needs to respond to debug'
     end
 
-    def presence(value)
+    # Not called `presence`: that is the name of a public method ActiveSupport
+    # gives every object, and a private one here answered in its place, so
+    # `config.presence` raised NoMethodError in a Rails app.
+    def non_empty(value)
       return nil if value.nil?
       return nil if value.respond_to?(:empty?) && value.empty?
 

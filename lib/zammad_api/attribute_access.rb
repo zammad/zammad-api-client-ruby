@@ -107,7 +107,7 @@ module ZammadAPI
 
     # @return [Hash{Symbol => Object}] a deep copy of all attributes, safe to
     #   modify
-    def to_h = deep_dup(attributes)
+    def to_h = DeepCopy.writable_copy(attributes)
 
     # @return [Integer, nil]
     def id = attributes[:id]
@@ -333,10 +333,12 @@ module ZammadAPI
     # Recursively converts string keys to symbols, including inside arrays, so
     # that user supplied attributes behave the same as decoded responses, and
     # freezes the result. See {DeepCopy} for why the walk lives there.
+    #
+    # Its inverse, {DeepCopy.writable_copy}, is called where it is needed and
+    # has no helper here. It had one, named `deep_dup`, and a private method
+    # of that name answers in place of the public one ActiveSupport gives
+    # every object and calls on whatever a Hash or an Array holds: so
+    # `{ticket: ticket}.deep_dup` raised NoMethodError in a Rails app.
     def frozen_attributes(value) = DeepCopy.frozen_copy(value, symbolize_keys: true)
-
-    # The inverse of {#frozen_attributes}, for handing out a copy that callers
-    # may treat as their own.
-    def deep_dup(value) = DeepCopy.writable_copy(value)
   end
 end

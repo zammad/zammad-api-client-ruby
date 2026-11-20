@@ -444,6 +444,21 @@ RSpec.describe ZammadAPI::AttributeAccess do
     end
   end
 
+  # ActiveSupport gives every object a public `deep_dup`, and calls it on
+  # whatever a Hash or an Array holds. A private helper of that name here
+  # answered in its place, so `{ticket: ticket}.deep_dup` raised
+  # NoMethodError. It is not loaded here: what is asked is that the name is
+  # left to it.
+  describe 'the names ActiveSupport gives every object' do
+    it 'defines no deep_dup of its own' do
+      expect(described_class.private_method_defined?(:deep_dup)).to be(false)
+    end
+
+    it 'still hands out a deep copy from #to_h' do
+      expect(record.to_h).to eq(record.attributes).and(satisfy { !it[:preferences][:notes].frozen? })
+    end
+  end
+
   it 'rejects writes by default' do
     expect { record.name = 'other' }.to raise_error(NoMethodError, /read-only/)
   end
