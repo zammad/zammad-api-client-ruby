@@ -57,6 +57,7 @@ module ZammadAPI
     def self.misread_element_message: (String, Symbol) -> String
     def self.empty_query_name_message: (String? prefix) -> String
     def self.stringify_headers: (Hash[untyped, untyped]) -> Hash[String, String]
+    def self.stripped: (String text) -> String
     BLANK: Regexp
     def self.wire_text: (untyped value, String name) -> String
     LINE_BREAK_ADVICE: String

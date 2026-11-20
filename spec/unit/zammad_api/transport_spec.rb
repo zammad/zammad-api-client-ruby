@@ -64,8 +64,65 @@ RSpec.describe ZammadAPI::Transport do
         }
     end
 
-    it 'takes one that only ends in a line break, which Net::HTTP strips' do
-      expect(described_class.stringify_headers('X-Note' => "abc\n")).to eq('x-note' => "abc\n")
+    # Net::HTTP strips it, and it was left to: an adapter that does not was
+    # handed the value with the break on it.
+    it 'takes one that only ends in a line break, and hands it on without' do
+      expect(described_class.stringify_headers('X-Note' => "abc\n")).to eq('x-note' => 'abc')
+    end
+
+    it 'strips what Net::HTTP does from both ends, and nothing inside' do
+      expect(described_class.stringify_headers('X-Note' => " \tone two\r\n\r\n")).to eq('x-note' => 'one two')
+    end
+
+    it 'strips a line break after bytes that are invalid in the encoding, and keeps the encoding' do
+      value = described_class.stringify_headers('X-Note' => "abc\xFF\n").fetch('x-note')
+
+      expect(value).to eq("abc\xFF")
+      expect(value.encoding).to eq(Encoding::UTF_8)
+    end
+
+    it 'hands a value with nothing around it on as the String it was given' do
+      value = 'abc'
+
+      expect(described_class.stripped(value)).to be(value)
+    end
+
+    # WebMock is asked by Net::HTTP, which has stripped the headers by then.
+    # A middleware sees them as the adapter is handed them.
+    context 'with a configured header value that ends in a line break' do
+      def handed_to_the_adapter(**options)
+        seen     = nil
+        recorder = Class.new(Faraday::Middleware) do
+          define_method(:on_request) { |env| seen = env.request_headers.to_h }
+        end
+        stub_request(:get, url).to_return(json_response([]))
+        unit_transport(middleware: ->(builder) { builder.use(recorder) }, **options).get('api/v1/groups', operation: 'test')
+        seen
+      end
+
+      it 'hands the adapter an access token without it' do
+        expect(handed_to_the_adapter(http_token: "abc\n")['Authorization']).to eq('Token abc')
+      end
+
+      it 'hands the adapter an OAuth2 token without it' do
+        expect(handed_to_the_adapter(http_token: nil, oauth2_token: "abc\r\n")['Authorization']).to eq('Bearer abc')
+      end
+
+      it 'hands the adapter a user agent without it' do
+        expect(handed_to_the_adapter(user_agent: "my-app/1.0\n")['User-Agent']).to eq('my-app/1.0')
+      end
+
+      it 'hands the adapter a raw request header without it' do
+        seen     = nil
+        recorder = Class.new(Faraday::Middleware) do
+          define_method(:on_request) { |env| seen = env.request_headers['x-trace'] }
+        end
+        stub_request(:get, url).to_return(json_response([]))
+        unit_transport(middleware: ->(builder) { builder.use(recorder) })
+          .get('api/v1/groups', operation: 'test', headers: { 'X-Trace' => "t\r\n" })
+
+        expect(seen).to eq('t')
+      end
     end
 
     it 'carries a header value given in UTF-16 as the same text in UTF-8' do
@@ -1691,6 +1748,16 @@ RSpec.describe ZammadAPI::Transport do
     # encoding ASCII is no part of, for an identifier that names someone too.
     it 'refuses an identifier with a line break inside it' do
       expect { unit_transport.with_on_behalf_of("agent\nadmin") }.to raise_error(ArgumentError, /on_behalf_of holds a line break/)
+    end
+
+    # Net::HTTP strips it. The scope was held, and handed to any other
+    # adapter, with the break on it.
+    it 'holds an identifier that only ends in a line break without it' do
+      expect(unit_transport.with_on_behalf_of("agent\n").on_behalf_of).to eq('agent')
+    end
+
+    it 'refuses an identifier that is nothing once it is stripped' do
+      expect { unit_transport.with_on_behalf_of("\0") }.to raise_error(ArgumentError, /on_behalf_of needs the login/)
     end
 
     it 'refuses a blank identifier given in UTF-16' do
