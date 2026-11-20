@@ -1264,10 +1264,13 @@ module ZammadAPI
     #
     # Asked only where the bytes in hand are the bytes that were counted. A
     # body under a Content-Encoding may have been decoded on the way here,
-    # by an adapter that leaves both headers as they arrived - Net::HTTP
-    # drops the one and corrects the other - and one under a
-    # Transfer-Encoding is not framed by the count at all. A 204 has no
-    # body whatever a header beside it says.
+    # by an adapter that leaves both headers as they arrived. The default
+    # one does: Net::HTTP drops the one and corrects the other while it
+    # reads the body, and Faraday has taken its copy of the headers by
+    # then. So a compressed body cut short is not caught here, and
+    # {Resources::TicketArticleAttachment#download} asks for its file
+    # uncompressed. A body under a Transfer-Encoding is not framed by the
+    # count at all, and a 204 has no body whatever a header beside it says.
     #
     # Only a body that is short. One that is longer was not cut off.
     #

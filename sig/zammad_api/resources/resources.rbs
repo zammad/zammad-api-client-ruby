@@ -204,6 +204,12 @@ module ZammadAPI
       def initialize: (Transport, ?Hash[untyped, untyped]? attributes) -> void
       def download: () -> String
       def inspect: () -> String
+
+      private
+
+      UNENCODED: Hash[String, String]
+
+      def request_file: (Hash[String, String]? headers) -> Response
     end
   end
 end
