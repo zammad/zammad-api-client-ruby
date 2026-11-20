@@ -1027,6 +1027,15 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `client.get('api/v1/x#token=...')` printed the token in all three, since only what
   follows a `?` was read for credentials, and a fragment after a query was printed as the
   tail of its last value. It is no part of the request, which is sent without it as before.
+- The error for a request body that cannot be encoded quotes nothing from the body. Its
+  message repeated the JSON generator's and kept the generator's error as its cause, and
+  the generator quotes what it could not write: `client.users.create(login: 'a', password:
+  "hunter2\xFF")` raised an error whose backtrace printed `Invalid object: "hunter2\xFF"`,
+  and under json 3 a body naming one key twice was quoted whole in the message. The error
+  has no cause now and says only what this gem refused itself, by key and class, a Float
+  that is NaN or infinite included. A body that names one key twice, as `login:` and as
+  `'login'`, raises `ArgumentError` with both spellings, as a query does; json 2 sent both
+  and left the choice to Zammad.
 
 ### Changed
 
