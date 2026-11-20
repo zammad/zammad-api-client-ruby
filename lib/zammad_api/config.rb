@@ -131,6 +131,9 @@ module ZammadAPI
       basic:        %i[user password]
     }.freeze
 
+    # The credentials that are sent as they stand, in a header of their own.
+    TOKEN_OPTIONS = %i[http_token oauth2_token].freeze
+
     # Lays +overrides+ over +options+, dropping the credentials they replace.
     #
     # A configuration authenticates one way, so an override that names
@@ -152,11 +155,30 @@ module ZammadAPI
     # @param overrides [Hash{Symbol => Object}]
     # @return [Hash{Symbol => Object}]
     def self.merge_options(options, overrides)
-      named    = CREDENTIAL_OPTIONS.select { |_, keys| keys.any? { !overrides[it].to_s.empty? } }
+      named    = CREDENTIAL_OPTIONS.select { |_, keys| keys.any? { names_credential?(it, overrides[it]) } }
       replaced = named.empty? ? [] : CREDENTIAL_OPTIONS.except(*named.keys).values.flatten
 
       options.except(*replaced).merge(overrides)
     end
+
+    # Whether an override holds a credential, and so names its scheme. Not
+    # where it is nil or empty, and not a token of nothing but whitespace,
+    # which {#normalize_token} takes for none as well.
+    #
+    # @api private
+    # @return [Boolean]
+    def self.names_credential?(name, value)
+      !value.to_s.empty? && !(TOKEN_OPTIONS.include?(name) && blank_token?(value))
+    end
+
+    # Whether a token is one a header would carry nothing of.
+    #
+    # Asked of the bytes with +strip+, which is how {Transport.stripped}
+    # takes the whitespace off the token it sends.
+    #
+    # @api private
+    # @return [Boolean]
+    def self.blank_token?(value) = value.is_a?(String) && value.b.strip.empty?
 
     # `url:` has a default so that leaving it out is answered by
     # {#normalize_url}, with the ConfigurationError that building a client is
@@ -187,8 +209,8 @@ module ZammadAPI
         url:            immutable(normalize_url(url)),
         user:           immutable(non_empty(user)),
         password:       immutable(non_empty(password)),
-        http_token:     immutable(non_empty(http_token)),
-        oauth2_token:   immutable(non_empty(oauth2_token)),
+        http_token:     immutable(normalize_token(:http_token, http_token)),
+        oauth2_token:   immutable(normalize_token(:oauth2_token, oauth2_token)),
         user_agent:     immutable(non_empty(user_agent) || DEFAULT_USER_AGENT),
         timeout:        timeout,
         open_timeout:   open_timeout,
@@ -555,6 +577,26 @@ module ZammadAPI
       Transport.wire_text(value, "config #{name}")
     rescue ArgumentError => e
       raise ConfigurationError, e.message, cause: nil
+    end
+
+    # A token as it is held: text, or nil where there is none to send.
+    #
+    # One of nothing but whitespace is none. It is what reading an empty
+    # token file gives, and the transport takes the whitespace off the value
+    # it sends, so the client was built, reported +auth=http_token+ and
+    # sent +Authorization: Token+ with nothing after it. Taken for unset, as
+    # an empty String is, it is answered here with what is missing.
+    #
+    # And one that is no String is refused. It was sent as it prints, an
+    # Array as +["a"]+, and it passed {#validate_header_options!}, which
+    # asks a String for its line breaks and had nothing to ask a Symbol
+    # holding one. The class is named and the value is not: it is a
+    # credential, or was meant to be.
+    def normalize_token(name, value)
+      return nil if non_empty(value).nil?
+      raise ConfigurationError, "config #{name} needs to be a string, got #{value.class}" if !value.is_a?(String)
+
+      self.class.blank_token?(value) ? nil : value
     end
 
     # A proxy is the second string here that may carry credentials, and the

@@ -23,7 +23,10 @@ module ZammadAPI
     CREDENTIAL_OPTIONS: Hash[Symbol, Array[Symbol]]
 
     def self.new: (**untyped) -> instance
+    TOKEN_OPTIONS: Array[Symbol]
     def self.merge_options: (Hash[Symbol, untyped] options, Hash[Symbol, untyped] overrides) -> Hash[Symbol, untyped]
+    def self.names_credential?: (Symbol name, untyped value) -> bool
+    def self.blank_token?: (untyped value) -> bool
 
     attr_reader url: String
     attr_reader user: String?
@@ -74,6 +77,7 @@ module ZammadAPI
     private
 
     def redact_userinfo: (String) -> String
+    def normalize_token: (Symbol name, untyped value) -> String?
     def normalize_proxy: (untyped) -> String?
     def normalize_adapter: (untyped) -> Symbol?
     def render: (Symbol, untyped) -> String
