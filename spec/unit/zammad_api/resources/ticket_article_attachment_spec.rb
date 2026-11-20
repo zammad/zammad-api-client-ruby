@@ -103,6 +103,16 @@ RSpec.describe ZammadAPI::Resources::TicketArticleAttachment do
       expect(attachment.download.encoding).to eq(Encoding::BINARY)
     end
 
+    # Net::HTTP hands over what had arrived when the connection dropped,
+    # and that was returned as the file.
+    it 'raises for a file the connection was closed under, and does not return the part that arrived' do
+      stub_request(:get, download_url)
+        .to_return(status: 200, body: "\x89PNG\r\n".b, headers: { 'Content-Type' => 'image/png', 'Content-Length' => '1000' })
+
+      expect { attachment.download }
+        .to raise_error(ZammadAPI::ConnectionError, /\ACan't download attachment: the response from .+ ended 994 bytes short of the 1000/)
+    end
+
     it 'raises when the attachment is gone' do
       stub_request(:get, download_url).to_return(json_response({ error: 'not found' }, status: 404))
       expect { attachment.download }.to raise_error(ZammadAPI::NotFoundError)

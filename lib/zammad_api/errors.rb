@@ -28,7 +28,8 @@ module ZammadAPI
   class TransportError < Error; end
 
   # Raised when the connection to the Zammad instance could not be
-  # established (DNS, refused connection, TLS failure, ...).
+  # established (DNS, refused connection, TLS failure, ...), or was closed
+  # before the body of a response had arrived.
   class ConnectionError < TransportError; end
 
   # Raised when a request exceeded {Config#open_timeout} or {Config#timeout}.

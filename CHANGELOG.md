@@ -959,6 +959,13 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   and read again, a ticket was open twice and closed only at the third read. A lone stub
   stays in place to go on answering, and was taken for the first of the sequence the second
   one began.
+- A response the connection was closed under raises `ZammadAPI::ConnectionError` where its
+  body is shorter than its `Content-Length`. `Net::HTTP` hands over what had arrived
+  without a word, so `attachment.download` returned the first bytes of a file as the file,
+  and a raw request for anything that is not JSON did the same. Checked for a 2xx response
+  that names one `Content-Length` and neither a `Content-Encoding` nor a
+  `Transfer-Encoding`; a chunked body cut short raised already. The request is not sent
+  again.
 
 ### Changed
 

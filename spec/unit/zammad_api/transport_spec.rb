@@ -919,6 +919,98 @@ RSpec.describe ZammadAPI::Transport do
         .to raise_error(ZammadAPI::TimeoutError, %r{request to api/v1/groups\?token=\[REDACTED\] timed out})
     end
 
+    # Net::HTTP reads a body framed by Content-Length until the count is
+    # reached or the connection ends, and takes the second for the first.
+    # The bytes that had arrived came back as the response.
+    context 'when the connection closes before the body has arrived' do
+      def cut_off(headers = {}, status: 200, body: '0123456789')
+        stub_request(:get, url).to_return(status: status, body: body, headers: { 'Content-Length' => '1000' }.merge(headers))
+      end
+
+      it 'raises a ConnectionError for a body shorter than its Content-Length' do
+        cut_off({ 'Content-Type' => 'image/png' })
+
+        expect { unit_transport.get('api/v1/groups', operation: 'download attachment') }
+          .to raise_error(ZammadAPI::ConnectionError, %r{\ACan't download attachment: the response from http://zammad\.test/ ended 990 bytes short of the 1000})
+      end
+
+      it 'raises for a JSON body that is short, and still parses' do
+        cut_off({ 'Content-Type' => 'application/json' }, body: '[]')
+
+        expect { unit_transport.get('api/v1/groups', operation: 'test') }.to raise_error(ZammadAPI::ConnectionError, /998 bytes short/)
+      end
+
+      it 'raises for a body of which nothing arrived' do
+        cut_off(body: '')
+
+        expect { unit_transport.get('api/v1/groups', operation: 'test') }.to raise_error(ZammadAPI::ConnectionError, /1000 bytes short/)
+      end
+
+      it 'counts the bytes, not the characters' do
+        stub_request(:get, url).to_return(status: 200, body: 'ää', headers: { 'Content-Length' => '4', 'Content-Type' => 'text/plain; charset=utf-8' })
+
+        expect(unit_transport.get('api/v1/groups', operation: 'test').raw_body.bytesize).to eq(4)
+      end
+
+      it 'returns a body as long as its Content-Length' do
+        stub_request(:get, url).to_return(status: 200, body: '0123456789', headers: { 'Content-Length' => '10' })
+
+        expect(unit_transport.get('api/v1/groups', operation: 'test').raw_body).to eq('0123456789')
+      end
+
+      it 'returns a body that names no Content-Length' do
+        stub_request(:get, url).to_return(status: 200, body: '0123456789')
+
+        expect(unit_transport.get('api/v1/groups', operation: 'test').raw_body).to eq('0123456789')
+      end
+
+      # The bytes in hand may be the decoded ones, beside a count of the
+      # encoded ones, and a chunked body is not framed by the count.
+      it 'does not judge a body under a Content-Encoding or a Transfer-Encoding' do
+        [{ 'Content-Encoding' => 'br' }, { 'Transfer-Encoding' => 'chunked' }].each do |header|
+          cut_off(header)
+
+          expect(unit_transport.get('api/v1/groups', operation: 'test').raw_body).to eq('0123456789')
+        end
+      end
+
+      it 'does not judge a Content-Length that is not one figure' do
+        ['1000, 1000', 'many', ''].each do |announced|
+          cut_off({ 'Content-Length' => announced })
+
+          expect(unit_transport.get('api/v1/groups', operation: 'test').raw_body).to eq('0123456789')
+        end
+      end
+
+      it 'does not judge a 204, which has no body whatever is announced beside it' do
+        stub_request(:delete, url).to_return(status: 204, body: '', headers: { 'Content-Length' => '5' })
+
+        expect(unit_transport.delete('api/v1/groups', operation: 'test').status).to eq(204)
+      end
+
+      it 'leaves a body that is longer than announced alone' do
+        stub_request(:get, url).to_return(status: 200, body: '0123456789', headers: { 'Content-Length' => '4' })
+
+        expect(unit_transport.get('api/v1/groups', operation: 'test').raw_body).to eq('0123456789')
+      end
+
+      # The status is what such a response says, and the body is read for
+      # the message only.
+      it 'still raises the error its status names for one that is not a 2xx' do
+        cut_off({ 'Content-Type' => 'application/json' }, status: 404, body: '{"error":')
+
+        expect { unit_transport.get('api/v1/groups', operation: 'find object') }.to raise_error(ZammadAPI::NotFoundError)
+      end
+
+      it 'logs the response it then refuses' do
+        log = StringIO.new
+        cut_off
+
+        expect { unit_transport(logger: Logger.new(log)).get('api/v1/groups', operation: 'test') }.to raise_error(ZammadAPI::ConnectionError)
+        expect(log.string).to include('Zammad API response: GET api/v1/groups -> 200')
+      end
+    end
+
     # Net::HTTP raises Net::OpenTimeout for it, and the default adapter wraps
     # that into Faraday::ConnectionFailed with every other failure to connect,
     # so it was reported as an unreachable host and skipped the rescue that is

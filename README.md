@@ -1126,7 +1126,7 @@ ZammadAPI::Error
 ├── ZammadAPI::ParseError            unexpected response shape
 ├── ZammadAPI::PaginationError       endpoint ignored the page parameter
 ├── ZammadAPI::TransportError
-│   ├── ZammadAPI::ConnectionError   unreachable host or TLS failure
+│   ├── ZammadAPI::ConnectionError   unreachable host, TLS failure or a response cut short
 │   └── ZammadAPI::TimeoutError      exceeded timeout or open_timeout
 └── ZammadAPI::ResponseError         carries the HTTP response
     ├── ZammadAPI::ClientError       4xx
