@@ -87,6 +87,12 @@ module ZammadAPI
     # Seconds to wait before the first retry; doubles on each attempt.
     DEFAULT_RETRY_INTERVAL = 0.5
 
+    # The longest wait a configuration takes, in seconds: a little over
+    # three years, and the longest one every platform takes. macOS refuses a
+    # wait on a socket that is one second longer, and what came of it was a
+    # ConnectionError calling the instance unreachable.
+    MAX_SECONDS = 100_000_000
+
     # Attributes whose values must never be rendered.
     REDACTED_ATTRIBUTES = %i[password http_token oauth2_token].freeze
 
@@ -477,6 +483,11 @@ module ZammadAPI
       raise ConfigurationError, 'missing password in config' if password.nil?
     end
 
+    def too_long_message(name, value)
+      "config #{name} needs to be at most #{MAX_SECONDS} seconds, got #{value}. No value stands for no #{name == :retry_interval ? 'limit' : 'timeout'}: " \
+        'pass the longest wait that is acceptable.'
+    end
+
     def multiple_credentials_message(schemes)
       named = schemes.map { CREDENTIAL_OPTIONS.fetch(it).join(' and ') }.join(', ')
 
@@ -491,9 +502,16 @@ module ZammadAPI
     # written to close.
     def positive_number?(value) = value.is_a?(Numeric) && value.respond_to?(:positive?) && value.positive?
 
+    # A number has to be one the HTTP stack can wait for as well, and that
+    # is not every positive one. `timeout: Float::INFINITY`, the natural way
+    # to ask for no timeout, which is what 1.x had, was accepted, and every
+    # request then raised a bare RangeError from inside Net::HTTP, as it did
+    # for a figure past what a C long holds. An infinite +retry_interval+
+    # raised the same from the sleep before the first retry.
     def validate_numbers!
       { timeout: timeout, open_timeout: open_timeout, retry_interval: retry_interval }.each do |name, value|
         raise ConfigurationError, "config #{name} needs to be a positive number" if !positive_number?(value)
+        raise ConfigurationError, too_long_message(name, value) if value > MAX_SECONDS
       end
 
       raise ConfigurationError, 'config retries needs to be a non-negative integer' if !retries.is_a?(Integer) || retries.negative?
