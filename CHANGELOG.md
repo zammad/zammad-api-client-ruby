@@ -992,6 +992,9 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - `Client.new` without a `url:` raises `ZammadAPI::ConfigurationError`, as it does for one
   that is `nil` or empty and as 1.x did. It raised `ArgumentError: missing keyword: :url`,
   past a `rescue ZammadAPI::ConfigurationError` written for an incomplete configuration.
+- `RateLimitError#retry_after` reads the header in base ten. A zero in front made the figure
+  octal: `Retry-After: 010` was 8, and `08` was `nil`, so the `e.retry_after || 60` the
+  README shows waited a minute. `0x10`, which was 16, is `nil` now.
 
 ### Changed
 

@@ -193,5 +193,33 @@ RSpec.describe ZammadAPI::ResponseError do
       )
       expect(error.retry_after).to be_nil
     end
+
+    # Integer reads a prefix as a radix unless it is told the base, so a
+    # zero in front made the figure octal: `010` was 8, and `08` was nil.
+    it 'reads a figure with a zero in front in base ten' do
+      figures = %w[010 08 0030].map do |value|
+        response = ZammadAPI::Response.new(status: 429, headers: { 'retry-after' => value }, body: {}, raw_body: '{}', json: true)
+
+        ZammadAPI::ResponseError.build(response, operation: 'find object').retry_after
+      end
+
+      expect(figures).to eq([10, 8, 30])
+    end
+
+    it 'returns nil for a figure in another base' do
+      error = ZammadAPI::ResponseError.build(
+        ZammadAPI::Response.new(status: 429, headers: { 'retry-after' => '0x10' }, body: {}, raw_body: '{}', json: true),
+        operation: 'find object'
+      )
+      expect(error.retry_after).to be_nil
+    end
+
+    it 'reads a figure held as an Integer' do
+      error = ZammadAPI::ResponseError.build(
+        ZammadAPI::Response.new(status: 429, headers: { 'retry-after' => 30 }, body: {}, raw_body: '{}', json: true),
+        operation: 'find object'
+      )
+      expect(error.retry_after).to eq(30)
+    end
   end
 end

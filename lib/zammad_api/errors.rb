@@ -198,7 +198,13 @@ module ZammadAPI
       value = headers['retry-after']
       return nil if value.nil?
 
-      Integer(value, exception: false)
+      # In base ten, said outright. Left to itself Integer reads a prefix as
+      # a radix, so `010` was 8 and `08`, which is no octal number, was nil -
+      # where the retry middleware waited ten seconds and eight - and `0x10`
+      # was 16, which is no figure this header carries. A base is only taken
+      # with text, hence the `to_s`: a Response built by hand may hold the
+      # figure as an Integer.
+      Integer(value.to_s, 10, exception: false)
     end
   end
 
