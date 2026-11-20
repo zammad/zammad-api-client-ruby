@@ -982,6 +982,13 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   is built. It was accepted, as anything that answers `debug` was, and each line is handed
   over as a block: `def debug(message)` raised a bare `ArgumentError` at the first request
   and at every one after it.
+- `attachment.download` asks for the file with `Accept-Encoding: identity`, so that one the
+  connection was closed under raises `ZammadAPI::ConnectionError` behind a proxy that
+  compresses as well. `Net::HTTP` asks for gzip by itself and inflates what arrives, without
+  a word for a stream that stops halfway, and the length of a body under a
+  `Content-Encoding` is not checked: a text attachment of 180 kB came back as its first
+  16 kB. A server that compresses the file all the same is asked a second time without the
+  header, and what it sends is decoded and not checked, as before.
 
 ### Changed
 
