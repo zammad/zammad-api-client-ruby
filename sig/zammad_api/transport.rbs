@@ -51,6 +51,7 @@ module ZammadAPI
     def self.stringify_query: (untyped) -> Hash[String, untyped]
     def self.stringify_query_hash: (Hash[untyped, untyped], String?) -> Hash[String, untyped]
     def self.stringify_query_value: (String, untyped) -> untyped
+    def self.stringify_query_scalar: (String key, untyped value) -> String
     def self.not_a_query_value_message: (String key, untyped value) -> String
     def self.stringify_query_list: (String, Array[untyped]) -> Array[untyped]
     def self.misread_element_message: (String, Symbol) -> String

@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'bigdecimal'
 require 'pp'
 
 RSpec.describe ZammadAPI::Transport do
@@ -177,7 +178,7 @@ RSpec.describe ZammadAPI::Transport do
       { 'a Set' => Set[1, 2], 'a Range' => (1..3), 'a Time' => Time.at(0), 'any other object' => Object.new }.each do |kind, value|
         it "refuses #{kind} by its class, without quoting it" do
           expect { described_class.stringify_query(ids: value) }
-            .to raise_error(ArgumentError, /\Aquery parameter ids was given as #{value.class}, and a query string carries text, numbers and booleans/) { |error|
+            .to raise_error(ArgumentError, /\Aquery parameter ids was given as #{value.class}, and a query string carries text, Integers, Floats and booleans/) { |error|
               expect(error.message).not_to include(value.to_s)
             }
         end
@@ -200,6 +201,26 @@ RSpec.describe ZammadAPI::Transport do
       it 'still writes text, a Symbol, a number and a boolean' do
         expect(described_class.stringify_query(a: 'x', b: :y, c: 1, d: 1.5, e: true, f: false))
           .to eq({ 'a' => 'x', 'b' => 'y', 'c' => '1', 'd' => '1.5', 'e' => 'true', 'f' => 'false' })
+      end
+
+      # Every Numeric was taken for a number a query string spells, and
+      # these print as `0.5e1`, `1/2` and `1+2i`.
+      { 'a BigDecimal' => BigDecimal('5'), 'a Rational' => Rational(1, 2), 'a Complex' => Complex(1, 2) }.each do |kind, value|
+        it "refuses #{kind}, which is a number and prints as something else" do
+          expect { described_class.stringify_query(ids: [value]) }
+            .to raise_error(ArgumentError, /\Aquery parameter ids\[0\] was given as #{value.class}, .+ a number of another kind as an Integer or a Float/)
+        end
+      end
+
+      [Float::NAN, Float::INFINITY, -Float::INFINITY].each do |value|
+        it "refuses #{value}, which is a Float and no number a query string spells" do
+          expect { described_class.stringify_query(condition: { weight: value }) }
+            .to raise_error(ArgumentError, /\Aquery parameter condition\[weight\] is #{value}, and a query string has no spelling for a Float that is not finite/)
+        end
+      end
+
+      it 'still writes a Float of any size' do
+        expect(described_class.stringify_query(a: 0.0, b: -2.5, c: 1e20)).to eq({ 'a' => '0.0', 'b' => '-2.5', 'c' => '1.0e+20' })
       end
     end
 

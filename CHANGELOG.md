@@ -966,6 +966,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   that names one `Content-Length` and neither a `Content-Encoding` nor a
   `Transfer-Encoding`; a chunked body cut short raised already. The request is not sent
   again.
+- A query value that is a number and neither an `Integer` nor a `Float` raises
+  `ArgumentError`, as any other value a query string has no spelling for does. Every
+  `Numeric` was taken as it prints: `client.users.search('smith', ids: [BigDecimal('5')])`,
+  with the id read from a decimal column, asked for `ids[]=0.5e1`, and user 5 was not among
+  the hits. A `Rational` went as `1/2` and a `Complex` as `1+2i`. A `Float` that is `NaN` or
+  infinite raises as well, where it was sent as that word.
 
 ### Changed
 

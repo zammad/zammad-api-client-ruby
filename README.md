@@ -892,10 +892,12 @@ attribute value goes in the term, a sort in `order`, and paging in `page`, `in_b
 `find_each`. A user keyword on another resource raises for the same reason: Zammad takes
 `group_ids` on a ticket search and drops it, so tickets are narrowed by group with the
 condition above. A `nil` value raises too: there is no query string that means "this field
-is null". A value that is not text, a number, `true` or `false` raises as well, alone or
-inside a list or a condition: `ids: Set[1, 2]` would be sent as that text, which names no
-user, so pass a `Set` or a `Range` as its `to_a`, a time as the text Zammad reads, and a
-record as its id. So does a keyword with nothing in it, such as `ids: []`,
+is null". A value that is not text, an `Integer`, a `Float`, `true` or `false` raises as
+well, alone or inside a list or a condition: `ids: Set[1, 2]` would be sent as that text,
+which names no user, so pass a `Set` or a `Range` as its `to_a`, a time as the text Zammad
+reads, and a record as its id. A number of another kind counts: `BigDecimal('5')` prints as
+`0.5e1`, so pass it as an `Integer` or a `Float`, and a `Float` that is `NaN` or infinite
+raises too. So does a keyword with nothing in it, such as `ids: []`,
 `condition: {}`, or a condition that holds nothing but empty Hashes, which a query string
 does not write. Zammad reads that as the keyword not having been given, so
 `search('smith', ids: allowed_ids)` with no id allowed would come back with every user
