@@ -1181,8 +1181,10 @@ A `TransportError` is a request with no whole answer, which is not the same as o
 never saw: a write that timed out may have been applied. `IncompleteResponseError` is the
 one case where that is known. Zammad answered 2xx, the connection closed before the body
 had arrived, and `e.response` holds the status and what did arrive. A record whose `save`
-or `destroy` raises it is left saved or destroyed, so the call is not to be repeated;
-`reload` brings in what the lost answer would have.
+or `destroy` raises it is left saved or destroyed, so the call is not to be repeated. After
+an update, `reload` brings in what the lost answer would have. A record that was being
+created is in Zammad as well, but its id was in that answer: it has none to reload by, and
+`reload` raises `ZammadAPI::Error` saying so. Look it up again, with `find_by` for instance.
 
 ### Timeouts and retries
 
