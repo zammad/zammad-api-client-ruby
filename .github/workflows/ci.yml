@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       zammad_ref:
-        description: 'Zammad git ref to run the integration specs against'
+        description: 'Zammad branch or tag to run the integration specs against (not a commit SHA)'
         default: 'develop'
         type: string
 
