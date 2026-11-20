@@ -136,17 +136,29 @@ check('find it back') do
   found.name
 end
 
+# Each of these reads back what Zammad holds and compares it. Printing it
+# was not a check: with the body of the PUT lost on the way, this said
+# `ok ... created by check_connection.rb` and went on.
 check('update only the changed attribute') do
   @group.note = 'updated'
   raise 'change not staged' if !@group.changed?
+  raise "staged more than the note: #{@group.changes.keys.inspect}" if @group.changes.keys != [:note]
 
   @group.save
-  CLIENT.groups.find(@group.id).note
+  found = CLIENT.groups.find(@group.id)
+  raise "note was not saved: #{found.note.inspect}" if found.note != 'updated'
+  raise "name changed with it: #{found.name.inspect}" if found.name != "smoke-#{SUFFIX}"
+
+  found.note
 end
 
 check('reload discards local changes') do
   @group.note = 'not saved'
-  @group.reload.note
+  note = @group.reload.note
+  raise "the staged value is still there: #{note.inspect}" if note != 'updated'
+  raise 'the record still reports a change' if @group.changed?
+
+  note
 end
 
 check('pattern match a record') do
@@ -175,7 +187,14 @@ check('page by page') do
   "#{pages} page(s)"
 end
 
-check('search') { "#{CLIENT.users.search(LOGIN).to_a.size} hits" }
+# The account this runs as is the one record a search is sure to have, and
+# a search that answers with nothing does not raise.
+check('search') do
+  hits = CLIENT.users.search(LOGIN).to_a
+  raise "no hit is #{LOGIN}, among #{hits.size}" if hits.none? { [it.login, it.email].include?(LOGIN) }
+
+  "#{hits.size} hit(s)"
+end
 
 # These were never driven against a live Zammad, which is why nobody noticed
 # that an attribute filter passed to an index endpoint never reached the query
@@ -304,8 +323,19 @@ end
 
 section 'On behalf of another user'
 
+# Acting for the account the client is signed in as reads the same with the
+# header or without it. Zammad answers 403 for a From that names nobody, so
+# that is the answer which says the header arrived.
 check('sends the From header') do
-  CLIENT.on_behalf_of(LOGIN) { |scoped| scoped.tickets.find(@ticket.id).number }
+  number = CLIENT.on_behalf_of(LOGIN) { |scoped| scoped.tickets.find(@ticket.id).number }
+  raise "read ticket #{number}, not #{@ticket.number}" if number != @ticket.number
+
+  begin
+    CLIENT.on_behalf_of("nobody-#{SUFFIX}@example.com") { |scoped| scoped.tickets.find(@ticket.id) }
+  rescue ZammadAPI::AuthorizationError => e
+    next "number=#{number}, and status=#{e.status} for a user that does not exist"
+  end
+  raise 'a From header naming no user was accepted, so none was sent'
 end
 
 check('block form leaves the outer client unscoped') do
