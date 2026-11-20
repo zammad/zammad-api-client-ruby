@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'json'
 require 'logger'
 require 'uri'
 
@@ -290,6 +291,25 @@ module ZammadAPI
     # @param state [JSON::State, nil] passed by +JSON.generate+
     # @return [String] {#as_json} as a JSON object
     def to_json(state = nil) = as_json.to_json(state)
+
+    # What Psych writes for a configuration: {#as_json}, as a plain mapping
+    # of what its JSON reads back as.
+    #
+    # Psych asks none of the above. It writes the members of a Data as
+    # they are, so +config.to_yaml+ held the token, the password and the
+    # credentials of a proxy in full - the fourth way out of the class
+    # documented as safe to log, and the one Rails' +debug+ view helper and
+    # a Delayed::Job handler take.
+    #
+    # No tag is written, so the mapping loads as the Hash it is and not as
+    # a configuration with placeholders where its credentials were. And it
+    # goes through the JSON, so that nothing in it is an object Psych would
+    # write by its instance variables in turn.
+    #
+    # @api private
+    # @param coder [Psych::Coder]
+    # @return [void]
+    def encode_with(coder) = coder.represent_object(nil, JSON.parse(to_json))
 
     private
 

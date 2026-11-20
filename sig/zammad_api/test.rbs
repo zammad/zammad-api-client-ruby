@@ -78,6 +78,7 @@ module ZammadAPI
       def initialize: (Test test, ?on_behalf_of: (String | Integer)?, ?config: Config) -> void
       def with_on_behalf_of: ((String | Integer)? identifier) -> Test::Transport
       def with_config: (Config) -> Test::Transport
+      def encode_with: (untyped coder) -> void
 
 
       def request: (Symbol method, String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?, ?resource_class: Class?) -> Response

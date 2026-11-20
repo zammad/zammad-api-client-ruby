@@ -1036,6 +1036,14 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   that is NaN or infinite included. A body that names one key twice, as `login:` and as
   `'login'`, raises `ArgumentError` with both spellings, as a query does; json 2 sent both
   and left the choice to Zammad.
+- `to_yaml` of a configuration, a client, a collection and a record holds no credential.
+  Psych asks neither `inspect` nor `as_json`: it writes the members of a Data and the
+  instance variables of an object, and every record holds its transport, whose connection
+  holds the token and the proxy password. So `record.to_yaml`, which is what Rails' `debug`
+  view helper and a Delayed::Job handler write, printed both. A configuration is written as
+  the mapping its JSON holds, and a transport as its URL and the way it authenticates, the
+  test kit's included. `Marshal.dump` still holds the credentials: it is what a copy is
+  rebuilt from.
 
 ### Changed
 

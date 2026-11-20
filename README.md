@@ -160,9 +160,11 @@ client = ZammadAPI::Client.from_env(timeout: 300)
 
 Credentials are never written to the log, and `client.config` redacts them however it is
 printed — `inspect`, `to_s` or `pp`, which is what a console shows — and however it is
-serialized, with `to_json` or with the `as_json` ActiveSupport asks, so a configuration
-object is safe to include in an error report. A client serializes as its URL and the way it
-authenticates, and no more.
+serialized as text, with `to_json`, with the `as_json` ActiveSupport asks or with `to_yaml`,
+so a configuration object is safe to include in an error report. A client serializes as its
+URL and the way it authenticates, and no more, and so does the transport a record's YAML
+names. `Marshal.dump` is the exception: it writes what the object is rebuilt from,
+credentials included.
 
 Credentials belong in the options above, not in the URL. `https://user:secret@host/` raises
 `ZammadAPI::ConfigurationError`, because the HTTP stack would send those as basic

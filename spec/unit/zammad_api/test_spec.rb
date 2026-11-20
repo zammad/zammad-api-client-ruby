@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'yaml'
 require 'zammad_api/test'
 
 RSpec.describe ZammadAPI::Test do
@@ -792,6 +793,29 @@ RSpec.describe ZammadAPI::Test do
 
       expect { (writers + readers).each(&:join) }.not_to raise_error
       expect(zammad.requests.size).to eq(100)
+    end
+  end
+
+  # A record holds its transport, and Psych writes an object as its instance
+  # variables. The real transport writes where it points and how it
+  # authenticates, and the stand-in's wrote the stand-in: every stub and
+  # every recorded request, under each record.
+  describe 'a record written as YAML' do
+    let(:zammad) { described_class.new(http_token: 'tok-s3cret') }
+
+    it 'names the transport the way the real one does' do
+      expect(YAML.unsafe_load(client.groups.new(name: 'Support').to_yaml.sub(/\A--- .*$/, '---')))
+        .to include('transport' => { 'url' => 'https://zammad.test/', 'auth' => 'http_token' })
+    end
+
+    it 'names an on_behalf_of scope' do
+      expect(client.on_behalf_of('agent@example.com').groups.new(name: 'Support').to_yaml).to include('on_behalf_of: agent@example.com')
+    end
+
+    it 'holds neither the token nor what was stubbed' do
+      zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'stubbed-name' })
+
+      expect(client.groups.new(name: 'Support').to_yaml).not_to match(/tok-s3cret|stubbed-name/)
     end
   end
 

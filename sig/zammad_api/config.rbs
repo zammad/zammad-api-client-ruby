@@ -67,6 +67,7 @@ module ZammadAPI
     def pretty_print: (untyped printer) -> void
     def as_json: (*untyped) -> Hash[Symbol, untyped]
     def to_json: (?untyped state) -> String
+    def encode_with: (untyped coder) -> void
     def to_h: () -> Hash[Symbol, untyped]
 
     private
