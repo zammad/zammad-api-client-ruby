@@ -8,8 +8,13 @@ reads the credentials from the environment:
 export ZAMMAD_URL=https://zammad.example.com/
 export ZAMMAD_TOKEN=your-access-token
 
-ruby examples/quickstart.rb
+bundle exec ruby examples/quickstart.rb
 ```
+
+Run from a checkout of this repository, they go through Bundler, which is what puts
+`lib/` on the load path: plain `ruby` would load an installed release of the gem, 1.x
+included, or none. Copied into a project that has `zammad_api` 2.0 in its bundle, they
+run there the same way.
 
 `ZAMMAD_USER` and `ZAMMAD_PASSWORD` work instead of a token, as does
 `ZAMMAD_OAUTH2_TOKEN`.

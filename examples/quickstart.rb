@@ -5,7 +5,7 @@
 # update it.
 #
 #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=... \
-#     ruby examples/quickstart.rb
+#     bundle exec ruby examples/quickstart.rb
 
 require 'zammad_api'
 

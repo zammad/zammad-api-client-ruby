@@ -11,7 +11,7 @@
 # may not have arrived.
 #
 #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=... \
-#     ruby examples/error_handling.rb
+#     bundle exec ruby examples/error_handling.rb
 
 require 'zammad_api'
 

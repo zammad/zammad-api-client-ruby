@@ -5,7 +5,7 @@
 # that has to checkpoint and resume, or a producer feeding a queue.
 #
 #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=... \
-#     ruby examples/manual_batches.rb
+#     bundle exec ruby examples/manual_batches.rb
 
 require 'zammad_api'
 require 'digest'

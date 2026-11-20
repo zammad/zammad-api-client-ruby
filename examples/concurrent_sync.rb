@@ -16,7 +16,7 @@
 #   )
 #
 #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=... \
-#     ruby examples/concurrent_sync.rb
+#     bundle exec ruby examples/concurrent_sync.rb
 
 require 'zammad_api'
 

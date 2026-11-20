@@ -7,7 +7,7 @@
 # what was modified is sent, and adding an article.
 #
 #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=... \
-#     ruby examples/triage_tickets.rb
+#     bundle exec ruby examples/triage_tickets.rb
 
 require 'zammad_api'
 require 'time'
