@@ -124,11 +124,13 @@ module ZammadAPI
     #
     # Stubbing the same method and path again queues a second response: the
     # first request gets the first, and the last stub answers every request
-    # after it. A collection read is one step of such a sequence however many
-    # pages it asks for, so three list stubs answer three reads in turn. A
-    # +query+ matches when every parameter it names is present in
-    # the request with that value, so a stub does not have to repeat the
-    # +expand+, +page+ and +per_page+ parameters the client adds itself.
+    # after it. One declared after an earlier one has answered takes over
+    # from the next request on. A collection read is one step of such a
+    # sequence however many pages it asks for, so three list stubs answer
+    # three reads in turn. A +query+ matches when every parameter it names
+    # is present in the request with that value, so a stub does not have to
+    # repeat the +expand+, +page+ and +per_page+ parameters the client adds
+    # itself.
     #
     # A stub that names a +query+ is more specific than one that does not, and
     # answers ahead of it however they were declared. Queueing applies within
@@ -373,6 +375,15 @@ module ZammadAPI
     # three list stubs A, B and C, three reads answered A, C and C, and B was
     # never seen. The trailing request belongs to the read that made it, so it
     # is answered by the stub that read's first page came from.
+    #
+    # A stub that answered while it was the last of its kind has had its
+    # turn, and gives way to one declared after it. It is kept in place so
+    # that it can go on answering, and so it was still at the head once a
+    # second one was queued behind it, and was taken for the first of a
+    # sequence that had not begun: stubbed open, read, stubbed closed and
+    # read again, a ticket was open twice and closed at the third read. A
+    # test that changes what an endpoint answers as it goes is the same
+    # sequence as one that declares it up front.
     def take(method, path, params)
       endpoint = key(method, path)
       queued   = @stubs[endpoint]
@@ -381,11 +392,18 @@ module ZammadAPI
       matching = queued.each_index.select { matches?(queued[it][:query], params) }
       return nil if matching.empty?
 
-      group = most_specific(queued, matching, method, path)
-      scope = queued[group.first][:query]
+      group  = most_specific(queued, matching, method, path)
+      scope  = queued[group.first][:query]
+      served = @served[[endpoint, scope]]
       # The stub at the head of the queue is the fallback, for a later page
       # that is the first thing asked: `page(3)` on a list nothing has read.
-      return @served[[endpoint, scope]] || queued[group.first] if later_page?(scope, params)
+      return served || queued[group.first] if later_page?(scope, params)
+
+      if group.size > 1 && queued[group.first].equal?(served)
+        queued.delete_at(group.first)
+        # Every other stub of the group sat behind the one that went.
+        group = group.drop(1).map(&:pred)
+      end
 
       @served[[endpoint, scope]] = group.one? ? queued[group.first] : queued.delete_at(group.first)
     end

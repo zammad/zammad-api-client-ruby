@@ -393,6 +393,57 @@ RSpec.describe ZammadAPI::Test do
 
         expect(Array.new(3) { client.groups.find(1).name }).to eq(%w[Users Users Users])
       end
+
+      # A lone stub stays in place to go on answering, so it was still at
+      # the head when a second one was queued, and answered once more.
+      context 'when a stub is declared after an earlier one has answered' do
+        before do
+          zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'First' })
+          client.groups.find(1)
+        end
+
+        it 'answers the next request with the later one' do
+          zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'Second' })
+
+          expect(Array.new(2) { client.groups.find(1).name }).to eq(%w[Second Second])
+        end
+
+        it 'does so however often the earlier one answered' do
+          2.times { client.groups.find(1) }
+          zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'Second' })
+
+          expect(client.groups.find(1).name).to eq('Second')
+        end
+
+        it 'serves several declared after it in turn' do
+          %w[Second Third].each { zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: it }) }
+
+          expect(Array.new(3) { client.groups.find(1).name }).to eq(%w[Second Third Third])
+        end
+
+        it 'does so again for one declared after the last of a sequence has answered' do
+          zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'Second' })
+          client.groups.find(1)
+          zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'Third' })
+
+          expect(client.groups.find(1).name).to eq('Third')
+        end
+
+        it 'leaves a stub of another scope where it is' do
+          zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'Scoped' }, query: { full: true })
+
+          expect(client.groups.find(1).name).to eq('First')
+          expect(client.get('api/v1/groups/1', query: { full: true }).body).to eq({ id: 1, name: 'Scoped' })
+        end
+
+        it 'answers a failure the client retried with the stub declared after it' do
+          zammad.stub(:get, 'api/v1/groups/2', status: 503)
+          expect { client.groups.find(2) }.to raise_error(ZammadAPI::ServerError)
+          zammad.stub(:get, 'api/v1/groups/2', body: { id: 2, name: 'Back' })
+
+          expect(client.groups.find(2).name).to eq('Back')
+        end
+      end
     end
 
     describe 'query matching' do
@@ -1056,6 +1107,15 @@ RSpec.describe ZammadAPI::Test do
       %w[A B].each { zammad.stub(:get, 'api/v1/groups/search', body: [{ id: 1, name: it }], query: { query: 'x' }) }
 
       expect(Array.new(2) { client.groups.search('x').map(&:name) }).to eq([['A'], ['B']])
+    end
+
+    # The read before it asked for a page after its last, and that request
+    # belongs to the stub the read began with.
+    it 'answers a read with a stub declared after the last one has answered a whole read' do
+      3.times { names }
+      zammad.stub(:get, 'api/v1/groups', body: [{ id: 1, name: 'D' }])
+
+      expect(Array.new(2) { names }).to eq([['D'], ['D']])
     end
   end
 
