@@ -1,0 +1,117 @@
+module ZammadAPI
+  # The Faraday connection and responses are untyped here rather than named:
+  # these signatures ship with the gem and the Faraday declarations they would
+  # need live in sig/vendor, which does not. See sig/zammad_api/config.rbs.
+  class Transport
+    # Included by Transport and by Test::Transport, which stands in for it.
+    module Verbs
+      def get: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?, ?resource_class: Class?) -> Response
+      def post: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?, ?resource_class: Class?) -> Response
+      def put: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?, ?resource_class: Class?) -> Response
+      def delete: (String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?, ?resource_class: Class?) -> Response
+    end
+
+    include Verbs
+
+    RETRIABLE_METHODS: Array[Symbol]
+    RETRIABLE_STATUSES: Array[Integer]
+    RETRIABLE_EXCEPTIONS: Array[untyped]
+    TIMEOUT_ERRORS: Array[untyped]
+    CONNECTION_ERRORS: Array[untyped]
+    # Untyped for the same reason as the Faraday ones above: naming
+    # OpenSSL::SSL::SSLError here would make the published signatures need
+    # openssl declarations that a consumer has not loaded.
+    SSL_ERRORS: Array[untyped]
+    # private_constant in the source; RBS has no way to say so.
+    REFUSED_MIDDLEWARE: Hash[String, [String, String]]
+    CONTENT_LENGTH: Regexp
+    MISREAD_ELEMENTS: Hash[Symbol, String]
+    SENSITIVE_KEY_PATTERN: Regexp
+    REDACTED: String
+    UNRESERVED_IN_PATH: Regexp
+    DOT_SEGMENTS: Array[String]
+    RECORD_ID_TYPES: Array[Class]
+    QUERY_VALUE_TYPES: Array[Class]
+    JSON_VALUE_TYPES: Array[Class]
+    TEXT_VALUE_TYPES: Array[Class]
+    ABSOLUTE_URL: Regexp
+    RESERVED_HEADERS: Hash[String, String]
+    HEADER_NAME: Regexp
+
+    attr_reader config: Config
+    attr_reader on_behalf_of: String?
+
+    @connection: untyped
+
+    def self.redact_path: (untyped path) -> String
+    def self.redact_query_pair: (String pair) -> String
+    def self.credential_parameter?: (String parameter) -> bool
+    def self.blank_query_value: (String parameter) -> String
+    def self.redact: (untyped value) -> untyped
+    def self.stringify_query: (untyped) -> Hash[String, untyped]
+    def self.stringify_query_hash: (Hash[untyped, untyped], String?) -> Hash[String, untyped]
+    def self.stringify_query_value: (String, untyped) -> untyped
+    def self.stringify_query_scalar: (String key, untyped value) -> String
+    def self.not_a_query_value_message: (String key, untyped value) -> String
+    def self.stringify_query_list: (String, Array[untyped]) -> Array[untyped]
+    def self.misread_element_message: (String, Symbol) -> String
+    def self.empty_query_name_message: (String? prefix) -> String
+    def self.stringify_headers: (Hash[untyped, untyped]) -> Hash[String, String]
+    def self.stripped: (String text) -> String
+    BLANK: Regexp
+    def self.wire_text: (untyped value, String name) -> String
+    LINE_BREAK_ADVICE: String
+    def self.line_break?: (String text) -> bool
+    def self.stringify_on_behalf_of: ((String | Integer)? identifier) -> String?
+    def self.not_an_identifier_message: (untyped identifier) -> String
+    def self.blank_on_behalf_of_message: (untyped identifier) -> String
+    def self.header_name: (untyped name) -> String
+    def self.not_a_header_name_message: (String start) -> String
+    def self.stringify_header_value: (String, untyped) -> String
+    def self.escape_path_segment: (untyped) -> String
+    def self.not_a_record_id_message: (untyped value) -> String
+    def self.relative_path: (untyped) -> String
+    def self.refuse_unreadable_path!: (String relative) -> void
+    def self.unreadable_path_message: (String relative) -> String
+    def self.encode_body: (untyped body, operation: String, ?resource_class: Class?) -> String?
+    def self.json_value: (untyped value, untyped key) -> untyped
+    def self.json_object: (untyped value, untyped key) -> untyped
+    def self.writes_own_json?: (untyped value) -> bool
+    def self.not_a_json_value_message: (untyped value, untyped key) -> String
+    def self.retry_options: (Config config) -> Hash[Symbol, untyped]
+    def self.retried?: (Config config, Symbol method, Response response) -> bool
+    def self.description: (Config config, String? on_behalf_of) -> Hash[Symbol, untyped]
+
+    def initialize: (Config) -> void
+    def with_on_behalf_of: ((String | Integer)? identifier) -> Transport
+    def with_config: (Config) -> Transport
+    def inspect: () -> String
+    def as_json: (*untyped) -> Hash[Symbol, untyped]
+    def to_json: (?untyped state) -> String
+
+    def request: (Symbol method, String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?, ?resource_class: Class?) -> Response
+
+    private
+
+    def whole: (Response response, String operation) -> Response
+    def missing_bytes: (Response response) -> Integer?
+    def timed_out?: (untyped error) -> bool
+    def perform: (Symbol, String, Hash[Symbol, untyped]?, String?, Hash[untyped, untyped]?) -> untyped
+    def build_connection: () -> untyped
+    def apply_middleware_and_adapter: (untyped faraday) -> void
+    def refuse_unusable_middleware!: (untyped connection) -> void
+    def refused_middleware: (Class klass) -> String?
+    def refused_middleware_message: (Class klass, String refused) -> String
+    def apply_authentication: (untyped) -> void
+    def decode: (untyped) -> Response
+    def raw_body!: (untyped) -> String
+    def log_request: (Symbol, String, Hash[String, untyped]?, String?, Hash[String, String]?) -> void
+    def log_response: (Symbol, String, Response, Float) -> void
+    def loggable_body: (String payload) -> untyped
+    def unlogged_body: (String body) -> String
+    def reportable_cause: (StandardError error) -> StandardError?
+    def redact_config_values: (untyped message) -> String
+    def quoted_spellings: (String value) -> Array[String]
+    def logger: () -> Logger
+  end
+end

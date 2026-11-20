@@ -1,0 +1,64 @@
+module ZammadAPI
+  # Generic over the resource it is the entry point for: `client.tickets` is a
+  # ResourceProxy[Resources::Ticket], so `find` answers with a Ticket and a
+  # block over it is handed one.
+  class ResourceProxy[R < Resources::Base]
+    include Enumerable[R]
+
+    SEARCH_MAX_PER_PAGE: Integer
+    SEARCH_FILTER_KEYS: Array[Symbol]
+    BLANK_TERM_MESSAGE: String
+    SEARCHABLE_UNSORTABLE_HINT: String
+    UNSORTABLE_HINT: String
+
+    attr_reader resource_class: untyped
+
+    @transport: Transport
+
+    def initialize: (Transport, untyped resource_class) -> void
+    def new: (?hash[untyped, untyped] attributes) -> R
+    def create: (?hash[untyped, untyped] attributes) -> R
+    def find: (Integer | String id) -> R
+    def find_by: (**untyped) -> R?
+    def find_by!: (**untyped) -> R
+    def exists?: (Integer | String id) -> bool
+    def destroy: (Integer | String id) -> true
+    def all: () -> Collection[R]
+    def order: (*(Symbol | String) attributes, **(Symbol | String) directions) -> Collection[R]
+
+    def each: () { (R) -> void } -> Collection[R]
+            | () -> Enumerator[R, Collection[R]]
+    def find_each: (?batch_size: Integer?) { (R) -> void } -> Collection[R]
+                 | (?batch_size: Integer?) -> Enumerator[R, Collection[R]]
+    def in_batches: (?of: Integer?) { (Array[R]) -> void } -> Collection[R]
+                  | (?of: Integer?) -> Enumerator[Array[R], Collection[R]]
+    def page: (Integer number, ?per_page: Integer?) -> Collection[R]
+    def pluck: (*(Symbol | String) keys) -> Array[untyped]
+    def count: (*untyped) ?{ (R) -> boolish } -> Integer
+    def size: () -> Integer
+    def length: () -> Integer
+    def empty?: () -> bool
+    def any?: () -> bool
+           | ...
+    def none?: () -> bool
+            | ...
+    def first: () -> R?
+             | (Integer count) -> Array[R]
+    def take: (Integer count) -> Array[R]
+    def search: (String term, ?condition: Hash[untyped, untyped], ?ids: Array[Integer | String], ?role_ids: Array[Integer | String], ?group_ids: Array[Integer | String] | Hash[Integer | String, String | Symbol | Array[String | Symbol]], ?permissions: Array[String]) -> Collection[R]
+    def inspect: () -> String
+
+    private
+
+    def collection: (String, String, ?query: Hash[Symbol, untyped], ?max_per_page: Integer, ?sortable: bool, ?paginated: bool, ?search: bool) -> Collection[R]
+    def search_filters: (Hash[untyped, untyped] filters) -> Hash[Symbol, untyped]
+    def search_filter_keys: () -> Array[Symbol]
+    def unknown_search_filter_message: (Array[Symbol] unknown) -> String
+    def empty_search_filter?: (untyped value) -> bool
+    def empty_search_filter_message: (Hash[Symbol, untyped] empty) -> String
+    def searchable!: () -> void
+    def search_term_for: (Hash[Symbol, untyped]) -> String?
+    def path: () -> String
+    def member_path: (Integer | String id) -> String
+  end
+end

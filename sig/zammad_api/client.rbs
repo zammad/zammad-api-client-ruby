@@ -1,0 +1,56 @@
+module ZammadAPI
+  class Client
+    RESOURCES: Hash[Symbol, untyped]
+    CONVERSION_METHODS: Array[Symbol]
+    ENV_OPTIONS: Hash[String, Symbol]
+
+    attr_reader config: Config
+
+    @transport: Transport
+    @resources: Hash[untyped, ResourceProxy[untyped]]
+
+    def self.from_env: (**untyped overrides) -> Client
+    def self.build: (Config config, untyped transport) -> Client
+
+    def initialize: (**untyped options) -> void
+
+    def groups: () -> ResourceProxy[Resources::Group]
+    def organizations: () -> ResourceProxy[Resources::Organization]
+    def tickets: () -> ResourceProxy[Resources::Ticket]
+    def ticket_articles: () -> ResourceProxy[Resources::TicketArticle]
+    def ticket_priorities: () -> ResourceProxy[Resources::TicketPriority]
+    def ticket_states: () -> ResourceProxy[Resources::TicketState]
+    def users: () -> ResourceProxy[Resources::User]
+
+    # A class cannot carry its own type into the answer - RBS has no way to
+    # say "a proxy for whichever class this is" - so a proxy for a resource of
+    # your own is untyped until you say what it is:
+    #
+    #   roles = client.resource(Role) #: ZammadAPI::ResourceProxy[Role]
+    def resource: (Symbol | String | Class name) -> ResourceProxy[untyped]
+    def resource_names: () -> Array[Symbol]
+    def me: () -> Resources::User
+    def version: () -> String?
+
+    def get: (String path, ?query: Hash[untyped, untyped]?, ?headers: Hash[untyped, untyped]?) -> Response
+    def post: (String path, ?query: Hash[untyped, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?) -> Response
+    def put: (String path, ?query: Hash[untyped, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?) -> Response
+    def delete: (String path, ?query: Hash[untyped, untyped]?, ?headers: Hash[untyped, untyped]?) -> Response
+
+    def with: (**untyped options) -> Client
+    def on_behalf_of: (String | Integer identifier) -> Client
+                    | [T] (String | Integer identifier) { (Client) -> T } -> T
+    def inspect: () -> String
+    def as_json: (*untyped) -> Hash[Symbol, untyped]
+    def to_json: (?untyped state) -> String
+    def method_missing: (Symbol, *untyped) -> untyped
+    def respond_to_missing?: (Symbol, ?bool) -> bool
+
+    private
+
+    def raw: (Symbol method, String path, ?query: Hash[untyped, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?) -> Response
+    def unknown_resource_message: (Symbol | String) -> String
+    def proxy_for: (untyped resource_class) -> ResourceProxy[untyped]
+    def setup: (Config config, untyped transport) -> self
+  end
+end

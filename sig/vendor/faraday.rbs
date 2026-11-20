@@ -1,0 +1,73 @@
+# Minimal declarations for the parts of Faraday this gem uses.
+# Faraday does not ship RBS signatures of its own.
+
+module Faraday
+  class Error < StandardError
+  end
+
+  class ConnectionFailed < Error
+  end
+
+  class TimeoutError < Error
+  end
+
+  class SSLError < Error
+  end
+
+  class RetriableResponse < Error
+  end
+
+  class Response
+    def status: () -> Integer
+    def body: () -> untyped
+    def headers: () -> untyped
+  end
+
+  class Request
+    def url: (String) -> void
+    def params: () -> Hash[String, untyped]
+    def body=: (untyped) -> void
+    def headers: () -> Hash[String, untyped]
+  end
+
+  # Faraday.new yields the connection itself, which delegates the stack
+  # building methods below to its RackBuilder.
+  class Connection
+    def get: (String) ?{ (Request) -> void } -> Response
+    def post: (String) ?{ (Request) -> void } -> Response
+    def put: (String) ?{ (Request) -> void } -> Response
+    def delete: (String) ?{ (Request) -> void } -> Response
+    def public_send: (Symbol, *untyped) ?{ (Request) -> void } -> Response
+
+    def request: (Symbol, *untyped) -> void
+    def response: (Symbol, *untyped) -> void
+    def adapter: (untyped, *untyped) -> void
+    def use: (untyped, *untyped) -> void
+  end
+
+  # The encoder a connection writes its query with by default. An Array of
+  # pairs is written in the order it is given, where a Hash is sorted.
+  class NestedParamsEncoder
+    def self.encode: (untyped params) -> String?
+    def self.decode: (String? query) -> untyped
+  end
+
+  # The retry middleware, asked what it would do with a response. See
+  # ZammadAPI::Transport.retried?.
+  module Retry
+    class Middleware
+      def initialize: (untyped app, ?untyped options) -> void
+      def calculate_sleep_amount: (Integer retries, untyped env) -> Float?
+    end
+  end
+
+  module Utils
+    # Response headers, read whatever the case of the name.
+    class Headers
+      def initialize: (?Hash[untyped, untyped] hash) -> void
+    end
+  end
+
+  def self.new: (**untyped) ?{ (Connection) -> void } -> Connection
+  def self.default_adapter: () -> Symbol
+end
