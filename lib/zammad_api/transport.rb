@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'date'
 require 'faraday'
 require 'faraday/retry'
 require 'json'
@@ -186,6 +187,16 @@ module ZammadAPI
     # string can carry and Zammad reads back. No other object does, and
     # `to_s` answers for all of them.
     QUERY_VALUE_TYPES = [String, Symbol, Numeric, TrueClass, FalseClass].freeze
+
+    # What a request body is made of, where it is not a list or a structure:
+    # the values JSON has a type for, and a Symbol, which the generator
+    # writes as text.
+    JSON_VALUE_TYPES = [NilClass, String, Symbol, Integer, Float, TrueClass, FalseClass].freeze
+
+    # Objects that are no JSON type and go into a body as they print all the
+    # same, because what they print is the value: Zammad reads a time or a
+    # date attribute from that text. `date` is required above for this list.
+    TEXT_VALUE_TYPES = [Time, Date].freeze
 
     # A request path that opens with a scheme, which is what makes a URL an
     # absolute one, whatever follows. Any scheme and either case, which is
@@ -867,17 +878,100 @@ module ZammadAPI
     def self.encode_body(body, operation:, resource_class: nil)
       return body if body.nil? || body.is_a?(String)
 
-      # Through the walk a record's attributes go through, for what it
-      # reads as a Hash: see {DeepCopy.frozen_object}. The generator has no
-      # spelling for `ActionController::Parameters` and writes its `to_s`
-      # as one String, so `client.post(path, body: permitted)` sent that in
-      # place of an object, password included, and a body holding one sent
-      # it under the key.
-      JSON.generate(DeepCopy.frozen_copy(body))
+      JSON.generate(json_value(body, nil))
     rescue JSON::JSONError => e
       raise Error, "Can't #{Error.subject_for(operation, resource_class)}: the request body cannot be encoded as JSON (#{e.message}). " \
                    'Every value has to be a JSON type, and text has to be valid UTF-8: Base64-encode binary data such as an ' \
                    'attachment, and leave out a Float that is NaN or infinite.'
+    end
+
+    # A body as the generator may be handed it: every value in it one JSON
+    # has a type for, or an object that says what it is written as.
+    #
+    # The generator writes whatever is neither as the object's `to_s`, and
+    # every object has one. `client.users.create(login: 'x', role_ids:
+    # Set[1, 2])` sent `"role_ids":"Set[1, 2]"`, a String where the list
+    # belongs, and a Struct went as `#<struct ...>`. Nothing raised, and
+    # what Zammad made of the text was the answer. It is what
+    # {.stringify_query_value} refuses in a query, one request part over.
+    #
+    # @api private
+    # @param value [Object]
+    # @param key [Object, nil] the key the value sits under, for the error
+    #   message
+    # @return [Object]
+    # @raise [JSON::GeneratorError] for a value JSON has no type for, which
+    #   {.encode_body} words like any other body that cannot be encoded
+    def self.json_value(value, key)
+      case value
+      when *JSON_VALUE_TYPES then value
+      when Hash              then value.to_h { |name, nested| [name, json_value(nested, name)] }
+      when Array             then value.map { json_value(it, key) }
+      else json_object(value, key)
+      end
+    end
+
+    # What is none of the above, as what the object itself says it is, in
+    # the order the object is asked.
+    #
+    # What converts to a Hash is that Hash, as it is for a record's
+    # attributes: see {DeepCopy.frozen_object}. The generator has no
+    # spelling for `ActionController::Parameters` either, so `client.post(path,
+    # body: permitted)` sent its `to_s` in place of an object, password
+    # included, and a body holding one sent it under the key.
+    #
+    # An object with a `to_json` of its own is left to the generator, which
+    # calls it: a record of this gem, or a value object written to be sent.
+    #
+    # An object with an `as_json` is what that returns, and what it holds is
+    # walked in turn. ActiveSupport gives every object one and builds its
+    # `to_json` on it, which is what 1.x sent a body with. `JSON.generate`
+    # does not ask it, so in a Rails app `role_ids: Set[1, 2]` was the list
+    # under 1.x and the String above here, `ttl: 2.days` was `"172800"`, and
+    # a model went as `#<User ...>`.
+    #
+    # A Time and a Date are left to print: see {TEXT_VALUE_TYPES}.
+    #
+    # @api private
+    # @return [Object]
+    # @raise [JSON::GeneratorError]
+    def self.json_object(value, key)
+      converted = Hash.try_convert(value)
+      return json_value(converted, key) if converted
+      return value if writes_own_json?(value)
+
+      described = value.respond_to?(:as_json) ? value.as_json : value
+      case described
+      when *JSON_VALUE_TYPES, Hash, Array then json_value(described, key)
+      when *TEXT_VALUE_TYPES              then described
+      else raise JSON::GeneratorError, not_a_json_value_message(value, key)
+      end
+    end
+
+    # Whether an object has a `to_json` of its own, and not the one the
+    # generator gives every object - or ActiveSupport, around that one -
+    # which writes the object's `to_s`.
+    #
+    # Asked of where the method is defined, which is the same place for
+    # every object that has only the generic one, whichever of the two
+    # libraries put it there. And asked through Kernel, because a Struct or
+    # a Data may have a member called `method`.
+    #
+    # @api private
+    # @return [Boolean]
+    def self.writes_own_json?(value)
+      Kernel.instance_method(:method).bind_call(value, :to_json).owner != Object.instance_method(:to_json).owner
+    end
+
+    # Names the class and the key, and does not quote the value, as
+    # {.not_a_query_value_message} does not.
+    #
+    # @api private
+    # @return [String]
+    def self.not_a_json_value_message(value, key)
+      "#{key.nil? ? 'it' : "its key #{key}"} was given as #{value.class}, which is no JSON type and would be sent as that " \
+        'object prints: pass a Set or a Range as its to_a, a number as an Integer or a Float, and any other object as ' \
+        'a Hash of what it holds'
     end
 
     # What the retry middleware is built with.
@@ -1379,10 +1473,8 @@ module ZammadAPI
     # The other is an object inside the body. One that writes its own JSON
     # goes out as keys and values like any Hash - a value object with a
     # +to_json+, as the whole body or under a key of it - and +inspect+
-    # printed every one of them. One that does not is sent as its +to_s+,
-    # which for most objects names the class and no more, while +inspect+
-    # lists what the object holds: the log then showed a value the request
-    # never carried.
+    # printed every one of them. So does one that is sent as its +as_json+:
+    # see {.json_object}.
     #
     # So the payload is parsed, and the log holds what the wire holds. Where
     # it is a JSON object or array it is redacted like the structure it

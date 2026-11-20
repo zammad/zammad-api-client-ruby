@@ -177,6 +177,14 @@ RSpec.describe ZammadAPI::Test do
       expect(zammad.requests).to be_empty
     end
 
+    it 'refuses a body holding a value JSON has no type for, the way the real transport does' do
+      zammad.stub(:post, 'api/v1/users', body: { id: 1 })
+
+      expect { client.users.create(login: 'jane', role_ids: Set[1, 2]) }
+        .to raise_error(ZammadAPI::Error, /its key role_ids was given as Set, which is no JSON type/)
+      expect(zammad.requests).to be_empty
+    end
+
     # And for a query a query string could not carry as it was written.
     it 'refuses a list of Hashes Rails would read as one, the way the real transport does' do
       zammad.stub(:get, 'api/v1/roles', body: [])
