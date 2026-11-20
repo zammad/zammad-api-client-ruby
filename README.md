@@ -373,7 +373,9 @@ client.get('api/v1/tickets/1', headers: {'Accept-Language' => 'de-de'})
 Names are case-insensitive, and two spellings of one header are refused rather than merged.
 `Authorization` and `From` are refused outright: the first is what the client's credentials
 are for, the second is what `on_behalf_of` sets, and replacing either from a single request
-would leave the client reporting something it no longer does.
+would leave the client reporting something it no longer does. A name is letters, digits and
+signs such as `-` and `_`; one that is empty, or holds a space, a colon or a line break,
+raises `ArgumentError` before anything is sent or logged.
 
 A `body:` is sent as JSON, and so are the attributes a record is saved with. A value JSON
 has no type for raises `ZammadAPI::Error` rather than going out as it prints, which is all

@@ -177,6 +177,14 @@ RSpec.describe ZammadAPI::Test do
       expect(zammad.requests).to be_empty
     end
 
+    it 'refuses a header name that is not one, the way the real transport does' do
+      zammad.stub(:get, 'api/v1/roles', body: [])
+
+      expect { client.get('api/v1/roles', headers: { "X-A\r\nFrom: admin@example.com" => 'v' }) }
+        .to raise_error(ArgumentError, /goes on with a character no header name carries/)
+      expect(zammad.requests).to be_empty
+    end
+
     it 'refuses a body holding a value JSON has no type for, the way the real transport does' do
       zammad.stub(:post, 'api/v1/users', body: { id: 1 })
 

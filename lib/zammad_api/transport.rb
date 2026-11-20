@@ -429,6 +429,11 @@ module ZammadAPI
       'from'          => 'the From header is what on_behalf_of sets: use client.on_behalf_of(...) to perform requests for another user'
     }.freeze
 
+    # The part of a header name that is one, from its start: what RFC 9110
+    # calls a token, which is letters, digits and these signs. Read from
+    # the bytes, as a name is ASCII in every encoding a request can carry.
+    HEADER_NAME = /\A[!\#$%&'*+\-.^_`|~0-9A-Za-z]*/
+
     # The headers a request carries beyond the ones this class sets.
     #
     # Names are downcased, which is what makes two spellings of one header
@@ -436,6 +441,8 @@ module ZammadAPI
     # +{'Accept' => 'a', 'accept' => 'b'}+ would otherwise send whichever Hash
     # order put last and drop the other without a word - the silent drop
     # {DuplicateKeys} exists to refuse.
+    #
+    # A name that is not one is refused: see {.header_name}.
     #
     # Values are stringified for the reason {#with_on_behalf_of} stringifies
     # the +From+ scope: a header is text on the wire, and a value of another
@@ -449,12 +456,52 @@ module ZammadAPI
     # @api private
     # @param headers [Hash]
     # @return [Hash{String => String}]
-    # @raise [ArgumentError] for a nil value, a value that is not text, two
-    #   spellings of one header, or a header this class sets itself
+    # @raise [ArgumentError] for a name that is not a header name, a nil
+    #   value, a value that is not text, two spellings of one header, or a
+    #   header this class sets itself
     def self.stringify_headers(headers)
       DuplicateKeys
-        .normalize(headers, noun: 'header') { it.to_s.downcase }
+        .normalize(headers, noun: 'header') { header_name(it) }
         .to_h { |name, value| [name, stringify_header_value(name, value)] }
+    end
+
+    # A header name as it is compared and sent: downcased, and refused
+    # where it is not a name.
+    #
+    # Only the value was checked. A name went to the adapter as it was, and
+    # the Net::HTTP that ships with Ruby 3.4 and 4.0 writes it to the socket
+    # as it is: `headers: {"X-A: 1\r\nFrom: admin@example.com\r\nX-B" =>
+    # 'v'}` sent a From header of its own, which is the one {RESERVED_HEADERS}
+    # refuses by name, and an Authorization went the same way. `'From '`
+    # passed that lookup too, and was sent as `From : v`, and a name with
+    # nothing in it as `: v`. net-http refuses a control character or a
+    # colon from 0.10.0 on, with an ArgumentError of its own that quotes the
+    # name, raised after the request was logged, and takes the other two.
+    #
+    # @api private
+    # @param name [Object]
+    # @return [String]
+    # @raise [ArgumentError]
+    def self.header_name(name)
+      text  = name.to_s
+      bytes = text.b
+      start = bytes[HEADER_NAME].to_s
+      raise ArgumentError, not_a_header_name_message(start) if start.empty? || start.bytesize != bytes.bytesize
+
+      text.downcase
+    end
+
+    # Quotes the name as far as it is one, and no further.
+    #
+    # @api private
+    # @param start [String] the part of the name that is a name
+    # @return [String]
+    def self.not_a_header_name_message(start)
+      found = start.empty? ? 'a header name is empty or begins' : "the header name that begins #{start.inspect} goes on"
+
+      "#{found} with a character no header name carries: a name is letters, digits and signs such as - and _, " \
+        'without a space, a colon or a line break. The rest of it is not quoted here: what follows a line break in a ' \
+        'name would be sent as header lines of their own, and may be a credential.'
     end
 
     # @api private

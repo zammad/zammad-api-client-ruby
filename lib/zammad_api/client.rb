@@ -261,9 +261,9 @@ module ZammadAPI
     # @return [Response]
     # @raise [ResponseError] for any non-2xx response
     # @raise [TransportError] when the request could not be completed
-    # @raise [ArgumentError] for a header this client sets itself, a value
-    #   that is not text, a path that is an absolute URL, or one that cannot
-    #   be read as a URL
+    # @raise [ArgumentError] for a header this client sets itself, a header
+    #   name that is not one, a value that is not text, a path that is an
+    #   absolute URL, or one that cannot be read as a URL
     def get(path, query: nil, headers: nil) = raw(:get, path, query: query, headers: headers)
 
     # Performs a +POST+ against any endpoint of the Zammad API.
