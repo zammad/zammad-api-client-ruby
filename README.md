@@ -1204,6 +1204,11 @@ client = ZammadAPI::Client.new(
 )
 ```
 
+Any object will do in place of a `Logger`, as long as its `debug` can be called with a block
+and no argument: each line is handed over as a block, so that it is only built where it is
+written. One whose `debug` requires an argument raises `ConfigurationError` when the client
+is built.
+
 Requests, response statuses and durations are logged at `debug` level. Payload keys, query
 parameters and headers that look like credentials (`password`, `token`, `secret`, `cookie`,
 ...) are redacted. That holds for a query string written into the path of a raw request,
@@ -1495,7 +1500,7 @@ If this is not the time to move, [1.x stays available](#staying-on-1x).
 | -------------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
 | `Client.new(config_hash)`              | `Client.new(**config_hash)`                      | Options are keyword arguments now, so a Hash has to be splatted      |
 | an unknown option was ignored          | raises `ArgumentError: unknown keyword`          | A typo'd option used to be dropped without a word                    |
-| `logger: true`                         | `logger: Logger.new($stderr)`                    | The flag became an object, so you choose the device and level. Anything that answers `debug` is accepted; `true` raises `ConfigurationError` |
+| `logger: true`                         | `logger: Logger.new($stderr)`                    | The flag became an object, so you choose the device and level. Anything whose `debug` takes a block, as `Logger#debug` does, is accepted; `true` raises `ConfigurationError` |
 | `client.ticket`, `client.user`, …      | `client.tickets`, `client.users`, …              | A resource is `Enumerable` over every record now, so `client.ticket.each` read as if it acted on one ticket. The singular names raise `UnknownResourceError`, which lists the plural ones, and so does `client.resource(:ticket)` |
 | `client.on_behalf_of = 'login'`        | `client.on_behalf_of('login')` → new client      | The setter mutated the client and leaked across threads              |
 | `client.perform_on_behalf_of('x') { }` | `client.on_behalf_of('x') { \|scoped\| ... }`    | The old block form left the header set if the block raised           |

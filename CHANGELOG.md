@@ -20,7 +20,8 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   ignored, so an option that is misspelled or no longer supported is no longer silent.
 - `logger:` takes a `Logger` rather than a boolean flag. `logger: true` used to turn on
   debug output to `$stderr`; pass `Logger.new($stderr)` for the same thing. Any object
-  that responds to `debug` is accepted, and anything else raises `ConfigurationError`.
+  whose `debug` can be called with a block and no argument, as `Logger#debug` is, is
+  accepted, and anything else raises `ConfigurationError`.
 - `Collection#each` (`client.x.all`, `client.x.search`) now walks every page. Previously it
   fetched a single page, so iterating stopped silently at 100 records for `all` and at
   10 for `search`.
@@ -977,6 +978,10 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   gives every object, so `{ticket: ticket}.deep_dup` raised
   `NoMethodError: undefined attribute deep_dup`, and so did a list of records.
   `config.presence` raised the same way, for a private helper called `presence`.
+- A logger whose `debug` requires an argument raises `ConfigurationError` when the client
+  is built. It was accepted, as anything that answers `debug` was, and each line is handed
+  over as a block: `def debug(message)` raised a bare `ArgumentError` at the first request
+  and at every one after it.
 
 ### Changed
 
