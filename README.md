@@ -729,7 +729,13 @@ JSON.generate(group: client.groups.find(1))
 ```
 
 `as_json` returns the same attributes as a Hash, for ActiveSupport and any encoder that
-follows its convention.
+follows its convention. Both take `only:` and `except:` with attribute names, as Symbols or
+Strings:
+
+```ruby
+user.as_json(except: [:password])
+user.to_json(only: %w[id login])
+```
 
 ### Reload and destroy
 
