@@ -76,6 +76,7 @@ module ZammadAPI
     def page_size!: (untyped, String) -> Integer
     def walk: () { (Array[R]) -> void } -> void
     def read_whole: () { (Array[R]) -> void } -> void
+    def refuse_ignored_page!: (Integer page, Integer per_page, Integer digest) -> void
     def page_after: (Integer page, Integer per_page, Integer received, Integer? total) -> [ Integer, Integer ]
     def widened: (Integer covered, Integer? total) -> [ Integer, Integer ]
     def each_distinct: () { (Resources::Base) -> void } -> void

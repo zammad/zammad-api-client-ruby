@@ -1080,6 +1080,16 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `auth=http_token` and sent `Authorization: Token` with nothing after it. `http_token:
   12345`, `:abc` and `['a']` were sent as they print, and a Symbol was never asked for the
   line break a String is refused for.
+- A walk no longer raises `ZammadAPI::PaginationError` for a list that moved by exactly a
+  page between two requests. A page holding the records of the one before it was taken as
+  proof that the endpoint ignores `page`, and it is also what a list served newest first
+  answers with after that many records were created or updated at its front:
+  `client.tickets.search('state.name:open').in_batches(of: 2)` raised where two other open
+  tickets were updated between its first and second request, and on an index the message
+  advised `paginated false`, which would have read a list cut short. The walk asks for the
+  page before once more now. Where that holds the same records again it raises as before,
+  one request later. Where it holds others, the page that repeated is passed over, since
+  the block has had its records, and the walk goes on from the page after it.
 
 ### Changed
 

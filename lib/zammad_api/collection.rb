@@ -602,7 +602,16 @@ module ZammadAPI
         # are what a search serves for two pages of hits whose records are
         # gone, with more beyond them - see #hits_past? - and there is nothing
         # on either for the block to be handed twice.
-        raise PaginationError.build(operation: @operation, page: page, resource_class: @resource_class, index: !@search) if received.positive? && digest == previous
+        #
+        # A repeat alone does not say that `page` is ignored: see
+        # #refuse_ignored_page!. Where the list moved instead, this page is
+        # the one the block has had, so it is passed over and the walk goes
+        # on from the page after it.
+        if received.positive? && digest == previous
+          refuse_ignored_page!(page, per_page, digest)
+          page += 1
+          next
+        end
 
         yield records if received.positive?
 
@@ -657,6 +666,42 @@ module ZammadAPI
         previous = digest
         page, per_page = page_after(page, per_page, received, total)
       end
+    end
+
+    # Raises where a page that came back holding the records of the one
+    # before it means that the endpoint ignores +page+, and returns where it
+    # means that the list moved under the walk.
+    #
+    # Such a page is what an endpoint serves that ignores +page+, and it is
+    # also what one serves that pages as it should, where the list grew at
+    # its front by exactly a page between the two requests: a search is
+    # served most recently updated first, so two tickets updated elsewhere
+    # while `in_batches(of: 2)` was between its first and second request put
+    # the first page's tickets on the second. That walk raised
+    # PaginationError, and on an index the message went on to advise
+    # `paginated false`, which reads the list in one request and would have
+    # cut it short.
+    #
+    # The page before tells the two apart. Asked for again, it holds what it
+    # held, where the endpoint answers every page alike, and other records,
+    # where the ones it held have moved on to the next page. The page after
+    # would tell them apart as well and is one the walk needs anyway, but it
+    # repeats too where the list moves by a page a second time, which a small
+    # batch on a busy instance makes likely enough. For the page before to
+    # hold the same records again, the list has to move back.
+    #
+    # A page that repeats always follows one of its own size: only a page
+    # with nothing on it is followed by one of another size, and a page with
+    # records on it never compares equal to that.
+    #
+    # @param page [Integer] the page that repeated the one before it
+    # @param digest [Integer] what both pages held
+    # @raise [PaginationError]
+    def refuse_ignored_page!(page, per_page, digest)
+      _, again, = fetch(page - 1, per_page)
+      return if again != digest
+
+      raise PaginationError.build(operation: @operation, page: page, resource_class: @resource_class, index: !@search)
     end
 
     # The page that follows one a walk has read, and its size: the next of

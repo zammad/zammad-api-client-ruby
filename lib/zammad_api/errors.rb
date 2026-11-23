@@ -71,7 +71,8 @@ module ZammadAPI
   end
 
   # Raised when the server answers a page request with the page before it,
-  # which means it is ignoring +page+ and a collection walk would never end.
+  # and that page, asked for again, still holds the same records. It is
+  # ignoring +page+ then, and a collection walk would never end.
   class PaginationError < Error
     # What to do about an index that repeats its first page, which is what
     # one that serves every record in a single response does. Said as a
