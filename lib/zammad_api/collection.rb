@@ -360,6 +360,62 @@ module ZammadAPI
     # @see #count
     alias length count
 
+    # Yields the records in groups of +size+, the last group being what is
+    # left over.
+    #
+    # +Enumerable#each_slice+, run over the Enumerator of {#each} rather than
+    # over the collection. Ruby asks the receiver for its +size+ before it
+    # slices, to hold no more than there is to hold, and {#size} here is
+    # {#count}: a walk of every page on an index, a request for the total on
+    # a search, the page over again on a collection limited to one. So
+    # `page(1, per_page: 50).each_slice(10)` fetched its page twice and
+    # `client.tickets.each_slice(100)` read every ticket twice, and the
+    # groups were cut to the count the first of the two reads came back
+    # with, whatever the second then held. The Enumerator has no size to be
+    # asked for.
+    #
+    # An Enumerator that Ruby makes from the collection itself still has:
+    # `each_with_index` and `map` without a block report the size of what
+    # they were made from, so slicing one of those counts first. Slice
+    # first, and number the groups: `each_slice(10).with_index`.
+    #
+    # @example
+    #   client.users.each_slice(25) { |users| mailer.deliver(users) }
+    #
+    # @param size [Integer] records in a group
+    # @yieldparam records [Array<Resources::Base>]
+    # @return [Enumerator] when no block is given
+    def each_slice(size, &block)
+      return each.each_slice(size) if !block
+
+      each.each_slice(size, &block)
+      self
+    end
+
+    # Yields every run of +size+ records that follow one another.
+    #
+    # Run over the Enumerator of {#each}, for the reason {#each_slice} is:
+    # +Enumerable#each_cons+ asks for the +size+ in the same way.
+    #
+    # @param size [Integer] records in a run
+    # @yieldparam records [Array<Resources::Base>]
+    # @return [Enumerator] when no block is given
+    def each_cons(size, &block)
+      return each.each_cons(size) if !block
+
+      each.each_cons(size, &block)
+      self
+    end
+
+    # A lazy enumerator over the records.
+    #
+    # Made from the Enumerator of {#each} as well. A lazy enumerator answers
+    # +size+ with what its source answers, so `lazy.each_slice(10).first(2)`
+    # counted the collection on its way to two groups.
+    #
+    # @return [Enumerator::Lazy]
+    def lazy = each.lazy
+
     # Whether this collection has no records.
     #
     # Costs the one request {#first} costs: a page of a single record, except

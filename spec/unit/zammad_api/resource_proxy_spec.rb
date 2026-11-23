@@ -694,6 +694,33 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect(proxy.length).to eq(1)
     end
 
+    # A proxy is Enumerable, and Enumerable's own two ask for the size before
+    # they start, which is a walk of its own.
+    it 'forwards #each_slice, which walks the pages once' do
+      stub_last_page(1, [{ id: 1 }, { id: 2 }, { id: 3 }])
+
+      groups = []
+      proxy.each_slice(2) { groups << it.map(&:id) }
+      expect(groups).to eq([[1, 2], [3]])
+      expect(a_request(:get, url).with(query: hash_including({}))).to have_been_made.twice
+    end
+
+    it 'forwards #each_cons, which walks the pages once' do
+      stub_last_page(1, [{ id: 1 }, { id: 2 }, { id: 3 }])
+
+      runs = []
+      proxy.each_cons(2) { runs << it.map(&:id) }
+      expect(runs).to eq([[1, 2], [2, 3]])
+      expect(a_request(:get, url).with(query: hash_including({}))).to have_been_made.twice
+    end
+
+    it 'forwards #lazy, which slices without counting first' do
+      stub_last_page(1, [{ id: 1 }, { id: 2 }, { id: 3 }])
+
+      expect(proxy.lazy.each_slice(2).first(1).map { it.map(&:id) }).to eq([[1, 2]])
+      expect(a_request(:get, url).with(query: hash_including({}))).to have_been_made.once
+    end
+
     it 'forwards #take, so it costs what #first costs' do
       stub_page(1, [{ id: 1 }, { id: 2 }], per_page: 2)
 

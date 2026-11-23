@@ -1131,6 +1131,17 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   to its foreign key left what the association had resolved in place, and `related.role`
   answered role 5 after `role_id = 6`. Declaring one drops the list, on the class and on
   every class that inherits from it.
+- `each_slice` and `each_cons` read the records once. Ruby asks the receiver for its `size`
+  before either starts, and the `size` of a collection is its `count`: a walk of every page
+  on an index, a request for the total on a search, the page once more on a collection
+  limited to one. So `client.tickets.each_slice(100)` read every ticket twice, and
+  `page(1, per_page: 50).each_slice(10)`, the call the errors of `page` point to, fetched
+  its page twice. The groups were also cut to the count the first of the two reads came
+  back with, whatever the second then held. Both run over the Enumerator of `each` now, on
+  a collection and on `client.tickets` alike, and `lazy` is made from it as well, since a
+  lazy enumerator hands the same question on to its source. An Enumerator that Ruby makes
+  from the collection itself, as `each_with_index` without a block is, still counts when it
+  is sliced: slice first, with `each_slice(10).with_index`.
 
 ### Changed
 
