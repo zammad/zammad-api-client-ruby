@@ -1596,9 +1596,15 @@ module ZammadAPI
     # the message embeds the value verbatim, and the url as well as the proxy
     # because {Config} can only refuse the credentials in a url it can read:
     # one that is not a URL at all gets this far, and is quoted here.
+    #
+    # And the proxies the environment names, which no option holds: see
+    # {#environment_proxies}.
     def redact_config_values(message)
-      [config.proxy, config.url].compact.inject(message.to_s) do |text, value|
-        redacted = config.redacted(value)
+      [config.proxy, config.url, *environment_proxies].compact.inject(message.to_s) do |text, value|
+        spellings = quoted_spellings(value)
+        # Of the value as it can be read. A configured one is its own first
+        # spelling, and redacting text with a broken byte in it raises.
+        redacted  = config.redacted(spellings.first)
 
         # The block form. A String replacement expands the backslash
         # sequences it contains, and the replacement here is the configured
@@ -1615,8 +1621,35 @@ module ZammadAPI
         # matched nothing and left the password standing in full - the case
         # this method exists for, reached through the quoting rather than
         # the value.
-        quoted_spellings(value).inject(text) { |scrubbed, spelling| scrubbed.gsub(spelling) { redacted } }
+        spellings.inject(text) { |scrubbed, spelling| scrubbed.gsub(spelling) { redacted } }
       end
+    end
+
+    # A variable of the environment that names a proxy, in either case:
+    # `https_proxy`, `HTTP_PROXY`, and `no_proxy` among them, which is a
+    # list of hosts and comes through the redaction as it went in.
+    ENVIRONMENT_PROXY = /_proxy\z/i
+    private_constant :ENVIRONMENT_PROXY
+
+    # The proxy URLs the environment names, to be scrubbed from an error as
+    # the configured one is.
+    #
+    # With no `proxy:` given, Faraday takes the one `http_proxy` or
+    # `https_proxy` names, and it is URI that reads it: one it cannot parse
+    # was quoted whole in the ConfigurationError above and kept as its
+    # cause. `https_proxy='http://user:hunter 2@proxy.example:3128'`, a
+    # password with a space left unencoded, printed that password wherever
+    # the error was logged. The redaction knew the values of the
+    # configuration only, and this one is in none of them.
+    #
+    # Every such variable rather than the two Faraday is known to read:
+    # which of them URI consults depends on the scheme and on whether the
+    # process is a CGI, and a value that holds no credentials is not
+    # changed by being looked for.
+    #
+    # @return [Array<String>]
+    def environment_proxies
+      ENV.filter_map { |name, value| value if name.match?(ENVIRONMENT_PROXY) && !value.empty? }
     end
 
     # The value as an error may have quoted it: as it is, as +inspect+
@@ -1629,7 +1662,11 @@ module ZammadAPI
     # with an umlaut in it therefore matched neither of the two spellings
     # that were looked for, and stayed in the message - and in the cause,
     # which is kept wherever redaction finds nothing to change.
-    def quoted_spellings(value) = [value, value.inspect[1...-1], value.dump[1...-1]].compact.uniq
+    #
+    # Only the spellings that can be looked for. A value with a byte that is
+    # not text in its encoding, which the environment can hold, raises from
+    # the search for it, and an error can only have quoted it escaped.
+    def quoted_spellings(value) = [value, value.inspect[1...-1], value.dump[1...-1]].compact.uniq.select(&:valid_encoding?)
 
     # Takes off the connection what `Faraday.default_connection_options` put
     # on it that only this client's configuration is to say.
