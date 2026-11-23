@@ -60,6 +60,7 @@ module ZammadAPI
                           | (Symbol name) -> untyped
       def self.declared_associations: () -> Hash[Symbol, Hash[Symbol, untyped]]
       def self.belongs_to: (Symbol name, class_name: String, ?foreign_key: Symbol) -> void
+      def self.forget_foreign_keys: () -> void
       def self.has_many: (Symbol name, class_name: String, path: ^(String) -> String) -> void
 
       def initialize: (Transport, ?hash[untyped, untyped]? attributes) -> void

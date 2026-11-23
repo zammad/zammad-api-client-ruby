@@ -1125,6 +1125,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   customer who belongs to no organization, whether or not there is an organization 5, so
   `client.organizations.exists?(5)` was `true` for it. `find` hands over what was served,
   as before: a record with no id.
+- A `belongs_to` declared after a record of the class was written to is followed. The
+  foreign keys of a resource are listed at the first write to an attribute and the list was
+  kept, so an association added later, on a class reopened for it, was not in it: a write
+  to its foreign key left what the association had resolved in place, and `related.role`
+  answered role 5 after `role_id = 6`. Declaring one drops the list, on the class and on
+  every class that inherits from it.
 
 ### Changed
 
