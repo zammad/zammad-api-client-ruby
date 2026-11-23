@@ -163,8 +163,12 @@ printed — `inspect`, `to_s` or `pp`, which is what a console shows — and how
 serialized as text, with `to_json`, with the `as_json` ActiveSupport asks or with `to_yaml`,
 so a configuration object is safe to include in an error report. A client serializes as its
 URL and the way it authenticates, and no more, and so does the transport a record's YAML
-names. `Marshal.dump` is the exception: it writes what the object is rebuilt from,
-credentials included.
+names. `Marshal.dump` is the exception, where it works at all. It writes what the object is
+rebuilt from, credentials included, and it writes a configuration whose logger is the
+default one. A client and a record are dumped only until the client has made a request:
+from then on the connection holds a lock, and `Marshal.dump` raises `TypeError`, as it does
+from the start where the logger writes to a file or a stream. See
+[Comparing and serializing](#comparing-and-serializing) for what to cache of a record.
 
 Credentials belong in the options above, not in the URL. `https://user:secret@host/` raises
 `ZammadAPI::ConfigurationError`, because the HTTP stack would send those as basic
@@ -750,6 +754,17 @@ Strings:
 ```ruby
 user.as_json(except: [:password])
 user.to_json(only: %w[id login])
+```
+
+The record itself does not go through `Marshal`, so it does not go into a cache that
+marshals what it is given, as `Rails.cache` does. A record holds the connection it was read
+over, which cannot be dumped once it has carried a request, and `Marshal.dump(ticket)`
+raises `TypeError`. Cache what the record holds, and read it again by its id where a record
+is needed:
+
+```ruby
+Rails.cache.write("ticket/#{ticket.id}", ticket.to_h) # a plain Hash of what it holds
+client.tickets.find(ticket.id)                        # the record, read again
 ```
 
 ### Reload and destroy

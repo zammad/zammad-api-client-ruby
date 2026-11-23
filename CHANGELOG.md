@@ -1042,8 +1042,9 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   holds the token and the proxy password. So `record.to_yaml`, which is what Rails' `debug`
   view helper and a Delayed::Job handler write, printed both. A configuration is written as
   the mapping its JSON holds, and a transport as its URL and the way it authenticates, the
-  test kit's included. `Marshal.dump` still holds the credentials: it is what a copy is
-  rebuilt from.
+  test kit's included. `Marshal.dump` still holds the credentials where it writes anything:
+  it is what a copy is rebuilt from, and it raises `TypeError` for a client or a record
+  once the client has made a request.
 - A walk sorted by an attribute that records share hands each record over once. `order`
   sent the columns it was given, and Zammad sorts by those and by nothing after them, an
   index and a search alike, so PostgreSQL was free to hand rows that tie back in another
