@@ -987,6 +987,77 @@ RSpec.describe ZammadAPI::Test do
     end
   end
 
+  # The wire refuses a 2xx whose body stops short of its Content-Length, and
+  # the stand-in handed it back: code that handles a save cut short could
+  # not be exercised here, and a fixture with a stale Content-Length passed
+  # here and failed against Zammad.
+  describe 'a 2xx stubbed with a Content-Length its body is short of' do
+    subject(:zammad) { described_class.new }
+
+    let(:client) { zammad.client }
+    let(:cut_short) { { status: 200, body: '{"id":1,"na', headers: { 'Content-Type' => 'application/json', 'Content-Length' => '30' } } }
+
+    it 'raises what the wire raises, in its words' do
+      zammad.stub(:get, 'api/v1/groups/1', **cut_short)
+
+      expect { client.groups.find(1) }
+        .to raise_error(ZammadAPI::IncompleteResponseError, %r{Can't find object: the response from https://zammad\.test/ ended 19 bytes short of the 30})
+    end
+
+    it 'hands over the response as far as it was stubbed' do
+      zammad.stub(:get, 'api/v1/groups/1', **cut_short)
+
+      expect { client.groups.find(1) }
+        .to raise_error(ZammadAPI::IncompleteResponseError) { expect(it.response.raw_body).to eq('{"id":1,"na') }
+    end
+
+    it 'leaves a record whose save it answers saved, as the wire does' do
+      zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'Users' })
+      zammad.stub(:put, 'api/v1/groups/1', **cut_short)
+      group = client.groups.find(1)
+      group.name = 'Support'
+
+      expect { group.save }.to raise_error(ZammadAPI::IncompleteResponseError)
+      expect(group.changed?).to be(false)
+    end
+
+    it 'records the request, and does not send a read again for it' do
+      zammad.stub(:get, 'api/v1/groups/1', **cut_short)
+
+      expect { client.groups.find(1) }.to raise_error(ZammadAPI::IncompleteResponseError)
+      expect(zammad.requests.map(&:path)).to eq(['api/v1/groups/1'])
+    end
+
+    it 'takes a body as long as its Content-Length, or longer' do
+      zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 }, headers: { 'Content-Length' => 8 })
+      zammad.stub(:get, 'api/v1/groups/2', body: { id: 2 }, headers: { 'Content-Length' => 2 })
+
+      expect([client.groups.find(1).id, client.groups.find(2).id]).to eq([1, 2])
+    end
+
+    it 'takes a 204, which has no body whatever the header says' do
+      zammad.stub(:delete, 'api/v1/groups/1', status: 204, headers: { 'Content-Length' => 5 })
+
+      expect(client.groups.destroy(1)).to be(true)
+    end
+
+    it 'raises the error of its status for a response that is no 2xx' do
+      zammad.stub(:get, 'api/v1/groups/1', status: 404, body: { error: 'gone' }, headers: { 'Content-Length' => 500 })
+
+      expect { client.groups.find(1) }.to raise_error(ZammadAPI::NotFoundError)
+    end
+
+    # The page after a list is one the stand-in makes up, and the length
+    # written for the records does not count it.
+    it 'counts the empty page it serves after a list anew' do
+      records = [{ id: 1 }, { id: 2 }]
+      zammad.stub(:get, 'api/v1/groups', body: records, headers: { 'Content-Length' => JSON.generate(records).bytesize })
+
+      expect(client.groups.map(&:id)).to eq([1, 2])
+      expect(client.get('api/v1/groups', query: { page: 2 }).headers['content-length']).to eq('2')
+    end
+  end
+
   describe 'a list endpoint whose resource says it does not page' do
     let(:resource) do
       Class.new(ZammadAPI::Resources::Base) do

@@ -1189,6 +1189,12 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   the way round it. It raises `ArgumentError` now, with the dots written as they are or as
   `%2e`, for every verb, and in `ZammadAPI::Test` as on the wire. A `..` in a query string
   is left alone, and so is a record id, which is escaped into a segment of its own.
+- `ZammadAPI::Test` raises `IncompleteResponseError` for a 2xx stub whose `Content-Length`
+  announces more than its body holds, as the transport does for that response. It handed
+  the response back as whole, so what a program does about a save or a destroy that was cut
+  short could not be tested against it, and a fixture carrying a stale `Content-Length`
+  passed there and failed against Zammad. The empty page it serves after a stubbed list is
+  given a length of its own.
 
 ### Changed
 

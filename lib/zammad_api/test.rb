@@ -247,12 +247,19 @@ module ZammadAPI
     # times here where the wire is asked once. The +timeout+ a
     # +Retry-After+ is held against is read the same way.
     #
+    # A 2xx stubbed with a +Content-Length+ that announces more than its
+    # body holds is the response the wire raises {IncompleteResponseError}
+    # for, and is raised for here: it is how a test says that a save was
+    # answered and the answer cut short.
+    #
     # @api private
     # @param config [Config] the configuration of the client that sent the
     #   request
     # @return [Response]
     # @raise [ResponseError] for a stubbed non-2xx status, once the retries
     #   it is due are spent
+    # @raise [IncompleteResponseError] for a stubbed 2xx whose body is
+    #   shorter than its Content-Length
     # @raise [UnstubbedRequestError] when no stub matches
     def answer(method, path, operation:, query: nil, body: nil, headers: nil, resource_class: nil, on_behalf_of: nil, config: self.config)
       relative = ::ZammadAPI::Transport.relative_path(path)
@@ -277,7 +284,9 @@ module ZammadAPI
 
         response = attempt(request)
       end
-      return response if response.success?
+      # Held to its Content-Length as the wire holds it: see
+      # {Transport.whole}.
+      return ::ZammadAPI::Transport.whole(response, operation: operation, config: config) if response.success?
 
       raise ResponseError.build(response, operation: operation, resource_class: resource_class)
     end
@@ -552,7 +561,17 @@ module ZammadAPI
       # the bytes the stub was written with for every other response.
       return build_response(stub, body, raw, json: json) if paged.equal?(body)
 
-      build_response(stub, paged, JSON.generate(paged), json: json)
+      emptied = JSON.generate(paged)
+      build_response(stub, paged, emptied, json: json, headers: recounted(stub[:headers], emptied))
+    end
+
+    # The headers of a stub for a body that paging replaced. A
+    # Content-Length written for the records does not count the empty page
+    # served after them, and would have it refused as cut short.
+    def recounted(headers, raw_body)
+      return headers if !headers.key?('content-length')
+
+      headers.merge('content-length' => raw_body.bytesize.to_s)
     end
 
     # The bytes a stub's body would have arrived as. A Hash or Array is what a
@@ -572,8 +591,8 @@ module ZammadAPI
     # editing a content-type to check a decode path, say - rewrote the
     # stand-in for every later request in the example. The real transport builds a fresh
     # hash per response, and this exists to behave like it.
-    def build_response(stub, body, raw_body, json:)
-      Response.new(status: stub[:status], headers: stub[:headers].dup.freeze, body: body, raw_body: raw_body, json: json)
+    def build_response(stub, body, raw_body, json:, headers: stub[:headers])
+      Response.new(status: stub[:status], headers: headers.dup.freeze, body: body, raw_body: raw_body, json: json)
     end
 
     # Where the endpoint is stubbed and only the query kept every stub from

@@ -88,6 +88,8 @@ module ZammadAPI
     def self.not_a_json_value_message: (untyped value, untyped key) -> String
     def self.retry_options: (Config config) -> Hash[Symbol, untyped]
     def self.retried?: (Config config, Symbol method, Response response) -> bool
+    def self.whole: (Response response, operation: String, config: Config) -> Response
+    def self.missing_bytes: (Response response) -> Integer?
     def self.description: (Config config, String? on_behalf_of) -> Hash[Symbol, untyped]
 
     def initialize: (Config) -> void
@@ -102,8 +104,6 @@ module ZammadAPI
 
     private
 
-    def whole: (Response response, String operation) -> Response
-    def missing_bytes: (Response response) -> Integer?
     def timed_out?: (untyped error) -> bool
     def perform: (Symbol, String, Hash[Symbol, untyped]?, String?, Hash[untyped, untyped]?) -> untyped
     def build_connection: () -> untyped
