@@ -1387,6 +1387,9 @@ client.groups.all.count # => 1
 client.groups.all.count # => 2
 ```
 
+A `count` on a search is one step as well, although it asks twice: for the total alone,
+which a stub holding records answers with the records, and then for the pages.
+
 The second stub may also be declared once the first has answered, between two steps of a
 test. It answers from the next request on.
 

@@ -384,6 +384,15 @@ module ZammadAPI
     # read again, a ticket was open twice and closed at the third read. A
     # test that changes what an endpoint answers as it goes is the same
     # sequence as one that declares it up front.
+    #
+    # A request for the count of a search does not move the sequence on
+    # either, where the stub whose turn it is holds records rather than a
+    # total. `count` asks with +only_total_count+ first, is answered with the
+    # records the way a Zammad before 6.5.0 answers it, and walks the pages
+    # instead, so the request and the walk are one read. Taken for two, they
+    # spent a stub each: three stubs of one, two and three records counted
+    # two, three and three, where `to_a.size` over the same stubs is one, two
+    # and three. See {#counted_alone?}.
     def take(method, path, params)
       endpoint = key(method, path)
       queued   = @stubs[endpoint]
@@ -399,13 +408,48 @@ module ZammadAPI
       # that is the first thing asked: `page(3)` on a list nothing has read.
       return served || queued[group.first] if later_page?(scope, params)
 
-      if group.size > 1 && queued[group.first].equal?(served)
+      # A stub that answered while it was the last of its kind has had its
+      # turn, so the one behind it is due.
+      turn_over = group.size > 1 && queued[group.first].equal?(served)
+      due       = queued[turn_over ? group[1] : group.first]
+      return due if count_request?(scope, params) && !counted_alone?(due)
+
+      @served[[endpoint, scope]] = advance(queued, group, turn_over)
+    end
+
+    # Moves a sequence on by one read, and hands over the stub that read is
+    # answered by. The last of its kind is kept in place, to go on answering.
+    def advance(queued, group, turn_over)
+      if turn_over
         queued.delete_at(group.first)
         # Every other stub of the group sat behind the one that went.
         group = group.drop(1).map(&:pred)
       end
 
-      @served[[endpoint, scope]] = group.one? ? queued[group.first] : queued.delete_at(group.first)
+      group.one? ? queued[group.first] : queued.delete_at(group.first)
+    end
+
+    # Whether a request asks a search for its total alone, of a stub that
+    # was not written for that request in particular. One scoped to
+    # +only_total_count+ is the answer to this request and to no other, and
+    # is sequenced as any stub is.
+    def count_request?(scope, params)
+      params.key?('only_total_count') && !scope&.key?('only_total_count')
+    end
+
+    # Whether a stub answers a request for the total with one, which makes
+    # that request the whole of a `count`. {Collection#total_count} reads a
+    # total off a 2xx whose body is an object holding a count, and walks the
+    # pages for anything else.
+    #
+    # A stub of another status is no part of a walk: the request it answers
+    # fails, or is sent again, and either way has had a stub of its own.
+    def counted_alone?(stub)
+      return true if !Response::SUCCESS_STATUSES.cover?(stub[:status])
+
+      body, = Response.decode_body(stub[:headers]['content-type'], raw_body_for(stub[:body]))
+      total = body.is_a?(Hash) ? body[:total_count] : nil
+      total.is_a?(Integer) && !total.negative?
     end
 
     # Whether a request asks for a page beyond the first of a list whose stub

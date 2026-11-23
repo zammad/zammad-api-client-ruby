@@ -59,6 +59,9 @@ module ZammadAPI
     def snapshot: (untyped) -> untyped
     def take: (Symbol method, String path, Hash[String, untyped] params) -> Hash[Symbol, untyped]?
     def later_page?: (Hash[String, untyped]? scope, Hash[String, untyped] params) -> bool
+    def advance: (Array[Hash[Symbol, untyped]] queued, Array[Integer] group, bool turn_over) -> Hash[Symbol, untyped]
+    def count_request?: (Hash[String, untyped]? scope, Hash[String, untyped] params) -> bool
+    def counted_alone?: (Hash[Symbol, untyped] stub) -> bool
     def most_specific: (Array[Hash[Symbol, untyped]] queued, Array[Integer] matching, Symbol method, String path) -> Array[Integer]
     def ambiguous_message: (Symbol method, String path, Array[Hash[String, untyped]?] scopes) -> String
     def matches?: (Hash[untyped, untyped]? expected, Hash[String, untyped] params) -> bool
