@@ -261,11 +261,17 @@ module ZammadAPI
     # This costs one request, and reads the record to find out, because Zammad
     # has no cheaper answer for a single id.
     #
+    # A record is one that says which it is. Any 2xx used to count, and
+    # Zammad answers one with an empty object where it has nothing to show
+    # the client: `organizations/5` is `{}` for a customer who belongs to no
+    # organization, whether or not there is an organization 5. That came
+    # back as true. {#find} still hands over what was served, a record with
+    # no id.
+    #
     # @param id [Integer, String]
     # @return [Boolean]
     def exists?(id)
-      find(id)
-      true
+      !find(id).id.nil?
     rescue NotFoundError
       false
     end

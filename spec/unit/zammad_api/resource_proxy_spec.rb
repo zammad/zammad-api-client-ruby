@@ -512,6 +512,14 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect(proxy.exists?(404)).to be(false)
     end
 
+    # What Zammad answers a customer who belongs to no organization with,
+    # for any organization id: 200 and an object with nothing in it.
+    it 'is false where Zammad answers with an object that names no record' do
+      stub_request(:get, "#{url}/5").with(query: hash_including({})).to_return(json_response({}))
+
+      expect(proxy.exists?(5)).to be(false)
+    end
+
     it 'does not swallow an authorization failure' do
       stub_request(:get, "#{url}/1").with(query: hash_including({}))
         .to_return(json_response({ error: 'no' }, status: 403))
