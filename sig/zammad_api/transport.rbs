@@ -25,6 +25,7 @@ module ZammadAPI
     # private_constant in the source; RBS has no way to say so.
     REFUSED_MIDDLEWARE: Hash[String, [String, String]]
     CONTENT_LENGTH: Regexp
+    ENVIRONMENT_PROXY: Regexp
     MISREAD_ELEMENTS: Hash[Symbol, String]
     SENSITIVE_KEY_PATTERN: Regexp
     REDACTED: String
@@ -118,6 +119,7 @@ module ZammadAPI
     def unlogged_body: (String body) -> String
     def reportable_cause: (StandardError error) -> StandardError?
     def redact_config_values: (untyped message) -> String
+    def environment_proxies: () -> Array[String]
     def quoted_spellings: (String value) -> Array[String]
     def logger: () -> Logger
   end

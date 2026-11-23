@@ -1112,6 +1112,14 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   parameters set there went into every query. The connection is built without those three,
   as 1.x never was. Everything else in the options still applies, and what the
   `middleware:` callable sets on the connection stands.
+- A `ConfigurationError` raised while building the connection no longer quotes the
+  credentials of a proxy the environment names. With no `proxy:` given, Faraday takes the
+  one in `http_proxy` or `https_proxy`, and the redaction of that error knew the configured
+  values only: `https_proxy='http://user:hunter 2@proxy.example:3128'` came back as
+  `URI::InvalidURIError: bad URI (is not URI?)` with the whole URL in the message and again
+  in the cause, as 1.x let it out unwrapped. Every variable of the environment whose name
+  ends in `_proxy` is scrubbed as the configured proxy is, and the cause is dropped where
+  it quotes one.
 
 ### Changed
 

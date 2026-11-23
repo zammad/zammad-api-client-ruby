@@ -2671,6 +2671,74 @@ RSpec.describe ZammadAPI::Transport do
       end
     end
 
+    # With no `proxy:` given, Faraday takes the one the environment names,
+    # and URI quotes one it cannot parse as it quotes a configured one. The
+    # redaction knew the values of the configuration, and this is in none.
+    context 'when the proxy is the one the environment names' do
+      let(:proxy) { 'http://user:hunter 2@proxyhost:3128' }
+
+      around do |example|
+        before = ENV.fetch('http_proxy', nil)
+        ENV['http_proxy'] = proxy
+        example.run
+      ensure
+        ENV['http_proxy'] = before
+      end
+
+      # An address, so that URI has no name to look up before it reads the
+      # proxy.
+      def build = unit_transport(url: 'http://192.0.2.1/')
+
+      it 'reports it as a configuration error' do
+        expect { build }.to raise_error(ZammadAPI::ConfigurationError, /URI::InvalidURIError/)
+      end
+
+      it 'keeps the proxy password out of the message' do
+        expect { build }.to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.message).not_to include('hunter 2') }
+      end
+
+      it 'still says which value was rejected' do
+        expect { build }.to raise_error(ZammadAPI::ConfigurationError, %r{http://\[REDACTED\]@proxyhost:3128})
+      end
+
+      it 'keeps the proxy password out of the whole report' do
+        expect { build }
+          .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.full_message(highlight: false)).not_to include('hunter 2') }
+      end
+
+      it 'does not carry the error that quotes the password along as its cause' do
+        expect { build }.to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.cause).to be_nil }
+      end
+
+      # The environment can hold what no option is accepted with, and text
+      # with a broken byte in it raises from being searched for.
+      context 'when its password holds a byte that is not text' do
+        let(:proxy) { "http://user:hunter\xFF2@proxyhost:3128" }
+
+        it 'is still reported as a configuration error, without the password' do
+          expect { build }.to raise_error(ZammadAPI::ConfigurationError, %r{http://\[REDACTED\]@proxyhost:3128}) { |error|
+            expect(error.full_message(highlight: false)).not_to include('hunter')
+          }
+        end
+      end
+
+      context 'when the environment names it in upper case' do
+        around do |example|
+          before = ENV.fetch('HTTPS_PROXY', nil)
+          ENV['http_proxy']  = nil
+          ENV['HTTPS_PROXY'] = proxy
+          example.run
+        ensure
+          ENV['HTTPS_PROXY'] = before
+        end
+
+        it 'keeps the proxy password out of the whole report' do
+          expect { unit_transport(url: 'https://192.0.2.1/') }
+            .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.full_message(highlight: false)).not_to include('hunter 2') }
+        end
+      end
+    end
+
     # The error quotes what it rejected through `inspect`, which escapes the
     # backslash - so the text in the message stopped matching the configured
     # value and the substring swap redacted nothing at all.
