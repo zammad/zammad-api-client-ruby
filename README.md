@@ -1079,6 +1079,11 @@ A block or an argument is `Enumerable#count` counting matches, and walks either 
 client.tickets.all.count { it.state == 'open' }  # walks every page
 ```
 
+Ruby asks for a `size` in places that do not look like a count. `each_slice`, `each_cons`
+and `lazy` on a collection do not: they read the records once. An Enumerator that Ruby makes
+from the collection does, so `each_with_index.each_slice(10)` counts before it slices, and
+`each_slice(10).with_index` is the way to write it.
+
 Nothing is cached, so every traversal of a collection fetches again.
 
 ### `find` is a lookup, not a filter

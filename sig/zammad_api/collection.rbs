@@ -56,6 +56,11 @@ module ZammadAPI
     def count: (*untyped) ?{ (R) -> boolish } -> Integer
     def size: (*untyped) ?{ (R) -> boolish } -> Integer
     def length: (*untyped) ?{ (R) -> boolish } -> Integer
+    def each_slice: (Integer size) { (Array[R]) -> void } -> Collection[R]
+                  | (Integer size) -> Enumerator[Array[R], untyped]
+    def each_cons: (Integer size) { (Array[R]) -> void } -> Collection[R]
+                 | (Integer size) -> Enumerator[Array[R], untyped]
+    def lazy: () -> Enumerator::Lazy[R, void]
     def empty?: () -> bool
     def any?: () -> bool
            | ...

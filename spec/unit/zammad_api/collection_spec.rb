@@ -894,6 +894,137 @@ RSpec.describe ZammadAPI::Collection do
     end
   end
 
+  # Enumerable#each_slice and #each_cons ask the receiver for its size before
+  # they start, and the size of a collection is a count of it.
+  describe '#each_slice' do
+    let(:search_url) { "#{ClientHelper::BASE_URL}api/v1/users/search" }
+
+    def requests_made = a_request(:get, url).with(query: hash_including({}))
+
+    it 'yields the records in groups, the last one being what is left' do
+      stub_last_page(1, [{ id: 1 }, { id: 2 }, { id: 3 }])
+
+      groups = []
+      collection.each_slice(2) { groups << it.map(&:id) }
+      expect(groups).to eq([[1, 2], [3]])
+    end
+
+    it 'walks the pages once' do
+      stub_last_page(1, [{ id: 1 }, { id: 2 }, { id: 3 }])
+
+      collection.each_slice(2) { nil }
+      expect(requests_made).to have_been_made.twice
+    end
+
+    it 'fetches a page once' do
+      stub_page(1, [{ id: 1 }, { id: 2 }, { id: 3 }], per_page: 3)
+
+      collection.page(1, per_page: 3).each_slice(2) { nil }
+      expect(requests_made).to have_been_made.once
+    end
+
+    it 'does not ask a search for its total' do
+      stub_request(:get, search_url).with(query: hash_including('page' => '1')).to_return(json_response([{ id: 1 }]))
+      stub_request(:get, search_url).with(query: hash_including('page' => '2')).to_return(json_response([]))
+
+      client.users.search('smith').each_slice(2) { nil }
+      expect(a_request(:get, search_url).with(query: hash_including('only_total_count' => 'true'))).not_to have_been_made
+    end
+
+    # The groups were cut to the count that came back first, so a list that
+    # grew between the two reads was handed over in groups of that many.
+    it 'groups the records it reads, whatever a read before it held' do
+      stub_request(:get, url).with(query: hash_including('page' => '1'))
+        .to_return(json_response([{ id: 1 }]), json_response([{ id: 1 }, { id: 2 }]))
+      stub_request(:get, url).with(query: hash_including('page' => '2')).to_return(json_response([]))
+
+      groups = []
+      collection.each_slice(5) { groups << it.map(&:id) }
+      expect(groups).to eq([[1]])
+    end
+
+    it 'returns the collection' do
+      stub_last_page(1, [{ id: 1 }])
+
+      expect(collection.each_slice(2) { nil }).to equal(collection)
+    end
+
+    it 'returns an Enumerator without a block, and asks for nothing' do
+      expect(collection.each_slice(2)).to be_a(Enumerator)
+      expect(requests_made).not_to have_been_made
+    end
+
+    it 'numbers the groups without counting the records' do
+      stub_last_page(1, [{ id: 1 }, { id: 2 }, { id: 3 }])
+
+      expect(collection.each_slice(2).with_index.map { |group, index| [index, group.size] }).to eq([[0, 2], [1, 1]])
+      expect(requests_made).to have_been_made.twice
+    end
+
+    it 'refuses a size that is not positive, with or without a block' do
+      expect { collection.each_slice(0) }.to raise_error(ArgumentError, 'invalid slice size')
+      expect { collection.each_slice(0) { nil } }.to raise_error(ArgumentError, 'invalid slice size')
+    end
+  end
+
+  describe '#each_cons' do
+    def requests_made = a_request(:get, url).with(query: hash_including({}))
+
+    it 'yields every run of records that follow one another' do
+      stub_last_page(1, [{ id: 1 }, { id: 2 }, { id: 3 }])
+
+      runs = []
+      collection.each_cons(2) { runs << it.map(&:id) }
+      expect(runs).to eq([[1, 2], [2, 3]])
+    end
+
+    it 'walks the pages once' do
+      stub_last_page(1, [{ id: 1 }, { id: 2 }, { id: 3 }])
+
+      collection.each_cons(2) { nil }
+      expect(requests_made).to have_been_made.twice
+    end
+
+    it 'returns the collection' do
+      stub_last_page(1, [{ id: 1 }])
+
+      expect(collection.each_cons(2) { nil }).to equal(collection)
+    end
+
+    it 'returns an Enumerator without a block, and asks for nothing' do
+      expect(collection.each_cons(2)).to be_a(Enumerator)
+      expect(requests_made).not_to have_been_made
+    end
+
+    it 'refuses a size that is not positive' do
+      expect { collection.each_cons(0) }.to raise_error(ArgumentError, 'invalid size')
+    end
+  end
+
+  describe '#lazy' do
+    def requests_made = a_request(:get, url).with(query: hash_including({}))
+
+    it 'stops the walk as soon as it has enough' do
+      stub_page(1, full_page)
+
+      expect(collection.lazy.map(&:id).first(2)).to eq([1, 2])
+      expect(requests_made).to have_been_made.once
+    end
+
+    # A lazy enumerator answers size with its source's, which was the count.
+    it 'slices without counting the records first' do
+      stub_last_page(1, [{ id: 1 }, { id: 2 }, { id: 3 }])
+
+      expect(collection.lazy.each_slice(2).map { it.map(&:id) }.to_a).to eq([[1, 2], [3]])
+      expect(requests_made).to have_been_made.twice
+    end
+
+    it 'has no size to report' do
+      expect(collection.lazy.size).to be_nil
+      expect(requests_made).not_to have_been_made
+    end
+  end
+
   describe '#empty?' do
     it 'is false when the endpoint has a record' do
       stub_request(:get, url).with(query: hash_including({})).to_return(json_response([{ id: 1 }]))

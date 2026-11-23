@@ -396,7 +396,28 @@ module ZammadAPI
     #   @return [Array<Resources::Base>]
     #   @see Collection#take
 
-    def_delegators :all, :order, :each, :find_each, :in_batches, :page, :pluck, :count, :size, :length, :empty?, :any?, :none?, :first, :take
+    # @!method each_slice(size, &block)
+    #   Overrides +Enumerable#each_slice+, which asks for the +size+ before it
+    #   slices, and so read every record twice.
+    #   @param size [Integer] records in a group
+    #   @yieldparam records [Array<Resources::Base>]
+    #   @return [Enumerator] when no block is given
+    #   @see Collection#each_slice
+
+    # @!method each_cons(size, &block)
+    #   Overrides +Enumerable#each_cons+ the same way.
+    #   @param size [Integer] records in a run
+    #   @yieldparam records [Array<Resources::Base>]
+    #   @return [Enumerator] when no block is given
+    #   @see Collection#each_cons
+
+    # @!method lazy
+    #   Overrides +Enumerable#lazy+, whose enumerator hands the same question
+    #   on to +size+.
+    #   @return [Enumerator::Lazy]
+    #   @see Collection#lazy
+
+    def_delegators :all, :order, :each, :find_each, :in_batches, :page, :pluck, :count, :size, :length, :empty?, :any?, :none?, :first, :take, :each_slice, :each_cons, :lazy
 
     # @!endgroup
 

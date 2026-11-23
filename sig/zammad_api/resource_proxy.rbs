@@ -45,6 +45,11 @@ module ZammadAPI
     def first: () -> R?
              | (Integer count) -> Array[R]
     def take: (Integer count) -> Array[R]
+    def each_slice: (Integer size) { (Array[R]) -> void } -> Collection[R]
+                  | (Integer size) -> Enumerator[Array[R], untyped]
+    def each_cons: (Integer size) { (Array[R]) -> void } -> Collection[R]
+                 | (Integer size) -> Enumerator[Array[R], untyped]
+    def lazy: () -> Enumerator::Lazy[R, void]
     def search: (String term, ?condition: Hash[untyped, untyped], ?ids: Array[Integer | String], ?role_ids: Array[Integer | String], ?group_ids: Array[Integer | String] | Hash[Integer | String, String | Symbol | Array[String | Symbol]], ?permissions: Array[String]) -> Collection[R]
     def inspect: () -> String
 
