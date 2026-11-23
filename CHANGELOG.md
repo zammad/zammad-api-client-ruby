@@ -1120,6 +1120,11 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   in the cause, as 1.x let it out unwrapped. Every variable of the environment whose name
   ends in `_proxy` is scrubbed as the configured proxy is, and the cause is dropped where
   it quotes one.
+- `exists?` is `false` where Zammad answers with an object that carries no id. Any 2xx
+  counted as the record, and Zammad answers `organizations/5` with `200` and `{}` for a
+  customer who belongs to no organization, whether or not there is an organization 5, so
+  `client.organizations.exists?(5)` was `true` for it. `find` hands over what was served,
+  as before: a record with no id.
 
 ### Changed
 
