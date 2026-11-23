@@ -14,7 +14,8 @@ bundle exec ruby examples/quickstart.rb
 Run from a checkout of this repository, they go through Bundler, which is what puts
 `lib/` on the load path: plain `ruby` would load an installed release of the gem, 1.x
 included, or none. Copied into a project that has `zammad_api` 2.0 in its bundle, they
-run there the same way.
+run there the same way. `ticket_report.rb` also needs `gem 'csv'` in that bundle: `csv` is
+a bundled gem from Ruby 3.4 on, and `zammad_api` does not depend on it.
 
 `ZAMMAD_USER` and `ZAMMAD_PASSWORD` work instead of a token, as does
 `ZAMMAD_OAUTH2_TOKEN`.

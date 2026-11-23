@@ -6,6 +6,10 @@ source 'https://rubygems.org'
 gemspec
 
 group :development, :test do
+  # For examples/ticket_report.rb. A bundled gem from Ruby 3.4 on, which
+  # Bundler makes loadable only where the bundle names it. It was in the
+  # bundle as a dependency of steep alone, and so not without that group.
+  gem 'csv', require: false
   gem 'overcommit', require: false
   gem 'rake', require: false
   gem 'rspec', '~> 3.13'
