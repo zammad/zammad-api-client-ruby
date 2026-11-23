@@ -381,6 +381,45 @@ RSpec.describe ZammadAPI::Associations::Proxy do
     it 'includes the ones inherited from Base' do
       expect(ZammadAPI::Resources::Group.belongs_to_foreign_keys).to eq(%i[created_by_id updated_by_id])
     end
+
+    # The list is built at the first write to an attribute and kept. An
+    # association declared after that was never in it, so a write to its
+    # foreign key left the record it had resolved in place.
+    context 'when an association is declared after the list was built' do
+      let(:resource) { Class.new(ZammadAPI::Resources::Base) { path 'api/v1/memberships' } }
+
+      before { stub_const('Acme::Role', Class.new(ZammadAPI::Resources::Base) { path 'api/v1/roles' }) }
+
+      def declare_role = resource.send(:belongs_to, :role, class_name: 'Acme::Role')
+
+      it 'takes in its foreign key' do
+        resource.belongs_to_foreign_keys
+        declare_role
+
+        expect(resource.belongs_to_foreign_keys).to eq(%i[created_by_id updated_by_id role_id])
+      end
+
+      it 'takes it in on a class that inherits the declaration' do
+        subclass = Class.new(resource)
+        subclass.belongs_to_foreign_keys
+        declare_role
+
+        expect(subclass.belongs_to_foreign_keys).to include(:role_id)
+      end
+
+      it 'drops what the association resolved when its foreign key is written' do
+        [5, 6].each do |id|
+          stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/roles/#{id}").with(query: hash_including({})).to_return(json_response({ id: id }))
+        end
+        record = resource.from_response(unit_transport, id: 1, role_id: 5)
+        record.note = 'written before the declaration'
+        declare_role
+        record.related.role
+        record.role_id = 6
+
+        expect(record.related.role.id).to eq(6)
+      end
+    end
   end
 
   describe '#inspect' do

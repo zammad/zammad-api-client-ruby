@@ -345,10 +345,31 @@ module ZammadAPI
         # @param foreign_key [Symbol] attribute holding the target's id
         # @return [void]
         def belongs_to(name, class_name:, foreign_key: :"#{name}_id")
-          declared_associations[name] = { type: :belongs_to, class_name: class_name, foreign_key: foreign_key }
+          # Under the lock the list of foreign keys is built under, so that
+          # one being built meanwhile is either built with this declaration
+          # in it or dropped here once it stands.
+          MEMO_LOCK.synchronize do
+            declared_associations[name] = { type: :belongs_to, class_name: class_name, foreign_key: foreign_key }
+            forget_foreign_keys
+          end
           # The block runs against a Proxy instance, which the type checker
           # cannot see through define_method.
           related_class.define_method(name) { belongs_to_target(name, class_name, foreign_key) } # steep:ignore NoMethod
+        end
+
+        # Drops the list {.belongs_to_foreign_keys} keeps, here and on every
+        # class that inherits what this one declares.
+        #
+        # The list is built at the first write to an attribute of a record
+        # and was kept from then on. A `belongs_to` declared after that - on
+        # a class reopened to add one, or declared late in a file that had
+        # built a record further up - was never in it, so a write to its
+        # foreign key left the association alone: `related.role` went on
+        # answering role 5 after `role_id = 6`. A subclass keeps a list of
+        # its own that holds the keys of its ancestors, so its list goes too.
+        def forget_foreign_keys
+          @belongs_to_foreign_keys = nil
+          subclasses.each { it.send(:forget_foreign_keys) }
         end
 
         # Declares that this resource points at a list of other records,
