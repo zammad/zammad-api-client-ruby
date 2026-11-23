@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'attributes'
 require_relative 'duplicate_keys'
 
 module ZammadAPI
@@ -118,14 +119,23 @@ module ZammadAPI
     # walk that names the two spellings is made only once there is a pair to
     # name.
     #
+    # A copy with Symbol keys is the attributes of a record, at whatever
+    # depth, and those are handed out: see {Attributes} for why such a Hash
+    # is one that prints its credentials blanked. Made from the copy rather
+    # than filled key by key, which costs a page of a thousand tickets a
+    # millisecond. The payload the test kit records is copied with its keys
+    # as they are and stays a plain Hash, since a failed expectation is read
+    # from how it prints.
+    #
     # @api private
     # @return [Hash] a frozen copy
     # @raise [ArgumentError]
     def frozen_hash(hash, symbolize_keys)
       copy = hash.to_h { |key, nested| [symbolize_keys ? symbolize(key) : key, frozen_copy(nested, symbolize_keys: symbolize_keys)] }
-      DuplicateKeys.normalize(hash, noun: 'attribute') { symbolize(it) } if symbolize_keys && copy.size != hash.size
+      return copy.freeze if !symbolize_keys
 
-      copy.freeze
+      DuplicateKeys.normalize(hash, noun: 'attribute') { symbolize(it) } if copy.size != hash.size
+      Attributes[copy].freeze
     end
 
     # A writable deep copy, for handing out something callers may treat as

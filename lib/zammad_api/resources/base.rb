@@ -35,10 +35,11 @@ module ZammadAPI
       # Staged changes as +attribute => [old_value, new_value]+.
       #
       # A copy, and frozen: writing to the change set a record hands out would
-      # decide what the next +save+ sends.
+      # decide what the next +save+ sends. An {Attributes}, so that the error
+      # for such a write does not quote a password that is staged.
       #
       # @return [Hash{Symbol => Array(Object, Object)}]
-      def changes = @changes.dup.freeze
+      def changes = Attributes[@changes].freeze
 
       # The validation failure from the most recent {#save}, so that a +false+
       # return value can be acted on. Cleared when the next save is attempted,
@@ -1019,7 +1020,8 @@ module ZammadAPI
       # only once the body has decoded, and a body that does not is what
       # this method is here for.
       def acknowledge_changes!(sent)
-        settled     = new_record? ? sent : sent.slice(*@baseline.keys).freeze
+        # `slice` answers with a plain Hash, whatever it was called on.
+        settled     = new_record? ? sent : Attributes[sent.slice(*@baseline.keys)].freeze
         @attributes = settled
         @baseline   = settled
         @changes    = {}

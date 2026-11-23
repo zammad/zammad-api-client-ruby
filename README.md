@@ -575,6 +575,11 @@ group.name = 'Support 2'              # the way to stage a change
 group.to_h                            # a deep copy, yours to modify
 ```
 
+Ruby quotes a frozen Hash in that `FrozenError`, so both are a `ZammadAPI::Attributes`: a
+Hash that prints with the value under a key such as `password` or `token` blanked, the way
+`inspect` of the record prints them, and that is a Hash in every other way. Reading from it
+hands over every value, and `to_h` is a plain Hash.
+
 ### Pattern matching
 
 Records implement `deconstruct_keys`, so they work with `case/in`:

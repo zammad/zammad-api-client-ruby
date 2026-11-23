@@ -1142,6 +1142,17 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   lazy enumerator hands the same question on to its source. An Enumerator that Ruby makes
   from the collection itself, as `each_with_index` without a block is, still counts when it
   is sliced: slice first, with `each_slice(10).with_index`.
+- A write to the Hash `attributes` or `changes` hands out no longer raises an error that
+  quotes a staged password. Both are frozen, and Ruby prints a frozen object in the error
+  for a write to it: `user.attributes[:vip] = true`, which is how 1.x staged a change,
+  raised `FrozenError: can't modify frozen Hash: {login: "jane", password: "hunter2"}`, and
+  the message of an error is what a log and an error tracker keep. `inspect` of the record
+  blanked the same attributes, and the Hash it handed out printed itself. Both are a
+  `ZammadAPI::Attributes` now, as is every Hash inside them: a Hash that prints with the
+  value under each key naming a credential blanked, through `inspect`, `to_s` and `pp`. It
+  reads, compares and serializes as the Hash it was, to JSON and to YAML alike, and `to_h`
+  is a plain Hash. A String cannot be told how to print, so a write into the password
+  itself, `user.attributes[:password] << 'x'`, still quotes it.
 
 ### Changed
 
