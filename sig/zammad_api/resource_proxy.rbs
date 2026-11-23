@@ -62,6 +62,9 @@ module ZammadAPI
     def empty_search_filter?: (untyped value) -> bool
     def empty_search_filter_message: (Hash[Symbol, untyped] empty) -> String
     def searchable!: () -> void
+    def find_by_id: (untyped id, Hash[Symbol, untyped] others) -> R?
+    def record_number: (untyped id) -> Integer?
+    def carries?: (Resources::Base record, Hash[Symbol, untyped] params) -> bool
     def search_term_for: (Hash[Symbol, untyped]) -> String?
     def path: () -> String
     def member_path: (Integer | String id) -> String

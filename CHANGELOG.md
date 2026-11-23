@@ -1170,6 +1170,16 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   and 3 where `search('x').to_a.size` answered 1, 2 and 3. A request carrying
   `only_total_count` is answered by the stub whose turn it is and leaves the sequence where
   it was, unless that stub holds a total, fails, or was scoped to the request.
+- `find_by(id: ...)` finds the record with that id. An id was looked for as any other
+  value is, which is the one way it cannot be found. As the String a request parameter is,
+  `client.tickets.find_by(id: params[:id])` searched for the text and asked each hit
+  whether its id was that String, so it answered `nil` for a ticket that was among the
+  hits. As an Integer it gave no String to search on, and the index was walked a page at a
+  time until the record came by: `find_by(id: 123456)` read every ticket before it. The
+  record is read by its id now, in the one request `find` makes, with `nil` where that
+  answers 404, and any other value given beside the id is matched against it. An id that is
+  neither an Integer nor a String of digits is the id of no record: `nil`, without a
+  request.
 
 ### Changed
 
