@@ -1483,8 +1483,12 @@ module ZammadAPI
         # The encoder is this gem's own: see {QueryEncoder} for the one
         # structure Faraday's writes so that Rails reads another.
         request: { timeout: config.timeout, open_timeout: config.open_timeout, params_encoder: QueryEncoder },
-        headers: { 'User-Agent' => Transport.stripped(config.user_agent), 'Accept' => 'application/json' }
+        headers: { 'User-Agent' => Transport.stripped(config.user_agent), 'Accept' => 'application/json' },
+        # Named, and as nil, so that it stands in for the parameters of
+        # `Faraday.default_connection_options`: see #drop_shared_headers.
+        params:  nil
       ) do |faraday|
+        drop_shared_headers(faraday)
         apply_authentication(faraday)
         faraday.request :json
         faraday.request :retry, Transport.retry_options(config)
@@ -1626,6 +1630,33 @@ module ZammadAPI
     # that were looked for, and stayed in the message - and in the cause,
     # which is kept wherever redaction finds nothing to change.
     def quoted_spellings(value) = [value, value.inspect[1...-1], value.dump[1...-1]].compact.uniq
+
+    # Takes off the connection what `Faraday.default_connection_options` put
+    # on it that only this client's configuration is to say.
+    #
+    # `Faraday.new` starts every connection from those options, which a
+    # process sets once for all of its Faraday clients. An `Authorization`
+    # among their headers, there for another API, stood on this connection
+    # before the authorization middleware ran, and that middleware leaves a
+    # header it finds: the token of the other service was sent to Zammad and
+    # the configured one never, by a client whose `inspect` said
+    # `auth=http_token`. A `From` there was sent with every request, which
+    # Zammad reads as the user to act for, and their parameters went into
+    # the query of every request, beside the ones the request named and
+    # where no log line showed them.
+    #
+    # The two headers are the ones {RESERVED_HEADERS} refuses a raw request,
+    # for the same reason. The parameters are left out where the connection
+    # is built, with `params: nil`, and not cleared here: a query the
+    # configured url carries is on the connection as parameters by now, and
+    # is this client's own.
+    #
+    # Everything else those options hold is kept: other headers, TLS
+    # settings, a proxy. And this runs before the `middleware:` callable, so
+    # what that sets on the connection it was handed stands, as it did.
+    def drop_shared_headers(faraday)
+      RESERVED_HEADERS.each_key { faraday.headers.delete(it) }
+    end
 
     # A token as every adapter is to be handed it: see {Transport.stripped}.
     # A user and password are sent Base64-encoded, whatever is around them.

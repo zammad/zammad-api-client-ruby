@@ -1854,6 +1854,78 @@ RSpec.describe ZammadAPI::Transport do
     end
   end
 
+  # `Faraday.default_connection_options` is where a process says what every
+  # Faraday connection it makes starts from, and `Faraday.new` starts this
+  # one from it too. What only this client's configuration is to say was
+  # taken from there all the same: a default Authorization stood in for the
+  # configured token, because the authorization middleware leaves a header
+  # it finds.
+  describe 'options a process set for every Faraday connection' do
+    around do |example|
+      before = Faraday.default_connection_options
+      Faraday.default_connection_options = Faraday::ConnectionOptions.new(
+        headers: { 'Authorization' => 'Bearer other-service-token', 'From' => 'someone@else.example', 'X-Source' => 'app' },
+        params:  { api_key: 'other-service-key' }
+      )
+      example.run
+    ensure
+      Faraday.default_connection_options = before
+    end
+
+    before { stub_request(:get, url).with(query: hash_including({})).to_return(json_response([])) }
+
+    def sent = a_request(:get, url).with(query: hash_including({}))
+
+    it 'sends the configured token, not an Authorization set there' do
+      unit_transport.get('api/v1/groups', operation: 'test')
+
+      expect(sent.with(headers: { 'Authorization' => 'Token test-token' })).to have_been_made.once
+    end
+
+    it 'sends the configured user and password, not an Authorization set there' do
+      unit_transport(http_token: nil, user: 'u', password: 'p').get('api/v1/groups', operation: 'test')
+
+      expect(a_request(:get, url).with(basic_auth: %w[u p])).to have_been_made.once
+    end
+
+    it 'sends no From set there, which Zammad would read as the user to act for' do
+      unit_transport.get('api/v1/groups', operation: 'test')
+
+      expect(sent.with { |request| !request.headers.key?('From') }).to have_been_made.once
+    end
+
+    it 'sends the From of on_behalf_of, not one set there' do
+      unit_transport.with_on_behalf_of('agent@example.com').get('api/v1/groups', operation: 'test')
+
+      expect(sent.with(headers: { 'From' => 'agent@example.com' })).to have_been_made.once
+    end
+
+    it 'sends no parameter set there' do
+      unit_transport.get('api/v1/groups', operation: 'test', query: { page: 1 })
+
+      expect(a_request(:get, url).with(query: { 'page' => '1' })).to have_been_made.once
+    end
+
+    it 'keeps a query the configured url carries, which is this client\'s own' do
+      stub_request(:get, 'http://zammad.test/helpdesk/api/v1/groups').with(query: hash_including({})).to_return(json_response([]))
+      unit_transport(url: 'http://zammad.test/helpdesk?tenant=a').get('api/v1/groups', operation: 'test')
+
+      expect(a_request(:get, 'http://zammad.test/helpdesk/api/v1/groups').with(query: { 'tenant' => 'a' })).to have_been_made.once
+    end
+
+    it 'keeps a header set there that this client does not configure' do
+      unit_transport.get('api/v1/groups', operation: 'test')
+
+      expect(sent.with(headers: { 'X-Source' => 'app' })).to have_been_made.once
+    end
+
+    it 'keeps what the middleware callable sets on the connection it is handed' do
+      unit_transport(middleware: ->(connection) { connection.params['tenant'] = 'a' }).get('api/v1/groups', operation: 'test')
+
+      expect(a_request(:get, url).with(query: { 'tenant' => 'a' })).to have_been_made.once
+    end
+  end
+
   describe '#with_on_behalf_of' do
     it 'sends the From header' do
       stub = stub_request(:get, url).with(headers: { 'From' => 'agent@example.com' }).to_return(json_response([]))

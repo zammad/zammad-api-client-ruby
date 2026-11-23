@@ -1103,6 +1103,15 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   repeated. That holds for a 2xx cut short of its Content-Length as well, and
   `Response#json_content_type?` is what is asked. `destroy` is as it was: Zammad answers a
   ticket's DELETE with no body at all, so nothing in that 2xx says whose it is.
+- An `Authorization` header in `Faraday.default_connection_options` no longer replaces the
+  client's authentication. Every connection `Faraday.new` builds starts from those options,
+  and the authorization middleware leaves a header it finds, so a process that set
+  `Authorization: Bearer ...` there for another API sent that token to Zammad and the
+  configured one never, from a client whose `inspect` said `auth=http_token`. A `From` set
+  there was sent with every request, which Zammad reads as the user to act for, and
+  parameters set there went into every query. The connection is built without those three,
+  as 1.x never was. Everything else in the options still applies, and what the
+  `middleware:` callable sets on the connection stands.
 
 ### Changed
 

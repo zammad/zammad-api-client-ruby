@@ -232,6 +232,12 @@ retried, and a missing record would arrive as `Faraday::ResourceNotFound` rather
 `ZammadAPI::NotFoundError` your code rescues. A subclass of either is refused for what it
 inherits.
 
+What a process sets in `Faraday.default_connection_options` for all of its Faraday
+connections applies to this client's as well: other headers, TLS settings, a proxy. An
+`Authorization` header, a `From` header and query parameters set there are left off. The
+two headers are what `http_token:` and `on_behalf_of` say, and a request carries the query
+it names.
+
 ## Available resources
 
 `groups`, `organizations`, `tickets`, `ticket_articles`, `ticket_priorities`,

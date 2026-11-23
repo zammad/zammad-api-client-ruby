@@ -108,6 +108,7 @@ module ZammadAPI
     def refuse_unusable_middleware!: (untyped connection) -> void
     def refused_middleware: (Class klass) -> String?
     def refused_middleware_message: (Class klass, String refused) -> String
+    def drop_shared_headers: (untyped) -> void
     def apply_authentication: (untyped) -> void
     def decode: (untyped) -> Response
     def raw_body!: (untyped) -> String
