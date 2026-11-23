@@ -1154,6 +1154,80 @@ RSpec.describe ZammadAPI::Test do
     end
   end
 
+  # `count` on a search asks for the total alone first, and walks the pages
+  # where it is answered with records instead. Each of the two took a stub:
+  # the first of a sequence was never counted, and the last was counted
+  # twice.
+  describe 'a search stubbed as a sequence, and counted' do
+    subject(:zammad) { described_class.new }
+
+    let(:client) { zammad.client }
+    let(:path) { 'api/v1/users/search' }
+
+    def counts(times) = Array.new(times) { client.users.search('x').count }
+
+    def stub_lists
+      [1, 2, 3].each { |records| zammad.stub(:get, path, body: Array.new(records) { { id: it + 1 } }) }
+    end
+
+    it 'counts each stub in turn, and the last one from then on' do
+      stub_lists
+
+      expect(counts(4)).to eq([1, 2, 3, 3])
+    end
+
+    it 'counts what reading the records counts' do
+      stub_lists
+
+      expect(Array.new(3) { client.users.search('x').to_a.size }).to eq([1, 2, 3])
+    end
+
+    it 'spells #size and #length the same way' do
+      stub_lists
+
+      expect([client.users.search('x').size, client.users.search('x').length]).to eq([1, 2])
+    end
+
+    it 'records the request for the total and the walk that follows it' do
+      stub_lists
+      counts(1)
+
+      expect(zammad.requests.map { it.query.slice('only_total_count', 'page').values.first }).to eq(%w[true 1 2])
+    end
+
+    it 'spends a stub on the request alone where the stub holds a total' do
+      zammad.stub(:get, path, body: { records: [{ id: 1 }], total_count: 1 })
+      zammad.stub(:get, path, body: { total_count: 2 })
+      zammad.stub(:get, path, body: [{ id: 1 }, { id: 2 }, { id: 3 }])
+
+      expect(counts(4)).to eq([1, 2, 3, 3])
+    end
+
+    it 'spends a stub on an attempt that failed, and counts the one after it' do
+      zammad.stub(:get, path, status: 503)
+      stub_lists
+
+      expect(counts(3)).to eq([1, 2, 3])
+    end
+
+    it 'counts a stub declared after the last one has been counted' do
+      zammad.stub(:get, path, body: [{ id: 1 }])
+      counts(2)
+      zammad.stub(:get, path, body: [{ id: 1 }, { id: 2 }])
+
+      expect(counts(2)).to eq([2, 2])
+    end
+
+    # A stub scoped to the request is the answer to it and to nothing else,
+    # whatever it holds, so each request for the total is a step.
+    it 'still sequences stubs written for the request for the total' do
+      zammad.stub(:get, path, body: [{ id: 1 }], query: { only_total_count: true })
+      zammad.stub(:get, path, body: [{ id: 1 }, { id: 2 }], query: { only_total_count: true })
+
+      expect(Array.new(3) { client.get(path, query: { only_total_count: true }).body.size }).to eq([1, 2, 2])
+    end
+  end
+
   describe 'a list endpoint whose pages are stubbed by hand' do
     subject(:zammad) { described_class.new }
 

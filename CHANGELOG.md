@@ -1163,6 +1163,13 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   a 2xx whose body does not say it is JSON raises `ParseError` now, from both. The record
   is left as it was, with what was staged, and the `destroy` can be repeated. A 2xx cut
   short of its Content-Length leaves the record destroyed only where it said it was JSON.
+- In `ZammadAPI::Test`, `count`, `size` and `length` on a search spend one stub of a
+  sequence, as reading its records does. `count` asks for the total alone first and walks
+  the pages where it is answered with records, and the stand-in took the two for two reads:
+  over three stubs holding one, two and three records, `search('x').count` answered 2, 3
+  and 3 where `search('x').to_a.size` answered 1, 2 and 3. A request carrying
+  `only_total_count` is answered by the stub whose turn it is and leaves the sequence where
+  it was, unless that stub holds a total, fails, or was scoped to the request.
 
 ### Changed
 
