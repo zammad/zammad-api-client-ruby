@@ -48,6 +48,12 @@ RSpec.describe ZammadAPI::Transport do
       expect(stub).to have_been_requested
     end
 
+    it 'names itself where the user agent given is nothing but whitespace' do
+      stub = stub_request(:get, url).with(headers: { 'User-Agent' => "zammad_api-ruby/#{ZammadAPI::VERSION}" }).to_return(json_response([]))
+      unit_transport(user_agent: '  ').get('api/v1/groups', operation: 'test')
+      expect(stub).to have_been_requested
+    end
+
     # Net::HTTP refused it at the request, quoting the value.
     it 'refuses a raw request header with a line break inside it, without quoting it' do
       expect { described_class.stringify_headers('X-Api-Key' => "abc\r\nsecret") }

@@ -264,6 +264,18 @@ RSpec.describe ZammadAPI::Config do
       expect(build(user_agent: '').user_agent).to eq("zammad_api-ruby/#{ZammadAPI::VERSION}")
     end
 
+    # The transport takes the whitespace off the value it sends, so this one
+    # went out as a User-Agent header with nothing in it.
+    ['  ', "\n", " \t\r\n"].each do |blank|
+      it "falls back to the default when it is #{blank.inspect}, which a header would carry nothing of" do
+        expect(build(user_agent: blank).user_agent).to eq("zammad_api-ruby/#{ZammadAPI::VERSION}")
+      end
+    end
+
+    it 'keeps one with whitespace around it, which is taken off where it is sent' do
+      expect(build(user_agent: ' my-app/1.0 ').user_agent).to eq(' my-app/1.0 ')
+    end
+
     it 'rejects one that is not a string' do
       expect { build(user_agent: 42) }
         .to raise_error(ZammadAPI::ConfigurationError, 'config user_agent needs to be a string')

@@ -78,6 +78,7 @@ module ZammadAPI
 
     def redact_userinfo: (String) -> String
     def normalize_token: (Symbol name, untyped value) -> String?
+    def normalize_user_agent: (untyped value) -> untyped
     def normalize_proxy: (untyped) -> String?
     def normalize_adapter: (untyped) -> Symbol?
     def render: (Symbol, untyped) -> String
