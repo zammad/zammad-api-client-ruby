@@ -211,7 +211,7 @@ module ZammadAPI
         password:       immutable(non_empty(password)),
         http_token:     immutable(normalize_token(:http_token, http_token)),
         oauth2_token:   immutable(normalize_token(:oauth2_token, oauth2_token)),
-        user_agent:     immutable(non_empty(user_agent) || DEFAULT_USER_AGENT),
+        user_agent:     immutable(normalize_user_agent(user_agent)),
         timeout:        timeout,
         open_timeout:   open_timeout,
         retries:        retries,
@@ -597,6 +597,21 @@ module ZammadAPI
       raise ConfigurationError, "config #{name} needs to be a string, got #{value.class}" if !value.is_a?(String)
 
       self.class.blank_token?(value) ? nil : value
+    end
+
+    # The user agent as it is held: the one given, or the gem's own where
+    # none was.
+    #
+    # One of nothing but whitespace is none, as a token of that is, and for
+    # the same reason: the transport takes the whitespace off the value it
+    # sends, so `user_agent: '  '` was sent as a `User-Agent` header with
+    # nothing in it. Faraday fills in its own only where there is no header
+    # at all, so the requests went out naming no client, in the instance log
+    # an operator greps to find them.
+    def normalize_user_agent(value)
+      return DEFAULT_USER_AGENT if non_empty(value).nil? || self.class.blank_token?(value)
+
+      value
     end
 
     # A proxy is the second string here that may carry credentials, and the

@@ -1195,6 +1195,11 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   short could not be tested against it, and a fixture carrying a stale `Content-Length`
   passed there and failed against Zammad. The empty page it serves after a stubbed list is
   given a length of its own.
+- A `user_agent` of nothing but whitespace falls back to the gem's own, as `nil` and an
+  empty one do. The whitespace is taken off the value where it is sent, so
+  `user_agent: '  '`, which is what an environment variable set to a space gives, went out
+  as a `User-Agent` header with nothing in it, and the requests named no client in the
+  instance log.
 
 ### Changed
 
