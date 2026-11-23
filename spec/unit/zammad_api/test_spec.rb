@@ -158,6 +158,15 @@ RSpec.describe ZammadAPI::Test do
         .to raise_error(ArgumentError, /a request path is relative to the instance URL/)
     end
 
+    it 'refuses a path that climbs out of the instance URL the way the real transport does' do
+      expect { client.get('../billing/export') }.to raise_error(ArgumentError, /holds a '\.\.' segment/)
+      expect(zammad.requests).to be_empty
+    end
+
+    it 'refuses to stub such a path, which no request could reach' do
+      expect { zammad.stub(:get, 'api/v1/../x') }.to raise_error(ArgumentError, /holds a '\.\.' segment/)
+    end
+
     it 'refuses a path that cannot be read as a URL the way the real transport does' do
       expect { client.get('api/v1/tägs') }.to raise_error(ArgumentError, /cannot be read as one: it holds a character outside ASCII/)
       expect(zammad.requests).to be_empty

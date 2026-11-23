@@ -488,6 +488,62 @@ RSpec.describe ZammadAPI::Client do
           .to raise_error(ArgumentError) { |error| expect(error.message).not_to include('s3cret') }
       end
 
+      # A path is joined to the instance URL the way a link is resolved, so
+      # `..` climbs out of the sub-path a Zammad is served from, and the
+      # request went to whatever else the host serves with the token on it.
+      context 'with a path that climbs out of the instance URL' do
+        let(:client) { unit_client(url: 'http://zammad.test/helpdesk/') }
+
+        before { stub_request(:any, /zammad\.test/).to_return(json_response({})) }
+
+        it 'refuses it rather than sending the credentials to another application' do
+          expect { client.get('../billing/export') }
+            .to raise_error(ArgumentError, /holds a '\.\.' segment, which climbs out of it/)
+        end
+
+        it 'makes no request for it' do
+          expect { client.get('../billing/export') }.to raise_error(ArgumentError)
+          expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+        end
+
+        ['api/v1/../../../billing', 'api/v1/tickets/..', '..', '/../billing', '%2e%2e/billing', 'api/%2E%2e/x', 'api/.%2e/x'].each do |path|
+          it "refuses #{path}" do
+            expect { client.get(path) }.to raise_error(ArgumentError, /climbs out of it/)
+          end
+        end
+
+        # An id is escaped into one segment, slashes included, and a segment
+        # that holds `..` among other things is not one that climbs.
+        it 'still sends a record id that was escaped into its segment' do
+          stub = stub_request(:get, 'http://zammad.test/helpdesk/api/v1/groups/1%2F..%2F..%2Fbilling').with(query: hash_including({}))
+            .to_return(json_response({ error: 'not found' }, status: 404))
+
+          expect { client.groups.find('1/../../billing') }.to raise_error(ZammadAPI::NotFoundError)
+          expect(stub).to have_been_requested
+        end
+
+        it 'refuses it for every verb' do
+          %i[post put delete].each do |verb|
+            expect { client.public_send(verb, '../billing/export') }.to raise_error(ArgumentError, /climbs out of it/)
+          end
+        end
+
+        it 'refuses it for a client whose instance is served from the root as well' do
+          expect { unit_client.get('api/v1/../../x') }.to raise_error(ArgumentError, /climbs out of it/)
+        end
+
+        it 'does not quote the path it refuses, which may carry a secret' do
+          expect { client.get('../billing/export?token=s3cret') }
+            .to raise_error(ArgumentError) { |error| expect(error.message).not_to include('s3cret') }
+        end
+
+        ['api/v1/roles?path=../x', 'api/v1/roles#../x', 'api/v1/a..b', 'api/v1/.../x', './api/v1/roles', 'api/v1/..x'].each do |path|
+          it "takes #{path}, which holds two dots and no such segment" do
+            expect(client.get(path).status).to eq(200)
+          end
+        end
+      end
+
       # Faraday reads the path with URI, and URI raises an error of its own
       # for one it cannot read: neither a ZammadAPI::Error nor the
       # ArgumentError a path is documented to raise, and raised after the
