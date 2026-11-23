@@ -1397,7 +1397,7 @@ RSpec.describe ZammadAPI::Resources::Base do
     end
 
     it 'still says the record was saved where a save is what left it this way' do
-      stub_request(:post, url).with(query: hash_including({})).to_return(status: 201, body: '<html>proxy</html>')
+      stub_request(:post, url).with(query: hash_including({})).to_return(unreadable_json_response(status: 201))
       new_group = client.groups.new(name: 'Support')
       begin
         new_group.save
@@ -1410,16 +1410,17 @@ RSpec.describe ZammadAPI::Resources::Base do
   end
 
   # What makes a record persisted is that Zammad answered 2xx, not that the
-  # answer parsed. Decoded first, a create whose 201 carried an HTML error
-  # page from an intervening proxy raised ParseError with the record still
-  # looking new - so the ticket existed in Zammad and a retried save POSTed a
-  # second one. Marked persisted, the record has no id to be addressed by
-  # either, and nothing staged to send, so the retry has to say so rather than
-  # take the "nothing to send" short circuit and report success.
+  # answer parsed. Decoded first, a create whose 201 carried a body cut off
+  # or rewritten on its way through a proxy raised ParseError with the record
+  # still looking new - so the ticket existed in Zammad and a retried save
+  # POSTed a second one. Marked persisted, the record has no id to be
+  # addressed by either, and nothing staged to send, so the retry has to say
+  # so rather than take the "nothing to send" short circuit and report
+  # success.
   describe 'a create whose success body cannot be parsed' do
     subject(:group) { client.groups.new(name: 'Support') }
 
-    before { stub_request(:post, url).with(query: hash_including({})).to_return(status: 201, body: '<html>proxy</html>') }
+    before { stub_request(:post, url).with(query: hash_including({})).to_return(unreadable_json_response(status: 201)) }
 
     it 'still reports the parse failure' do
       expect { group.save }.to raise_error(ZammadAPI::ParseError)
@@ -1503,7 +1504,7 @@ RSpec.describe ZammadAPI::Resources::Base do
     before do
       stub_request(:get, ticket_url).with(query: hash_including({})).to_return(json_response({ id: 1, title: 'Help', note: nil }))
       stub_request(:put, ticket_url).with(query: hash_including({}))
-        .to_return({ status: 200, body: '<html>proxy</html>' }, json_response({ id: 1, title: 'Renamed' }))
+        .to_return(unreadable_json_response, json_response({ id: 1, title: 'Renamed' }))
 
       ticket.article = article
       begin
@@ -1516,7 +1517,7 @@ RSpec.describe ZammadAPI::Resources::Base do
     it 'still reports the parse failure' do
       other = client.tickets.find(1)
       other.note = 'x'
-      stub_request(:put, ticket_url).with(query: hash_including({})).to_return(status: 200, body: '<html>proxy</html>')
+      stub_request(:put, ticket_url).with(query: hash_including({})).to_return(unreadable_json_response)
 
       expect { other.save }.to raise_error(ZammadAPI::ParseError)
     end
@@ -1542,7 +1543,7 @@ RSpec.describe ZammadAPI::Resources::Base do
     it 'goes on reading the values it sent for the attributes Zammad serves' do
       other = client.tickets.find(1)
       other.title = 'Sent'
-      stub_request(:put, ticket_url).with(query: hash_including({})).to_return(status: 200, body: '<html>proxy</html>')
+      stub_request(:put, ticket_url).with(query: hash_including({})).to_return(unreadable_json_response)
       begin
         other.save
       rescue ZammadAPI::ParseError
@@ -1578,7 +1579,7 @@ RSpec.describe ZammadAPI::Resources::Base do
     it 'stages a value written back to what it was before the save, which Zammad no longer holds' do
       other = client.tickets.find(1)
       other.title = 'Sent'
-      stub_request(:put, ticket_url).with(query: hash_including({})).to_return(status: 200, body: '<html>proxy</html>')
+      stub_request(:put, ticket_url).with(query: hash_including({})).to_return(unreadable_json_response)
       begin
         other.save
       rescue ZammadAPI::ParseError
@@ -1619,7 +1620,7 @@ RSpec.describe ZammadAPI::Resources::Base do
       before do
         stub_request(:put, ticket_url).with(query: hash_including({})).to_return do
           other.title = 'C'
-          { status: 200, body: '<html>proxy</html>' }
+          unreadable_json_response
         end
 
         other.title = 'B'
@@ -1658,7 +1659,7 @@ RSpec.describe ZammadAPI::Resources::Base do
       subject(:other) { client.tickets.find(1) }
 
       before do
-        stub_request(:put, ticket_url).with(query: hash_including({})).to_return(status: 200, body: '<html>proxy</html>')
+        stub_request(:put, ticket_url).with(query: hash_including({})).to_return(unreadable_json_response)
 
         other.title = 'B'
         allow(ZammadAPI::Resources::Ticket).to receive(:member_path).and_wrap_original do |original, id|
@@ -1698,7 +1699,7 @@ RSpec.describe ZammadAPI::Resources::Base do
         stub_request(:put, ticket_url).with(query: hash_including({})).to_return do
           other.customer_id = 10
           related.customer
-          { status: 200, body: '<html>proxy</html>' }
+          unreadable_json_response
         end
 
         other.customer_id = 9
@@ -1856,6 +1857,126 @@ RSpec.describe ZammadAPI::Resources::Base do
       swallow { group.reload }
 
       expect(group.changes).to eq(name: %w[Support Renamed])
+    end
+  end
+
+  # A 2xx says that Zammad applied a save only where the 2xx is Zammad's.
+  # It answers a create and an update with JSON, so a 2xx that says it is
+  # anything else, or does not say, is the page of something in front of
+  # Zammad that never passed the request on: a login page, a captive portal,
+  # the default page of a load balancer. Settled on that, the record read as
+  # saved and the retried save sent nothing, with Zammad none the wiser.
+  describe 'a save answered 2xx by something that is not Zammad' do
+    def login_page(**headers)
+      { status: 200, body: '<html>Please sign in</html>', headers: { 'Content-Type' => 'text/html' }.merge(headers) }
+    end
+
+    def swallow
+      yield
+    rescue ZammadAPI::ParseError, ZammadAPI::IncompleteResponseError
+      nil
+    end
+
+    context 'when it was a create' do
+      subject(:group) { client.groups.new(name: 'Support') }
+
+      before do
+        stub_request(:post, url).with(query: hash_including({}))
+          .to_return(login_page, json_response({ id: 7, name: 'Support' }, status: 201))
+      end
+
+      it 'still reports the parse failure' do
+        expect { group.save }.to raise_error(ZammadAPI::ParseError, /expected a JSON object, got String/)
+      end
+
+      it 'leaves the record new' do
+        swallow { group.save }
+
+        expect(group.new_record?).to be(true)
+        expect(group.persisted?).to be(false)
+      end
+
+      it 'sends the record with the next save, which is the first Zammad sees' do
+        swallow { group.save }
+
+        expect(group.save).to be(true)
+        expect(group.id).to eq(7)
+        expect(a_request(:post, url).with(query: hash_including({}), body: { name: 'Support' })).to have_been_made.twice
+      end
+    end
+
+    context 'when it was an update' do
+      subject(:ticket) { client.tickets.find(1) }
+
+      let(:ticket_url) { "#{ClientHelper::BASE_URL}api/v1/tickets/1" }
+
+      before do
+        stub_request(:get, ticket_url).with(query: hash_including({})).to_return(json_response({ id: 1, title: 'Help', state: 'open' }))
+        stub_request(:put, ticket_url).with(query: hash_including({}))
+          .to_return(login_page, json_response({ id: 1, title: 'Help', state: 'closed' }))
+
+        swallow { ticket.update(state: 'closed') }
+      end
+
+      it 'keeps the changes staged' do
+        expect(ticket.changes).to eq(state: %w[open closed])
+      end
+
+      it 'sends them with the next save rather than reporting it stored' do
+        expect(ticket.save).to be(true)
+        expect(a_request(:put, ticket_url).with(query: hash_including({}), body: { state: 'closed' })).to have_been_made.twice
+        expect(ticket.changed?).to be(false)
+      end
+
+      it 'keeps a write made while the request was out, as after any save that failed' do
+        other = client.tickets.find(1)
+        stub_request(:put, ticket_url).with(query: hash_including({})).to_return do
+          other.title = 'Written meanwhile'
+          login_page
+        end
+        swallow { other.update(state: 'closed') }
+
+        expect(other.changes).to eq(state: %w[open closed], title: ['Help', 'Written meanwhile'])
+      end
+    end
+
+    it 'takes a 2xx that names no content type the same way' do
+      stub_request(:post, url).with(query: hash_including({})).to_return(status: 200, body: 'OK')
+      group = client.groups.new(name: 'Support')
+      swallow { group.save }
+
+      expect(group.new_record?).to be(true)
+    end
+
+    # The transport refuses this one before the record sees a response, and
+    # the record is asked the same question of the response the error holds.
+    it 'takes a page cut short of its Content-Length the same way' do
+      stub_request(:post, url).with(query: hash_including({})).to_return(login_page('Content-Length' => '300'))
+      group = client.groups.new(name: 'Support')
+
+      expect { group.save }.to raise_error(ZammadAPI::IncompleteResponseError)
+      expect(group.new_record?).to be(true)
+    end
+
+    # Zammad answers a ticket's DELETE with no body at all, so a 2xx to a
+    # destroy carries nothing that says whose it is.
+    it 'does not ask the same of a destroy' do
+      group = ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Support')
+      stub_request(:delete, "#{url}/1").to_return(status: 200, body: '')
+
+      expect(group.destroy).to be(true)
+      expect(group).to be_destroyed
+    end
+
+    # A transport of the caller's can hand over a Response without the
+    # header. One whose body was decoded from JSON has said as much.
+    it 'takes a response decoded from JSON for Zammad\'s, with or without the header' do
+      response  = ZammadAPI::Response.new(status: 201, headers: {}, body: { id: 7, name: 'Support' }, raw_body: '', json: true)
+      transport = instance_double(ZammadAPI::Transport, post: response)
+      group     = ZammadAPI::Resources::Group.new(transport, name: 'Support')
+
+      expect(group.save).to be(true)
+      expect(group.persisted?).to be(true)
     end
   end
 end

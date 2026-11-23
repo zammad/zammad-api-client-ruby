@@ -490,13 +490,13 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   recorded requests under the monitor that guards them.
 - A record is persisted because Zammad answered 2xx, not because the answer parsed. The
   create response was decoded before the flag went down, so a 201 carrying something other
-  than a JSON object — an HTML error page from an intervening proxy — raised `ParseError`
-  with the record still looking new. The ticket existed in Zammad while the record here did
-  not, and a retried `save` POSTed a second one. What that leaves behind is a record that
-  is persisted and has no id, and `save`, `reload` and `destroy` all refuse it by name
-  rather than pretending: a record built by `new` has nothing staged, so the retried `save`
-  took the "nothing changed, nothing to send" short circuit and returned `true` without
-  making a single request, for a record that may or may not be in Zammad.
+  than a JSON object — a body cut off or rewritten on its way through a proxy — raised
+  `ParseError` with the record still looking new. The ticket existed in Zammad while the
+  record here did not, and a retried `save` POSTed a second one. What that leaves behind is
+  a record that is persisted and has no id, and `save`, `reload` and `destroy` all refuse
+  it by name rather than pretending: a record built by `new` has nothing staged, so the
+  retried `save` took the "nothing changed, nothing to send" short circuit and returned
+  `true` without making a single request, for a record that may or may not be in Zammad.
 - A `ConfigurationError` raised while building the connection no longer quotes the proxy
   credentials. `proxy: 'http://user:pa ss@host:3128'` came back as
   `URI::InvalidURIError` with the whole URL, password included, in a message that lands in
@@ -748,7 +748,7 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   for one URL, and a client and its `on_behalf_of` scope, still hold the same record.
 - An update Zammad acknowledged is not sent again. The staged changes were dropped only
   once the response had decoded, so an update answered with a 2xx nothing could read, such
-  as a proxy's HTML page, raised `ParseError` with the whole change set still staged, and
+  as a body a proxy cut off, raised `ParseError` with the whole change set still staged, and
   the next `save` sent all of it again along with whatever had been staged since. For a
   ticket's `article` that is a second article and a second e-mail. A 2xx now settles what
   was sent before the body is read: the record holds the values it sent with nothing
@@ -1090,6 +1090,19 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   page before once more now. Where that holds the same records again it raises as before,
   one request later. Where it holds others, the page that repeated is passed over, since
   the block has had its records, and the walk goes on from the page after it.
+- A save answered 2xx by something that is not Zammad is no longer recorded as applied.
+  Every 2xx settled the record before its body was read, and the 2xx that cannot be read is
+  most often the page of something in front of Zammad that never passed the request on: a
+  single sign-on login page, a captive portal, the default page of a load balancer. After
+  `ticket.update(state: 'closed')` raised `ParseError` for a `200 text/html`, the ticket
+  read as closed with nothing staged, and the retried `save` returned `true` without a
+  request while Zammad still had it open. A create was left persisted with no id, for a
+  record Zammad never made. Zammad answers a create and an update with JSON, so only a 2xx
+  that says it is JSON settles the record now, whether or not its body can then be read.
+  Any other leaves the changes staged and a new record new, and the `save` can be
+  repeated. That holds for a 2xx cut short of its Content-Length as well, and
+  `Response#json_content_type?` is what is asked. `destroy` is as it was: Zammad answers a
+  ticket's DELETE with no body at all, so nothing in that 2xx says whose it is.
 
 ### Changed
 

@@ -93,6 +93,7 @@ module ZammadAPI
       def replace_attributes!: (Response, operation: String, ?sent: Hash[Symbol, untyped]?) -> void
       def mark_answered!: (Hash[Symbol, untyped]? sent) -> void
       def applied: (Hash[Symbol, untyped] sent) { () -> Response } -> Response
+      def applied_by?: (Response? response) -> bool
       def acknowledge_changes!: (Hash[Symbol, untyped] sent) -> void
       def reset_pending_state!: () -> void
       def forget_related_targets: () -> void

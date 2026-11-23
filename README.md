@@ -1186,6 +1186,16 @@ an update, `reload` brings in what the lost answer would have. A record that was
 created is in Zammad as well, but its id was in that answer: it has none to reload by, and
 `reload` raises `ZammadAPI::Error` saying so. Look it up again, with `find_by` for instance.
 
+A `save` that raises `ParseError` was answered 2xx without the record, and whose answer
+that was decides what it leaves behind. One that says it is JSON is Zammad's, with a body
+cut off or rewritten on the way: the save was applied, and the record is left as it is
+after an `IncompleteResponseError`. One of any other content type, or of none, is the
+answer of something in front of Zammad that did not pass the request on, such as a login
+page served with status 200. The record is left as it was, its changes staged and a new
+record still new, and the `save` can be repeated once the way is clear. An
+`IncompleteResponseError` whose `e.response` is not JSON leaves a record being saved that
+way as well.
+
 ### Timeouts and retries
 
 A `GET` is retried on connection failures, timeouts and the transient statuses 429, 500,

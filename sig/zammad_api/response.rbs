@@ -11,9 +11,11 @@ module ZammadAPI
     SUCCESS_STATUSES: Range[Integer]
 
     def self.decode_body: (String?, String) -> [untyped, bool]
+    def self.json_type?: (String?) -> bool
 
     def success?: () -> bool
     def json?: () -> bool
+    def json_content_type?: () -> bool
     def decoded: (Symbol shape, operation: String, ?resource_class: Class?) -> untyped
     def decoded_list: (operation: String, ?resource_class: Class?) -> [ Array[Hash[Symbol, untyped]], Integer? ]
 

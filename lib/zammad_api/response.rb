@@ -55,6 +55,26 @@ module ZammadAPI
     # @return [Boolean] whether {#body} was decoded from JSON
     def json? = json
 
+    # Whether the response says that its body is JSON, which is not whether
+    # the body then decoded as that: an empty one and one that does not parse
+    # are left as they arrived, and {#json?} is false for both.
+    #
+    # What an answer says it is tells whose it is. Zammad answers a request
+    # to its API with JSON, so a 2xx of another type - a login page, the
+    # default page of a load balancer - is the answer of something in front
+    # of it: see {Resources::Base#save!}.
+    #
+    # @return [Boolean]
+    def json_content_type? = Response.json_type?(headers['content-type'])
+
+    # The one reading of a content-type, for {.decode_body} and
+    # {#json_content_type?} alike.
+    #
+    # @api private
+    # @param content_type [String, nil]
+    # @return [Boolean]
+    def self.json_type?(content_type) = content_type.to_s.include?('json')
+
     # Decodes a body the way this gem decodes every body, and says whether it
     # did.
     #
@@ -79,7 +99,7 @@ module ZammadAPI
     # @return [Array(Hash | Array | String, bool)] the body and whether it was
     #   decoded from JSON
     def self.decode_body(content_type, raw_body)
-      return [raw_body, false] if !content_type.to_s.include?('json')
+      return [raw_body, false] if !json_type?(content_type)
       return [raw_body, false] if raw_body.empty?
 
       [JSON.parse(raw_body, symbolize_names: true), true]

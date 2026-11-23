@@ -40,7 +40,8 @@ module ZammadAPI
   # one thing that sets it apart from the others: the request was received and
   # answered. A write that raises this was applied, so it is not to be sent
   # again, and a record that was being saved or destroyed is left as saved or
-  # destroyed.
+  # destroyed. A save is taken as applied only where the answer said it was
+  # JSON, as Zammad's does: see {Resources::Base#save!}.
   class IncompleteResponseError < ConnectionError
     # @return [Response, nil] the response as far as it arrived
     attr_reader :response
