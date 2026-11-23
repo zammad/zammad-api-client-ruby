@@ -230,6 +230,87 @@ RSpec.describe ZammadAPI::Collection do
         .to raise_error(ZammadAPI::PaginationError, /ignoring the page parameter/)
     end
 
+    # A page that repeats the one before it is what an endpoint serves that
+    # ignores `page`, and also what one serves that pages as it should, where
+    # the list grew at its front by exactly a page between the two requests.
+    # The page before, asked for again, tells the two apart.
+    describe 'a page that repeats the one before it' do
+      # A list served newest first, paged as Zammad pages it.
+      def stub_list(url, list)
+        asked = []
+        stub_request(:get, url).with(query: hash_including({})).to_return do |request|
+          params = URI.decode_www_form(URI(request.uri).query).to_h
+          page   = Integer(params['page'])
+          size   = Integer(params['per_page'])
+          asked << page
+          json_response(list[(page - 1) * size, size].to_a.map { { id: it } })
+        end
+        asked
+      end
+
+      def walk(list, of:, grows_by:)
+        seen = []
+        collection.in_batches(of: of) do |batch|
+          list.unshift(*grows_by) if seen.empty?
+          seen.concat(batch.map(&:id))
+        end
+        seen
+      end
+
+      it 'reads on where the list grew by a page between two requests' do
+        list = [5, 4, 3, 2, 1]
+        stub_list(url, list)
+
+        expect(walk(list, of: 1, grows_by: [6])).to eq([5, 4, 3, 2, 1])
+      end
+
+      it 'hands the page that repeated over once' do
+        list = [6, 5, 4, 3, 2, 1]
+        stub_list(url, list)
+
+        expect(walk(list, of: 2, grows_by: [8, 7])).to eq([6, 5, 4, 3, 2, 1])
+      end
+
+      it 'asks for the page before once more to tell, and goes on from the page after' do
+        list  = [3, 2, 1]
+        asked = stub_list(url, list)
+        walk(list, of: 1, grows_by: [4])
+
+        expect(asked).to eq([1, 2, 1, 3, 4, 5])
+      end
+
+      it 'ends where the page after the repeated one is empty' do
+        list = [2, 1]
+        stub_list(url, list)
+
+        expect(walk(list, of: 2, grows_by: [4, 3])).to eq([2, 1])
+      end
+
+      it 'asks an endpoint that ignores the page parameter once more before it raises' do
+        stub_request(:get, url).with(query: hash_including({})).to_return(json_response(full_page))
+
+        expect { collection.to_a }.to raise_error(ZammadAPI::PaginationError, /page 2 repeated page 1/)
+        expect(a_request(:get, url).with(query: hash_including('page' => '1'))).to have_been_made.twice
+        expect(a_request(:get, url).with(query: hash_including('page' => '2'))).to have_been_made.once
+      end
+
+      # The list has to move back for the page before to hold what it held,
+      # so one that moves on by a page a second time, while the walk is
+      # asking, repeats a page twice over and is still read to its end.
+      it 'reads on where the list grew by a page twice running' do
+        list  = [3, 2, 1]
+        grows = [[4], [5]]
+        stub_request(:get, url).with(query: hash_including({})).to_return do |request|
+          params = URI.decode_www_form(URI(request.uri).query).to_h
+          served = list[Integer(params['page']) - 1, 1].to_a
+          list.unshift(*grows.shift)
+          json_response(served.map { { id: it } })
+        end
+
+        expect(Timeout.timeout(5) { collection.in_batches(of: 1).to_a.flatten.map(&:id) }).to eq([3, 2, 1])
+      end
+    end
+
     # The walk ran inside Kernel#loop, which rescues StopIteration for an
     # enumerator driven by hand inside it. The block here is the caller's, and
     # one raised from it was taken for the end of the walk: the rest of the
@@ -1523,6 +1604,24 @@ RSpec.describe ZammadAPI::Collection do
       stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response({ records: [{ id: 1 }], total_count: 9 }))
 
       expect { search.to_a }.to raise_error(ZammadAPI::PaginationError, /ignoring the page parameter/)
+    end
+
+    # A search is served most recently updated first, so hits that are
+    # updated or created while it is walked go to its front.
+    it 'reads on where the hits moved by a page between two requests' do
+      list = [5, 4, 3, 2, 1]
+      stub_request(:get, search_url).with(query: hash_including({})).to_return do |request|
+        params = URI.decode_www_form(URI(request.uri).query).to_h
+        size   = Integer(params['per_page'])
+        json_response({ records: list[(Integer(params['page']) - 1) * size, size].to_a.map { { id: it } }, total_count: list.size })
+      end
+      seen = []
+      search.in_batches(of: 2) do |batch|
+        list.unshift(7, 6) if seen.empty?
+        seen.concat(batch.map(&:id))
+      end
+
+      expect(seen).to eq([5, 4, 3, 2, 1])
     end
 
     it 'ends on the empty page where the total is not a count' do
