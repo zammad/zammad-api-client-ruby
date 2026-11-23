@@ -1534,6 +1534,17 @@ If this is not the time to move, [1.x stays available](#staying-on-1x).
   handed, does that to all of them now. Limit it explicitly with `first(n)` or
   `page(1, per_page: n)`.
 
+- **A Hash inside an Array attribute** has Symbol keys, where 1.x left it the String keys
+  Zammad sent: only a Hash directly under another Hash was symbolized. Read by String key,
+  it answers `nil` and nothing raises:
+
+  ```ruby
+  article.attributes[:attachments].first['filename'] # the name in 1.x, nil in 2.0
+  article.attributes[:attachments].first[:filename]  # the name in 2.0
+  ```
+
+  Keys are Symbols at every depth now, so one spelling reads a value wherever it sits.
+
 - **`rescue Faraday::ConnectionFailed`** (and any other Faraday exception) no longer
   matches. Transport failures are wrapped, so rescue `ZammadAPI::ConnectionError`,
   `ZammadAPI::TimeoutError`, or `ZammadAPI::TransportError` for both.
