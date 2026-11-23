@@ -34,6 +34,29 @@ RSpec.describe ZammadAPI::Response do
     end
   end
 
+  # What a response says it carries, which is not what it turned out to: a
+  # JSON body that did not parse still came from something that speaks JSON.
+  describe '#json_content_type?' do
+    it 'is true for a JSON content type' do
+      expect(build(headers: { 'content-type' => 'application/json; charset=utf-8' })).to be_json_content_type
+    end
+
+    it 'is true where the body then did not decode' do
+      response = build(body: '{"id":', raw_body: '{"id":', headers: { 'content-type' => 'application/json' })
+
+      expect(response).to be_json_content_type
+      expect(response).not_to be_json
+    end
+
+    it 'is false for another content type' do
+      expect(build(headers: { 'content-type' => 'text/html' })).not_to be_json_content_type
+    end
+
+    it 'is false where the response names none' do
+      expect(build).not_to be_json_content_type
+    end
+  end
+
   describe '#decoded' do
     it 'returns an object body when one is expected' do
       expect(build(body: { a: 1 }).decoded(:object, operation: 'find object')).to eq(a: 1)

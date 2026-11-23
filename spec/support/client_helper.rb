@@ -26,4 +26,12 @@ module ClientHelper
       headers: { 'Content-Type' => 'application/json' }.merge(headers)
     }
   end
+
+  # Zammad's own answer with a body that cannot be read: it says it is JSON,
+  # and what arrived of it is not.
+  #
+  # @return [Hash] arguments for WebMock's +to_return+
+  def unreadable_json_response(status: 200)
+    { status: status, body: '{"id":1,"na', headers: { 'Content-Type' => 'application/json' } }
+  end
 end

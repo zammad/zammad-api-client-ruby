@@ -577,6 +577,10 @@ module ZammadAPI
       #   connection was closed before its answer had arrived. The record is
       #   persisted and holds what it sent; {#reload} brings in the rest, and
       #   a record that was being created has no id to be reloaded by.
+      # @raise [ParseError] when a 2xx did not carry the record. One that said
+      #   it was JSON was Zammad's, and leaves the record as the error above
+      #   does. Any other was the answer of something in front of Zammad, and
+      #   leaves the record as it was, changes staged, to be saved again.
       # @see #save
       def save!
         raise_if_destroyed!('save')
@@ -853,10 +857,10 @@ module ZammadAPI
       # The flag goes down before the body is decoded, because what makes a
       # record persisted is that Zammad answered 2xx, not that the answer
       # parsed. Decoded first, a create whose 201 carried something other than
-      # a JSON object - an HTML error page from an intervening proxy - raised
-      # ParseError with @new_record still true, so the ticket existed in
-      # Zammad while the record here still looked unsaved and a retried `save`
-      # POSTed a second one.
+      # a JSON object - a body cut off or rewritten on its way through a
+      # proxy - raised ParseError with @new_record still true, so the ticket
+      # existed in Zammad while the record here still looked unsaved and a
+      # retried `save` POSTed a second one.
       #
       # What that leaves behind is a record which is persisted and carries no
       # id, and the rest of this class has to treat it as the unusable thing
@@ -865,10 +869,14 @@ module ZammadAPI
       # to send" short circuit and reported true, having made no request at
       # all, for a record that may or may not be in Zammad.
       #
+      # Only where the 2xx is Zammad's, which {#applied_by?} asks: one that
+      # is not settles nothing, and the ParseError its body raises below
+      # leaves the record as the save found it.
+      #
       # +sent+ is what a save was sent with, and is what tells one from a
       # read.
       def replace_attributes!(response, operation:, sent: nil)
-        mark_answered!(sent)
+        mark_answered!(sent) if sent.nil? || applied_by?(response)
         @attributes = frozen_attributes(response.decoded(:object, operation: operation, resource_class: self.class))
         @baseline   = @attributes
         reset_pending_state!
@@ -900,16 +908,44 @@ module ZammadAPI
       # @raise [IncompleteResponseError] once the record is settled
       def applied(sent)
         yield
-      rescue IncompleteResponseError
-        mark_answered!(sent)
+      rescue IncompleteResponseError => e
+        mark_answered!(sent) if applied_by?(e.response)
         raise
+      end
+
+      # Whether a 2xx says that Zammad applied the save it answers.
+      #
+      # Every 2xx was taken to. But the 2xx whose body cannot be read is, more
+      # often than a record Zammad served mangled, the page of something in
+      # front of Zammad that never passed the request on: the login page of a
+      # single sign-on gateway, a captive portal, the default page of a load
+      # balancer. Settled on that, `ticket.update(state: 'closed')` raised
+      # ParseError and left the ticket reading closed with nothing staged, so
+      # the retried `save` answered true without a request while Zammad still
+      # had it open, and a create was left persisted with no id for a record
+      # Zammad never made.
+      #
+      # The content type tells the two apart. Zammad answers a create and an
+      # update with JSON, from every controller, so a 2xx that says it is
+      # JSON is its own, readable or not, and one that says anything else, or
+      # nothing, is not. A body that was decoded from JSON counts as said,
+      # for a transport of the caller's that hands over a {Response} without
+      # the header.
+      #
+      # Not asked of a destroy. Zammad answers a ticket's DELETE with no body
+      # at all, so there is nothing in that 2xx to say whose it is.
+      #
+      # @param response [Response, nil] nil where an error that says Zammad
+      #   answered carries none, which leaves its word for it
+      def applied_by?(response)
+        response.nil? || response.json? || response.json_content_type?
       end
 
       # The same argument, for what was staged: a 2xx is Zammad saying it
       # applied the changes, whether or not the rest of the answer parsed.
       #
       # They used to stay staged until the body had decoded. An update
-      # answered with a 2xx nothing could read - the same proxy page - raised
+      # answered with a 2xx nothing could read - the same mangled body - raised
       # ParseError with the whole change set still in place, so the next
       # `save` sent all of it again along with whatever had been staged
       # since. For most attributes that is the same value twice. For a
