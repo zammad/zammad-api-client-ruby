@@ -1212,6 +1212,11 @@ record still new, and the `save` can be repeated once the way is clear. An
 `IncompleteResponseError` whose `e.response` is not JSON leaves a record being saved that
 way as well.
 
+A `destroy` asks the same of its 2xx. Zammad answers a DELETE with no body or with JSON, so
+a 2xx with a body of any other kind raises `ParseError`, from `record.destroy` and from
+`client.groups.destroy(id)` alike. The record is not `destroyed?`, and the call can be
+repeated.
+
 ### Timeouts and retries
 
 A `GET` is retried on connection failures, timeouts and the transient statuses 429, 500,

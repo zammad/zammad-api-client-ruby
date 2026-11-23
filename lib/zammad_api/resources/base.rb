@@ -233,6 +233,41 @@ module ZammadAPI
           from_response(transport, response.decoded(:object, operation: operation, resource_class: self))
         end
 
+        # Refuses a 2xx to a DELETE that is not an answer Zammad gives to one.
+        #
+        # Zammad answers a DELETE with no body at all, for a ticket, and
+        # with an empty JSON object for what it destroys through
+        # ApplicationController#model_destroy_render. So a 2xx with a body
+        # that does not say it is JSON is the page of something in front of
+        # Zammad that never passed the request on - the login page of a
+        # single sign-on gateway, the default page of a load balancer - and
+        # the record is still there. Every 2xx was taken for Zammad's:
+        # `group.destroy` answered true to such a page and left the record
+        # destroyed, so nothing more could be asked of it, with the group
+        # still in Zammad.
+        #
+        # A 2xx with no body cannot be told from Zammad's own, and is taken
+        # for it.
+        #
+        # Here for the two callers that send a DELETE, {#destroy} and
+        # {ResourceProxy#destroy}.
+        #
+        # @api private
+        # @param response [Response]
+        # @return [Response]
+        # @raise [ParseError] when the body is neither empty nor JSON
+        def confirm_destroyed!(response)
+          return response if response.raw_body.to_s.empty? || response.json? || response.json_content_type?
+
+          content_type = response.headers['content-type'].to_s
+          raise ParseError.build(
+            operation:      'destroy object',
+            expected:       'body or none',
+            actual:         content_type.empty? ? 'a body that names no content type' : content_type,
+            resource_class: self
+          )
+        end
+
         # Builds a record that is already stored in Zammad.
         #
         # Straight to the state, past the constructor's refusal of attributes
@@ -737,22 +772,32 @@ module ZammadAPI
       # whole, for the reason {#applied} gives: the record is gone, and one
       # that still looked live sent a second DELETE, which came back as a 404.
       #
+      # Only where the 2xx is Zammad's, as a save is settled only by one that
+      # is: see {.confirm_destroyed!} for what tells them apart after a
+      # DELETE. A 2xx that is not leaves the record as it was, and the
+      # +destroy+ can be repeated.
+      #
       # @return [true]
       # @raise [Error] when the record was already destroyed
       # @raise [ResponseError] when Zammad rejected the request
+      # @raise [ParseError] when the request was answered 2xx with a body
+      #   that is not JSON, by something that is not Zammad. The record is
+      #   not {#destroyed?}.
       # @raise [IncompleteResponseError] when Zammad destroyed the record and
       #   the connection was closed before its answer had arrived. The record
-      #   is {#destroyed?} all the same.
+      #   is {#destroyed?} all the same, unless the answer did not say it was
+      #   JSON.
       def destroy
         raise_if_destroyed!('destroy')
         raise_if_new!('destroy')
 
         begin
-          transport.delete(member_path, operation: 'destroy object', resource_class: self.class)
-        rescue IncompleteResponseError
-          mark_destroyed!
+          response = transport.delete(member_path, operation: 'destroy object', resource_class: self.class)
+        rescue IncompleteResponseError => e
+          mark_destroyed! if applied_by?(e.response)
           raise
         end
+        self.class.confirm_destroyed!(response)
         mark_destroyed!
         true
       end
@@ -954,8 +999,9 @@ module ZammadAPI
       # for a transport of the caller's that hands over a {Response} without
       # the header.
       #
-      # Not asked of a destroy. Zammad answers a ticket's DELETE with no body
-      # at all, so there is nothing in that 2xx to say whose it is.
+      # A destroy is asked this only of an answer that was cut short. Zammad
+      # answers a ticket's DELETE with no body at all, so a whole one is
+      # asked what {.confirm_destroyed!} asks instead.
       #
       # @param response [Response, nil] nil where an error that says Zammad
       #   answered carries none, which leaves its word for it

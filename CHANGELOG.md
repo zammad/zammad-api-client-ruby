@@ -1101,8 +1101,8 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   that says it is JSON settles the record now, whether or not its body can then be read.
   Any other leaves the changes staged and a new record new, and the `save` can be
   repeated. That holds for a 2xx cut short of its Content-Length as well, and
-  `Response#json_content_type?` is what is asked. `destroy` is as it was: Zammad answers a
-  ticket's DELETE with no body at all, so nothing in that 2xx says whose it is.
+  `Response#json_content_type?` is what is asked. A `destroy` is asked another question,
+  since Zammad answers a ticket's DELETE with no body at all: see below.
 - An `Authorization` header in `Faraday.default_connection_options` no longer replaces the
   client's authentication. Every connection `Faraday.new` builds starts from those options,
   and the authorization middleware leaves a header it finds, so a process that set
@@ -1153,6 +1153,15 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   reads, compares and serializes as the Hash it was, to JSON and to YAML alike, and `to_h`
   is a plain Hash. A String cannot be told how to print, so a write into the password
   itself, `user.attributes[:password] << 'x'`, still quotes it.
+- `destroy` no longer reports a record destroyed where something that is not Zammad answered
+  the request. Every 2xx settled it, so a single sign-on gateway that answered the DELETE
+  with its login page and status 200 made `group.destroy` return `true` and left the record
+  `destroyed?`, refusing every call after it, with the group still in Zammad.
+  `client.groups.destroy(6)` returned `true` for the same page, as 1.x did. Zammad answers a
+  DELETE with no body, for a ticket, and with an empty JSON object for everything else, so
+  a 2xx whose body does not say it is JSON raises `ParseError` now, from both. The record
+  is left as it was, with what was staged, and the `destroy` can be repeated. A 2xx cut
+  short of its Content-Length leaves the record destroyed only where it said it was JSON.
 
 ### Changed
 

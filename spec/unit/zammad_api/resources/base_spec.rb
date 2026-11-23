@@ -2015,14 +2015,78 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(group.new_record?).to be(true)
     end
 
-    # Zammad answers a ticket's DELETE with no body at all, so a 2xx to a
-    # destroy carries nothing that says whose it is.
-    it 'does not ask the same of a destroy' do
-      group = ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Support')
-      stub_request(:delete, "#{url}/1").to_return(status: 200, body: '')
+    # Zammad answers a ticket's DELETE with no body at all, and with an empty
+    # JSON object for everything else it destroys. A 2xx whose body is
+    # neither is not its answer, and the record is still there.
+    context 'when it was a destroy' do
+      subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Support') }
 
-      expect(group.destroy).to be(true)
-      expect(group).to be_destroyed
+      let(:member_url) { "#{url}/1" }
+
+      it 'reports the page, naming what it was served as' do
+        stub_request(:delete, member_url).to_return(login_page)
+
+        expect { group.destroy }
+          .to raise_error(ZammadAPI::ParseError, "Can't destroy object (ZammadAPI::Resources::Group): expected a JSON body or none, got text/html")
+      end
+
+      it 'leaves the record as it was, with what was staged' do
+        stub_request(:delete, member_url).to_return(login_page)
+        group.name = 'Renamed'
+        swallow { group.destroy }
+
+        expect(group).not_to be_destroyed
+        expect(group.changes).to eq(name: %w[Support Renamed])
+      end
+
+      it 'sends the DELETE again with the next destroy, which is the first Zammad sees' do
+        stub_request(:delete, member_url).to_return(login_page, json_response({}))
+        swallow { group.destroy }
+
+        expect(group.destroy).to be(true)
+        expect(group).to be_destroyed
+        expect(a_request(:delete, member_url)).to have_been_made.twice
+      end
+
+      it 'takes a body that names no content type the same way' do
+        stub_request(:delete, member_url).to_return(status: 200, body: 'OK')
+
+        expect { group.destroy }.to raise_error(ZammadAPI::ParseError, /got a body that names no content type/)
+        expect(group).not_to be_destroyed
+      end
+
+      it 'takes a page cut short of its Content-Length the same way' do
+        stub_request(:delete, member_url).to_return(login_page('Content-Length' => '300'))
+
+        expect { group.destroy }.to raise_error(ZammadAPI::IncompleteResponseError)
+        expect(group).not_to be_destroyed
+      end
+
+      it 'is destroyed by a 2xx with no body, as Zammad answers for a ticket' do
+        stub_request(:delete, member_url).to_return(status: 200, body: '', headers: { 'Content-Type' => 'text/html' })
+
+        expect(group.destroy).to be(true)
+        expect(group).to be_destroyed
+      end
+
+      it 'is destroyed by a 204' do
+        stub_request(:delete, member_url).to_return(status: 204)
+
+        expect(group.destroy).to be(true)
+      end
+
+      it 'is destroyed by the empty object Zammad answers with for a group' do
+        stub_request(:delete, member_url).to_return(json_response({}))
+
+        expect(group.destroy).to be(true)
+        expect(group).to be_destroyed
+      end
+
+      it 'is destroyed by a body that says it is JSON and cannot be read as it' do
+        stub_request(:delete, member_url).to_return(unreadable_json_response)
+
+        expect(group.destroy).to be(true)
+      end
     end
 
     # A transport of the caller's can hand over a Response without the
