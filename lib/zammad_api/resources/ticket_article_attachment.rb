@@ -24,7 +24,7 @@ module ZammadAPI
       # Asks for the file as it is stored. A response says how long it is in
       # the bytes that were sent, and the transport can hold that against
       # the bytes in hand only where nothing decoded them on the way: see
-      # {Transport#missing_bytes}. Left to itself Net::HTTP asks for gzip
+      # {Transport.missing_bytes}. Left to itself Net::HTTP asks for gzip
       # and inflates what arrives, without a word for a stream that stops
       # halfway, so a text attachment behind a proxy that compresses came
       # back as its first part when the connection was closed under it.

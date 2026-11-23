@@ -1278,6 +1278,79 @@ module ZammadAPI
       !Faraday::Retry::Middleware.new(nil, options).calculate_sleep_amount(1, { response_headers: Faraday::Utils::Headers.new(response.headers) }).nil?
     end
 
+    # A Content-Length that can be compared: one figure, and nothing else.
+    # Two that were sent arrive joined by a comma, and say nothing certain.
+    CONTENT_LENGTH = /\A\d+\z/
+    private_constant :CONTENT_LENGTH
+
+    # A 2xx response, once its body is known to have arrived: see
+    # {.missing_bytes}.
+    #
+    # Raised with the response, as the one {ConnectionError} that has one:
+    # Zammad answered, so a write was applied, and {Resources::Base#save!}
+    # and {Resources::Base#destroy} have to hear that to settle the record.
+    #
+    # On the class and public for {Test}, like {.retried?}: the stand-in
+    # handed such a response back as whole, so code that handles a save cut
+    # short could not be exercised against it, and a fixture carrying a
+    # stale Content-Length passed there and failed on the wire.
+    #
+    # @api private
+    # @param response [Response]
+    # @param operation [String]
+    # @param config [Config] of the client that sent the request
+    # @return [Response]
+    # @raise [IncompleteResponseError]
+    def self.whole(response, operation:, config:)
+      missing = missing_bytes(response)
+      return response if missing.nil?
+
+      raise IncompleteResponseError.new(
+        "Can't #{operation}: the response from #{config.redacted_url} ended #{missing} bytes short of the " \
+        "#{response.headers['content-length']} its Content-Length announces, so the connection was closed " \
+        'before the body had arrived',
+        response: response
+      )
+    end
+
+    # How many bytes of its body a response stopped short by, where it did.
+    #
+    # A body framed by Content-Length ends where the count is reached, or
+    # where the connection does. Net::HTTP takes the second for the first
+    # without a word - its +ignore_eof+ is on by default - so a download
+    # the connection dropped under came back as the file:
+    # {Resources::TicketArticleAttachment#download} returned the first ten
+    # bytes of a thousand, and whatever wrote them to disk wrote a file that
+    # opens as a broken one. A chunked body cut short did raise, and a JSON
+    # one that no longer parses is refused where it is decoded, so this was
+    # the one response that came back wrong and looked right.
+    #
+    # Asked only where the bytes in hand are the bytes that were counted. A
+    # body under a Content-Encoding may have been decoded on the way here,
+    # by an adapter that leaves both headers as they arrived. The default
+    # one does: Net::HTTP drops the one and corrects the other while it
+    # reads the body, and Faraday has taken its copy of the headers by
+    # then. So a compressed body cut short is not caught here, and
+    # {Resources::TicketArticleAttachment#download} asks for its file
+    # uncompressed. A body under a Transfer-Encoding is not framed by the
+    # count at all, and a 204 has no body whatever a header beside it says.
+    #
+    # Only a body that is short. One that is longer was not cut off.
+    #
+    # @api private
+    # @param response [Response]
+    # @return [Integer, nil] nil for a response that is whole, or that
+    #   cannot be told
+    def self.missing_bytes(response)
+      headers   = response.headers
+      announced = headers['content-length']
+      return nil if announced.nil? || !CONTENT_LENGTH.match?(announced)
+      return nil if response.status == 204 || headers.key?('content-encoding') || headers.key?('transfer-encoding')
+
+      missing = announced.to_i - response.raw_body.bytesize
+      missing.positive? ? missing : nil
+    end
+
     # What {#inspect} says of a transport or of a client, for a JSON
     # encoder. Public for {Client#as_json}, whose transport may be another
     # kind than this one.
@@ -1399,7 +1472,7 @@ module ZammadAPI
       response = decode(perform(method, path, query, payload, headers))
       log_response(method, path, response, started)
 
-      return whole(response, operation) if response.success?
+      return Transport.whole(response, operation: operation, config: config) if response.success?
 
       raise ResponseError.build(response, operation: operation, resource_class: resource_class)
     rescue Faraday::TimeoutError, *TIMEOUT_ERRORS => e
@@ -1415,68 +1488,6 @@ module ZammadAPI
     end
 
     private
-
-    # A Content-Length that can be compared: one figure, and nothing else.
-    # Two that were sent arrive joined by a comma, and say nothing certain.
-    CONTENT_LENGTH = /\A\d+\z/
-    private_constant :CONTENT_LENGTH
-
-    # A 2xx response, once its body is known to have arrived: see
-    # {#missing_bytes}.
-    #
-    # Raised with the response, as the one {ConnectionError} that has one:
-    # Zammad answered, so a write was applied, and {Resources::Base#save!}
-    # and {Resources::Base#destroy} have to hear that to settle the record.
-    #
-    # @return [Response]
-    # @raise [IncompleteResponseError]
-    def whole(response, operation)
-      missing = missing_bytes(response)
-      return response if missing.nil?
-
-      raise IncompleteResponseError.new(
-        "Can't #{operation}: the response from #{config.redacted_url} ended #{missing} bytes short of the " \
-        "#{response.headers['content-length']} its Content-Length announces, so the connection was closed " \
-        'before the body had arrived',
-        response: response
-      )
-    end
-
-    # How many bytes of its body a response stopped short by, where it did.
-    #
-    # A body framed by Content-Length ends where the count is reached, or
-    # where the connection does. Net::HTTP takes the second for the first
-    # without a word - its +ignore_eof+ is on by default - so a download
-    # the connection dropped under came back as the file:
-    # {Resources::TicketArticleAttachment#download} returned the first ten
-    # bytes of a thousand, and whatever wrote them to disk wrote a file that
-    # opens as a broken one. A chunked body cut short did raise, and a JSON
-    # one that no longer parses is refused where it is decoded, so this was
-    # the one response that came back wrong and looked right.
-    #
-    # Asked only where the bytes in hand are the bytes that were counted. A
-    # body under a Content-Encoding may have been decoded on the way here,
-    # by an adapter that leaves both headers as they arrived. The default
-    # one does: Net::HTTP drops the one and corrects the other while it
-    # reads the body, and Faraday has taken its copy of the headers by
-    # then. So a compressed body cut short is not caught here, and
-    # {Resources::TicketArticleAttachment#download} asks for its file
-    # uncompressed. A body under a Transfer-Encoding is not framed by the
-    # count at all, and a 204 has no body whatever a header beside it says.
-    #
-    # Only a body that is short. One that is longer was not cut off.
-    #
-    # @return [Integer, nil] nil for a response that is whole, or that
-    #   cannot be told
-    def missing_bytes(response)
-      headers   = response.headers
-      announced = headers['content-length']
-      return nil if announced.nil? || !CONTENT_LENGTH.match?(announced)
-      return nil if response.status == 204 || headers.key?('content-encoding') || headers.key?('transfer-encoding')
-
-      missing = announced.to_i - response.raw_body.bytesize
-      missing.positive? ? missing : nil
-    end
 
     # Whether a connection failure is a timeout underneath.
     #
@@ -1753,7 +1764,7 @@ module ZammadAPI
 
     # The header values as text, as well as the names. Faraday keeps a value
     # as whatever wrote it: faraday-gzip sets Content-Length to the Integer
-    # length of what it inflated, and {#missing_bytes} asked a regexp of that,
+    # length of what it inflated, and {.missing_bytes} asked a regexp of that,
     # so every 2xx behind such a middleware raised a bare TypeError.
     def decode(faraday_response)
       headers    = faraday_response.headers.to_h.to_h { |name, value| [name.to_s.downcase, value.to_s] }.freeze

@@ -1341,6 +1341,15 @@ names downcased, the way a real `Response` carries them; a value that is not tex
 spellings of one header name, are refused where the stub is written rather than turned
 into something the wire could not send.
 
+A 2xx stubbed with a `Content-Length` that announces more than its body holds raises
+`IncompleteResponseError`, as that response does on the wire. It is how a test says that a
+save was answered and the answer cut short:
+
+```ruby
+zammad.stub(:put, 'api/v1/tickets/1', body: '{"id":1,"ti',
+            headers: {'Content-Type' => 'application/json', 'Content-Length' => 30})
+```
+
 `query` and `headers` are recorded through the real transport's own stringification, so
 they hold what a request would have carried rather than the raw Ruby values — and a header
 the wire would refuse is refused here too. `headers` names only what the call asked for;
