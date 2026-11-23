@@ -222,10 +222,15 @@ module ZammadAPI
     # costs one per page of hits. The longest value is searched to keep
     # those few.
     #
+    # An +id+ among the attributes is not searched for and not walked to. The
+    # id is what addresses a record, so the record is read by it, as {#find}
+    # reads it, and then held against the other values: see {#find_by_id}.
+    #
     # @example
     #   client.users.find_by(email: 'someone@example.com')&.id
     #   client.ticket_states.find_by(name: 'open')
     #   client.users.find_by(organization_id: 5, active: true)
+    #   client.tickets.find_by(id: params[:id])
     #
     # @param params [Hash] attribute names and the values to match exactly
     # @return [Resources::Base, nil] nil when nothing matched
@@ -233,10 +238,13 @@ module ZammadAPI
     def find_by(**params)
       raise ArgumentError, 'find_by needs at least one attribute to match' if params.empty?
 
+      id_key = params.keys.find { it.to_s == 'id' }
+      return find_by_id(params[id_key], params.except(id_key)) if id_key
+
       term       = resource_class.searchable? ? search_term_for(params) : nil
       candidates = term ? search(term) : all
 
-      candidates.detect { |record| params.all? { |key, value| record.key?(key) && record[key] == value } }
+      candidates.detect { |record| carries?(record, params) }
     end
 
     # Fetches the first record carrying all of these attribute values, raising
@@ -640,6 +648,57 @@ module ZammadAPI
 
       raise Error, "Zammad routes no search endpoint for #{resource_class.name}, so it cannot be searched by term: #{path}/search answers 404, which would arrive here as a NotFoundError about a record. Look one record up by attribute value with find_by, which walks the records where it cannot search, or pick several out with select { ... }."
     end
+
+    # The record with this id, where it carries the other values as well.
+    #
+    # {#find_by} looked for an id the way it looks for any value, and an id
+    # is the one value that cannot be found that way. Given as the Integer
+    # it is, there was no String to search on, so the index was walked a
+    # page at a time until the record came by: `tickets.find_by(id: 123456)`
+    # read every ticket before it. Given as the String a request parameter
+    # is, `find_by(id: params[:id])`, the text was searched for, and each hit
+    # was asked whether its id was that String, which the id of a record,
+    # an Integer, never is: nil, for a record that was among the hits.
+    #
+    # One request, the one {#find} makes, and nil where it answers 404. The
+    # id is taken as a number or as the digits of one, since that is what
+    # tells which record was asked for. Anything else is the id of no
+    # record, and is answered without a request: a nil out of a parameter
+    # that was not sent, or a word, which would be read as another endpoint
+    # of the same path, as `users/me` is.
+    #
+    # The record that comes back is held against the number as well: Zammad
+    # answers an organization it will not show with an object that carries
+    # no id, which is the record with no id of {#exists?}.
+    #
+    # @param id [Object] the value given for +id+
+    # @param others [Hash] the other attribute values to match
+    # @return [Resources::Base, nil]
+    def find_by_id(id, others)
+      number = record_number(id)
+      return nil if number.nil?
+
+      record = find(number)
+      record if record.id == number && carries?(record, others)
+    rescue NotFoundError
+      nil
+    end
+
+    # The number an id names: the Integer it is, or the one a String of
+    # digits writes.
+    #
+    # @return [Integer, nil] nil for anything else
+    def record_number(id)
+      return id if id.is_a?(Integer)
+
+      Integer(id, 10) if id.is_a?(String) && id.ascii_only? && id.match?(/\A\d+\z/)
+    end
+
+    # Whether a record carries every one of these values.
+    #
+    # Read with +[]+ and not with a reader, which raises for an attribute
+    # the record in hand does not carry.
+    def carries?(record, params) = params.all? { |key, value| record.key?(key) && record[key] == value }
 
     # The one value {#find_by} searches on: the longest, as the most selective
     # of them, which matters because a miss reads every page of hits.

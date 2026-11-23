@@ -492,6 +492,12 @@ client.ticket_states.find_by(name: 'open')                       # no search end
 client.users.find_by(organization_id: 5)                         # no string to search on: walks the index
 ```
 
+An `id` is neither searched for nor walked to. `find_by(id: params[:id])` reads the record
+the way `find` does, in one request, and answers `nil` where `find` raises `NotFoundError`.
+The id may be the Integer or a String of its digits, and any other value given with it is
+matched against the record that came back. Anything else, `nil` included, is the id of no
+record, and is answered `nil` without a request.
+
 A search is the cheap way, and is used wherever the resource has a search endpoint and one
 of the values is a string. The term is one string value, because Zammad matches words: a
 value of another type would go out as the word it prints as, so `active: true` would look

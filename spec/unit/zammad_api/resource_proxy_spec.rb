@@ -331,7 +331,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
 
       before do
         stub_request(:get, states_url).with(query: hash_including('page' => '1'))
-          .to_return(json_response([{ id: 1, name: 'new' }, { id: 2, name: 'open' }]))
+          .to_return(json_response([{ id: 1, name: 'new', state_type_id: 1 }, { id: 2, name: 'open', state_type_id: 2 }]))
         stub_request(:get, states_url).with(query: hash_including('page' => '2')).to_return(json_response([]))
       end
 
@@ -354,7 +354,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
       end
 
       it 'matches on a value of any type' do
-        expect(client.ticket_states.find_by(id: 2).name).to eq('open')
+        expect(client.ticket_states.find_by(state_type_id: 2).name).to eq('open')
       end
     end
 
@@ -402,6 +402,111 @@ RSpec.describe ZammadAPI::ResourceProxy do
         .to_return(json_response([{ id: 1, name: 'Users', note: nil }]), json_response([]))
 
       expect(proxy.find_by(note: nil).id).to eq(1)
+    end
+  end
+
+  # An id is what addresses a record, and the one value a search for it or
+  # a walk to it is the wrong way to find: given as an Integer the index was
+  # walked until the record came by, and given as the String a request
+  # parameter is, no hit ever carried it.
+  describe '#find_by with an id' do
+    let(:member_url) { "#{url}/5" }
+
+    def stub_member(body = { id: 5, name: 'Users', active: true })
+      stub_request(:get, member_url).with(query: hash_including({})).to_return(json_response(body))
+    end
+
+    def requests_made = a_request(:get, /#{Regexp.escape(url)}/)
+
+    it 'reads the record by its id, in one request' do
+      stub_member
+
+      expect(proxy.find_by(id: 5).name).to eq('Users')
+      expect(requests_made).to have_been_made.once
+    end
+
+    it 'reads it expanded, as a search and an index serve it' do
+      stub = stub_request(:get, member_url).with(query: { 'expand' => 'true' }).to_return(json_response({ id: 5 }))
+
+      proxy.find_by(id: 5)
+      expect(stub).to have_been_requested
+    end
+
+    it 'finds the record by the String a request parameter is' do
+      stub_member
+
+      expect(proxy.find_by(id: '5').id).to eq(5)
+    end
+
+    it 'takes the id under a String key' do
+      stub_member
+
+      expect(proxy.find_by('id' => 5).id).to eq(5)
+    end
+
+    it 'answers nil where Zammad has no such record' do
+      stub_request(:get, member_url).with(query: hash_including({})).to_return(json_response({ error: 'not found' }, status: 404))
+
+      expect(proxy.find_by(id: 5)).to be_nil
+    end
+
+    it 'raises from find_by! where Zammad has no such record' do
+      stub_request(:get, member_url).with(query: hash_including({})).to_return(json_response({ error: 'not found' }, status: 404))
+
+      expect { proxy.find_by!(id: 5) }.to raise_error(ZammadAPI::NotFoundError, /find object by id/)
+    end
+
+    it 'answers with the record where it carries the other values too' do
+      stub_member
+
+      expect(proxy.find_by(id: 5, name: 'Users', active: true).id).to eq(5)
+    end
+
+    it 'answers nil where it does not carry one of them' do
+      stub_member
+
+      expect(proxy.find_by(id: 5, name: 'Support')).to be_nil
+    end
+
+    it 'answers nil where it lacks an attribute that was asked for' do
+      stub_member
+
+      expect(proxy.find_by(id: 5, note: nil)).to be_nil
+    end
+
+    it 'leaves any other failure to say what it is' do
+      stub_request(:get, member_url).with(query: hash_including({})).to_return(json_response({ error: 'Not authorized' }, status: 403))
+
+      expect { proxy.find_by(id: 5) }.to raise_error(ZammadAPI::AuthorizationError)
+    end
+
+    # Zammad answers `organizations/5` with `{}` for a customer who belongs
+    # to no organization, whichever organization 5 is.
+    it 'answers nil for an object that carries no id' do
+      stub_member({})
+
+      expect(proxy.find_by(id: 5)).to be_nil
+    end
+
+    it 'reads a String of digits as the number it writes' do
+      stub_member
+
+      expect(proxy.find_by(id: '05').id).to eq(5)
+    end
+
+    [nil, '', 'me', '5abc', ' 5', :me, 5.0, [5], '5'.encode('UTF-16LE'), "5\xff"].each do |value|
+      it "answers nil for #{value.inspect}, the id of no record, without a request" do
+        expect(proxy.find_by(id: value)).to be_nil
+        expect(requests_made).not_to have_been_made
+      end
+    end
+
+    it 'does the same for a resource with no search endpoint' do
+      states_url = "#{ClientHelper::BASE_URL}api/v1/ticket_states"
+      stub_request(:get, "#{states_url}/2").with(query: hash_including({})).to_return(json_response({ id: 2, name: 'open' }))
+
+      expect(unit_client.ticket_states.find_by(id: 2, name: 'open').id).to eq(2)
+      expect(a_request(:get, states_url).with(query: hash_including({}))).not_to have_been_made
     end
   end
 
