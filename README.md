@@ -420,6 +420,8 @@ pasted straight from the Zammad documentation. An absolute URL raises `ArgumentE
 client's credentials only ever go to the instance it was configured for, so a link taken
 from a response body has to be reduced to its path first. Any path that opens with a
 scheme counts as one, `http:/collect` as much as `https://other.example/collect`. A path
+with a `..` segment raises it for the same reason, however the dots are written: for a
+Zammad served from a sub-path, `../billing/export` is another application on its host. A path
 is written the way a URL is, so a space or a character outside ASCII has to be
 percent-encoded, `t%C3%A4gs` for `tägs`; one that cannot be read as a URL raises
 `ArgumentError` too, before anything is sent or logged. A non-2xx response raises the same

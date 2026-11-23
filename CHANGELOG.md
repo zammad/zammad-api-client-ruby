@@ -1180,6 +1180,15 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   answers 404, and any other value given beside the id is matched against it. An id that is
   neither an Integer nor a String of digits is the id of no record: `nil`, without a
   request.
+- A raw request refuses a path with a `..` segment. A path is joined to the instance URL the
+  way a link is resolved, so for a Zammad served from a sub-path such a segment left it:
+  with `url: 'https://host/zammad/'`, `client.get('../billing/export')` was sent to
+  `https://host/billing/export`, another application on that host, with the client's
+  `Authorization` header and its `on_behalf_of` scope. An absolute URL was refused already
+  so that the credentials stay with the instance they were configured for, and this was
+  the way round it. It raises `ArgumentError` now, with the dots written as they are or as
+  `%2e`, for every verb, and in `ZammadAPI::Test` as on the wire. A `..` in a query string
+  is left alone, and so is a record id, which is escaped into a segment of its own.
 
 ### Changed
 

@@ -229,6 +229,11 @@ module ZammadAPI
     # for this reason, and every path Zammad serves opens with `api/`.
     ABSOLUTE_URL = /\A[a-z][a-z0-9+.-]*:/i
 
+    # A `..` segment in the path of a request, with either dot written as it
+    # is or percent-encoded: see {.refuse_parent_segment!}.
+    PARENT_SEGMENT = %r{(?:\A|/)(?:\.|%2e){2}(?:/|\z)}i
+    private_constant :PARENT_SEGMENT
+
     # @return [Config]
     attr_reader :config
 
@@ -839,11 +844,14 @@ module ZammadAPI
     # for a request that never left - what {#perform} stringifies the query
     # and the headers first to prevent.
     #
+    # A path that climbs out of the instance URL is refused for the reason an
+    # absolute one is: see {.refuse_parent_segment!}.
+    #
     # @api private
     # @param path [Object]
     # @return [String]
-    # @raise [ArgumentError] for an absolute URL, or a path that cannot be
-    #   read as a URL
+    # @raise [ArgumentError] for an absolute URL, a path that cannot be read
+    #   as a URL, or one with a `..` segment
     def self.relative_path(path)
       relative = path.to_s.sub(%r{\A/+}, '')
       if ABSOLUTE_URL.match?(relative)
@@ -853,7 +861,45 @@ module ZammadAPI
       end
 
       refuse_unreadable_path!(relative)
+      refuse_parent_segment!(relative)
       relative
+    end
+
+    # Refuses a request path with a `..` segment in it.
+    #
+    # A path is joined to the instance URL the way a link is resolved, and
+    # `..` climbs. For a Zammad served from a sub-path that leaves it:
+    # against `https://host/zammad/`, `client.get('../billing/export')` was
+    # sent to `https://host/billing/export`, another application on the same
+    # host, with this client's Authorization header and its on_behalf_of
+    # scope. A path put together from a value that was not checked - a
+    # filename, a link out of a response body - is how one gets there. An
+    # absolute URL is refused so that the credentials stay with the instance
+    # they were configured for, and this is the same door.
+    #
+    # Whatever the instance URL is, since no endpoint is reached by climbing.
+    # The dots are read percent-encoded as well: a client sends `%2e%2e` as
+    # it stands, and what receives it reads it as the dots. A `..` in a query
+    # string or after a `#` is no part of the path, and is left alone.
+    #
+    # A segment is what stands between two slashes that were written as
+    # slashes. A record id is escaped into one by {.escape_path_segment},
+    # slashes and all, so `find('1/../x')` asks for the one segment
+    # `1%2F..%2Fx` and is not what this refuses.
+    #
+    # The message does not quote the path, for the reason {.relative_path}
+    # gives.
+    #
+    # @api private
+    # @param relative [String] a path that reads as a URL
+    # @return [void]
+    # @raise [ArgumentError]
+    def self.refuse_parent_segment!(relative)
+      return if !PARENT_SEGMENT.match?(relative[/\A[^?#]*/].to_s)
+
+      raise ArgumentError, "a request path names an endpoint below the instance URL, and this one holds a '..' segment, which climbs " \
+                           "out of it: for a Zammad served from a sub-path, sending it would hand this client's credentials to " \
+                           "whatever else that host serves. Pass the path of the endpoint itself, such as 'api/v1/tickets'."
     end
 
     # Reads a path the two ways Faraday will: the whole of it as a URL, and
