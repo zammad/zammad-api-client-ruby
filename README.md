@@ -147,7 +147,7 @@ client = ZammadAPI::Client.from_env(timeout: 300)
 | `oauth2_token`   | `nil`              | OAuth2 bearer token.                                               |
 | `user`           | `nil`              | Login for basic authentication.                                    |
 | `password`       | `nil`              | Password for basic authentication.                                 |
-| `timeout`        | `60`               | Seconds to wait for a response, at most 100000000. No value means no timeout. |
+| `timeout`        | `60`               | Seconds to wait for a response, at most 100000000. It cannot be turned off, and `nil` is refused: pass the longest wait that is acceptable. |
 | `open_timeout`   | `10`               | Seconds to wait for the connection, with the same limit.           |
 | `retries`        | `2`                | Retry attempts for a `GET` that failed transiently. `0` disables retrying. |
 | `retry_interval` | `0.5`              | Seconds before the first retry; doubles on each attempt, up to `timeout`. Up to half of it is added to each wait as jitter. |
