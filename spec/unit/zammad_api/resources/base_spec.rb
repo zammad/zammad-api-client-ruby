@@ -235,6 +235,63 @@ RSpec.describe ZammadAPI::Resources::Base do
       group.save!
       expect { group.attributes[:preferences][:note] << '!' }.to raise_error(FrozenError)
     end
+
+    # Ruby quotes the frozen object in the error for a write to it, and the
+    # message of an error is what a log and an error tracker keep.
+    context 'with a credential among the attributes' do
+      subject(:user) { client.users.new(login: 'jane', password: 'hunter2', preferences: { bind_pw: 's3cret', locale: 'de' }) }
+
+      def message_of
+        yield
+        nil
+      rescue FrozenError => e
+        e.message
+      end
+
+      it 'does not quote a staged password in the error for a write to #attributes' do
+        expect(message_of { user.attributes[:vip] = true })
+          .to eq(%(can't modify frozen ZammadAPI::Attributes: {login: "jane", password: "[REDACTED]", preferences: {bind_pw: "[REDACTED]", locale: "de"}}))
+      end
+
+      it 'does not quote a credential in the error for a write to a nested Hash' do
+        expect(message_of { user.attributes[:preferences][:x] = 1 })
+          .to eq(%(can't modify frozen ZammadAPI::Attributes: {bind_pw: "[REDACTED]", locale: "de"}))
+      end
+
+      it 'does not quote either password in the error for a write to #changes' do
+        user.password = 'correct horse'
+
+        expect(message_of { user.changes[:x] = 1 })
+          .to eq(%(can't modify frozen ZammadAPI::Attributes: {password: "[REDACTED]"}))
+      end
+
+      it 'does not quote one that was written after the record was built' do
+        user.password = 'correct horse'
+
+        expect(message_of { user.attributes[:vip] = true }).to include('password: "[REDACTED]"')
+      end
+
+      it 'still reads every value as it is' do
+        expect(user.attributes).to eq(login: 'jane', password: 'hunter2', preferences: { bind_pw: 's3cret', locale: 'de' })
+      end
+
+      it 'hands out plain Hashes from #to_h, which print what they hold' do
+        expect(user.to_h).to be_an_instance_of(Hash).and(satisfy { it[:preferences].instance_of?(Hash) })
+      end
+    end
+
+    # A save whose answer cannot be read puts the record on what it sent,
+    # cut to the attributes it arrived with, and `slice` hands back a plain
+    # Hash whatever it was called on.
+    it 'hands out an Attributes after a save whose answer could not be read' do
+      stub_request(:get, "#{url}/1").with(query: hash_including({})).to_return(json_response({ id: 1, name: 'Users' }))
+      stub_request(:put, "#{url}/1").with(query: hash_including({})).to_return(unreadable_json_response)
+      found = client.groups.find(1)
+      found.name = 'Support'
+
+      expect { found.save! }.to raise_error(ZammadAPI::ParseError)
+      expect(found.attributes).to be_a(ZammadAPI::Attributes).and be_frozen
+    end
   end
 
   describe '#save' do

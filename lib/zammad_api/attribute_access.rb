@@ -38,7 +38,11 @@ module ZammadAPI
     # staging a change, so the next +save+ would not send it. {#to_h} returns a
     # copy that is safe to modify; an attribute writer is the way to stage one.
     #
-    # @return [Hash{Symbol => Object}]
+    # An {Attributes}, here and for every Hash inside it: a Hash that prints
+    # with its credentials blanked, since the error Ruby raises for a write
+    # to a frozen Hash prints it.
+    #
+    # @return [Attributes{Symbol => Object}]
     attr_reader :attributes
 
     # @param key [Symbol, String]
