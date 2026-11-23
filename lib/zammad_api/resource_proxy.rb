@@ -281,8 +281,12 @@ module ZammadAPI
     # @param id [Integer, String]
     # @return [true]
     # @raise [ResponseError] when Zammad rejected the request
+    # @raise [ParseError] when the request was answered 2xx with a body that
+    #   is not JSON, by something that is not Zammad: see
+    #   {Resources::Base.confirm_destroyed!}
     def destroy(id)
-      @transport.delete(member_path(id), operation: 'destroy object', resource_class: resource_class)
+      response = @transport.delete(member_path(id), operation: 'destroy object', resource_class: resource_class)
+      resource_class.confirm_destroyed!(response)
       true
     end
 

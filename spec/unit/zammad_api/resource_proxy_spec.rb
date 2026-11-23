@@ -542,6 +542,21 @@ RSpec.describe ZammadAPI::ResourceProxy do
 
       expect { proxy.destroy(404) }.to raise_error(ZammadAPI::NotFoundError)
     end
+
+    it 'answers true for the empty object Zammad answers a DELETE with' do
+      stub_request(:delete, "#{url}/1").to_return(json_response({}))
+
+      expect(proxy.destroy(1)).to be(true)
+    end
+
+    # The page of something in front of Zammad that never passed the DELETE
+    # on. This answered true for it, with the record still in Zammad.
+    it 'raises ParseError for a 2xx whose body is not JSON' do
+      stub_request(:delete, "#{url}/1").to_return(status: 200, body: '<html>Please sign in</html>', headers: { 'Content-Type' => 'text/html' })
+
+      expect { proxy.destroy(1) }
+        .to raise_error(ZammadAPI::ParseError, "Can't destroy object (ZammadAPI::Resources::Group): expected a JSON body or none, got text/html")
+    end
   end
 
   # What a collection over this endpoint fetches per request when nothing asks
