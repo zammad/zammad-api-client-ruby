@@ -10,6 +10,9 @@
 #
 #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=... \
 #     bundle exec ruby examples/ticket_report.rb tickets.csv
+#
+# `csv` is a bundled gem from Ruby 3.4 on, and `zammad_api` does not depend
+# on it: a project this is copied into needs `gem 'csv'` in its Gemfile.
 
 require 'zammad_api'
 require 'csv'

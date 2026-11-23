@@ -189,6 +189,7 @@ PLATFORMS
   x86_64-linux-musl
 
 DEPENDENCIES
+  csv
   irb
   overcommit
   rake
