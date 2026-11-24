@@ -2955,6 +2955,49 @@ RSpec.describe ZammadAPI::Transport do
         end
       end
 
+      # The environment can hold a name that is not text either, and the
+      # pattern that picks out the proxy variables raised when asked of it:
+      # a bare ArgumentError in place of the ConfigurationError.
+      context 'when another variable has a name that is not text' do
+        around do |example|
+          ENV["caf\xE9_proxy"] = other
+          example.run
+        ensure
+          ENV["caf\xE9_proxy"] = nil
+        end
+
+        let(:other) { 'http://other.proxy.test:1' }
+
+        it 'is still reported as a configuration error, without the password' do
+          expect { build }.to raise_error(ZammadAPI::ConfigurationError, %r{http://\[REDACTED\]@proxyhost:3128}) { |error|
+            expect(error.full_message(highlight: false)).not_to include('hunter 2')
+          }
+        end
+
+        it 'reports a configured proxy that cannot be parsed the same way' do
+          ENV['http_proxy'] = nil
+
+          expect { unit_transport(url: 'http://192.0.2.1/', proxy: 'http://puser:pa ss@own.proxy.test') }
+            .to raise_error(ZammadAPI::ConfigurationError, %r{http://\[REDACTED\]@own\.proxy\.test})
+        end
+
+        it 'builds a client whose configuration can be used' do
+          ENV['http_proxy'] = nil
+
+          expect(build).to be_a(described_class)
+        end
+
+        # It ends in _proxy, so what it holds is scrubbed like any other.
+        it 'keeps the credentials that variable holds out of a report that quotes them' do
+          ENV['http_proxy']       = nil
+          ENV["caf\xE9_proxy"]    = 'http://quser:qpass word@other.proxy.test:1'
+          quoting                 = ->(_) { raise ArgumentError, 'could not reach http://quser:qpass word@other.proxy.test:1' }
+
+          expect { unit_transport(url: 'http://192.0.2.1/', middleware: quoting) }
+            .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.full_message(highlight: false)).not_to include('qpass word') }
+        end
+      end
+
       context 'when the environment names it in upper case' do
         around do |example|
           before = ENV.fetch('HTTPS_PROXY', nil)
