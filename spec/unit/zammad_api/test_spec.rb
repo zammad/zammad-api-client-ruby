@@ -1138,6 +1138,109 @@ RSpec.describe ZammadAPI::Test do
     end
   end
 
+  # Only the page number was read. The records were served whole to page 1
+  # whatever size was asked for, and every later page was empty, so code
+  # that pages by hand or leans on a batch size saw other records here than
+  # Zammad serves it.
+  describe 'a list endpoint stubbed once, read a page of a given size at a time' do
+    subject(:zammad) { described_class.new }
+
+    let(:client)  { zammad.client }
+    let(:records) { (1..5).map { { id: it, name: "group #{it}" } } }
+
+    before { zammad.stub(:get, 'api/v1/groups', body: records) }
+
+    it 'answers page 1 with as many records as were asked for' do
+      expect(client.groups.all.page(1, per_page: 2).map(&:id)).to eq([1, 2])
+    end
+
+    it 'answers a later page with the records that follow' do
+      expect(client.groups.all.page(2, per_page: 2).map(&:id)).to eq([3, 4])
+    end
+
+    it 'answers the last page with what is left' do
+      expect(client.groups.all.page(3, per_page: 2).map(&:id)).to eq([5])
+    end
+
+    it 'answers a page past the records as an endpoint out of records would' do
+      expect([4, 9].map { client.groups.all.page(it, per_page: 2).to_a }).to eq([[], []])
+    end
+
+    it 'hands in_batches the batches Zammad would' do
+      batches = []
+      client.groups.in_batches(of: 2) { |batch| batches << batch.map(&:id) }
+
+      expect(batches).to eq([[1, 2], [3, 4], [5]])
+    end
+
+    it 'hands find_each every record once, however small the batch' do
+      expect(client.groups.find_each(batch_size: 2).map(&:id)).to eq([1, 2, 3, 4, 5])
+    end
+
+    it 'asks for an empty page after a last one that was full' do
+      client.groups.find_each(batch_size: 5).to_a
+
+      expect(zammad.requests.map { it.query['page'] }).to eq(%w[1 2])
+    end
+
+    it 'still reads the whole list where the page is larger than it' do
+      expect(client.groups.all.map(&:id)).to eq([1, 2, 3, 4, 5])
+    end
+
+    it 'serves a raw request that names no size every record' do
+      expect(client.get('api/v1/groups').body.size).to eq(5)
+    end
+
+    it 'serves a raw request the page it names' do
+      expect(client.get('api/v1/groups', query: { page: 2, per_page: 3 }).body).to eq([{ id: 4, name: 'group 4' }, { id: 5, name: 'group 5' }])
+    end
+
+    it 'keeps the bytes of a stub it did not cut' do
+      zammad.stub(:get, 'api/v1/users', body: '[ {"id": 1} ]', headers: { 'Content-Type' => 'application/json' })
+
+      expect(client.get('api/v1/users', query: { per_page: 1 }).raw_body).to eq('[ {"id": 1} ]')
+    end
+
+    it 'counts a page it cut anew, where the stub announced a length' do
+      zammad.stub(:get, 'api/v1/users', body: [{ id: 1 }, { id: 2 }], headers: { 'Content-Length' => 19 })
+
+      expect(client.get('api/v1/users', query: { per_page: 1 }).headers['content-length']).to eq('10')
+    end
+
+    # A stub short of its own Content-Length says the answer was cut short,
+    # and a page cut from it would have been counted anew and served.
+    it 'does not cut a page from a stub that is short of its own Content-Length' do
+      zammad.stub(:get, 'api/v1/users', body: [{ id: 1 }, { id: 2 }], headers: { 'Content-Length' => 500 })
+
+      expect { zammad.client.with(retries: 0).users.all.page(1, per_page: 1).to_a }.to raise_error(ZammadAPI::IncompleteResponseError)
+    end
+
+    it 'leaves a size that is no number above zero to the stub as it was written' do
+      expect(%w[0 -1 two].map { client.get('api/v1/groups', query: { per_page: it }).body.size }).to eq([5, 5, 5])
+    end
+
+    # Such a stub is what a request of that size is answered.
+    it 'does not cut a stub that names a per_page of its own' do
+      zammad.stub(:get, 'api/v1/users', body: [{ id: 1 }, { id: 2 }, { id: 3 }], query: { per_page: 2 })
+
+      expect(client.get('api/v1/users', query: { per_page: 2 }).body.size).to eq(3)
+      expect(client.get('api/v1/users', query: { per_page: 2, page: 2 }).body).to eq([])
+    end
+
+    it 'does not cut a stub that names its page' do
+      zammad.stub(:get, 'api/v1/users', body: [{ id: 1 }, { id: 2 }, { id: 3 }], query: { page: 1 })
+
+      expect(client.get('api/v1/users', query: { page: 1, per_page: 2 }).body.size).to eq(3)
+    end
+
+    it 'spends one stub of a sequence on a read of several pages' do
+      zammad.stub(:get, 'api/v1/groups', body: [{ id: 9, name: 'later' }])
+
+      expect(client.groups.find_each(batch_size: 2).map(&:id)).to eq([1, 2, 3, 4, 5])
+      expect(client.groups.find_each(batch_size: 2).map(&:id)).to eq([9])
+    end
+  end
+
   # The object a Zammad from 6.5.1 on answers a walked search with. It is a
   # list too, so the page after it holds no records - and reports the same
   # total, which is what a walk reads to tell that page from the end.
@@ -1162,6 +1265,18 @@ RSpec.describe ZammadAPI::Test do
       zammad.stub(:get, 'api/v1/users/search', body: { records: [{ id: 1 }, { id: 2 }], total_count: 2 })
 
       expect(client.get('api/v1/users/search', query: { query: 'smith', page: 1 }).body).to eq(records: [{ id: 1 }, { id: 2 }], total_count: 2)
+    end
+
+    it 'answers a page of a given size with its records and the same total' do
+      zammad.stub(:get, 'api/v1/users/search', body: { records: [{ id: 1 }, { id: 2 }, { id: 3 }], total_count: 3 })
+
+      expect(client.get('api/v1/users/search', query: { query: 'smith', page: 2, per_page: 2 }).body).to eq(records: [{ id: 3 }], total_count: 3)
+    end
+
+    it 'hands a search read in batches every hit once' do
+      zammad.stub(:get, 'api/v1/users/search', body: { records: [{ id: 1 }, { id: 2 }, { id: 3 }], total_count: 3 })
+
+      expect(client.users.search('smith').find_each(batch_size: 2).map(&:id)).to eq([1, 2, 3])
     end
 
     # The stub holds two records and says there are five hundred hits, so the

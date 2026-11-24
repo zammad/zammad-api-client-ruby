@@ -1399,15 +1399,21 @@ reporting it as an API failure.
 
 ### Stubbing a list endpoint
 
-One stub is enough for a collection that fits in a page. The records it holds are one page
-of them, so a request for any later page is answered the way an endpoint out of records
-would answer it:
+One stub is enough for a list. The records it holds are the list, and a request is served
+the page of them it asks for. A page past the records is answered the way an endpoint out
+of records would answer it:
 
 ```ruby
-zammad.stub(:get, 'api/v1/groups', body: [{id: 1, name: 'Users'}, {id: 2, name: 'Sales'}])
+zammad.stub(:get, 'api/v1/groups', body: [{id: 1, name: 'Users'}, {id: 2, name: 'Sales'}, {id: 3, name: 'Support'}])
 
-client.groups.all.map(&:name) # => ["Users", "Sales"]
+client.groups.all.map(&:name)                     # => ["Users", "Sales", "Support"]
+client.groups.all.page(2, per_page: 2).map(&:name) # => ["Support"]
+client.groups.in_batches(of: 2).map(&:size)        # => [2, 1]
 ```
+
+The page is cut by the `page` and `per_page` the request carries. A request that names no
+`per_page` gets every record on page 1 and none after it, and the endpoint's own limit on
+a page is not applied.
 
 Stub the endpoint again to describe a list that changes between reads. A read is one step
 of the sequence however many pages it asks for, so each read gets the next stub and the
@@ -1427,7 +1433,8 @@ which a stub holding records answers with the records, and then for the pages.
 The second stub may also be declared once the first has answered, between two steps of a
 test. It answers from the next request on.
 
-Name a `page` to say what each one holds, and the stub is served exactly as written:
+Name a `page` to say what each one holds, and the stub is served exactly as written. One
+that names a `per_page` is not cut either:
 
 ```ruby
 zammad.stub(:get, 'api/v1/groups', body: first_hundred, query: {page: 1})
@@ -1436,8 +1443,8 @@ zammad.stub(:get, 'api/v1/groups', body: [{id: 101}], query: {page: 2})
 
 A search that is walked asks for its total with `with_total_count`, and an Array answers
 it the way a Zammad before 6.5.1 does, with the records alone. To stand in for one that
-reports the total, stub the object it answers with. It is paged like an Array: a later
-page holds no records and the same total.
+reports the total, stub the object it answers with. It is paged like an Array, and every
+page reports the same total.
 
 ```ruby
 zammad.stub(:get, 'api/v1/users/search', body: {records: [{id: 1}, {id: 2}], total_count: 2})

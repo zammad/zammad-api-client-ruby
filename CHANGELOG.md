@@ -1243,6 +1243,15 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   answered it, and the error and the response it carries are what they were.
   `ZammadAPI::Test` sends such a read again as well, each attempt taking the next stub of a
   sequence.
+- `ZammadAPI::Test` serves a stubbed list a page at a time, of the size the request asks
+  for. Only the page number was read: the records went whole to page 1 whatever `per_page`
+  said, and every later page was empty. With five records stubbed, `page(1, per_page: 2)`
+  held all five, `page(2, per_page: 2)` none, and `in_batches(of: 2)` yielded one batch of
+  five, where Zammad serves two, two and one, so code that pages by hand or leans on a
+  batch size saw other records in a test than in production. A search stubbed with its
+  total is cut the same way and reports the total on every page. A stub that names a
+  `page` or a `per_page` in its `query:` is served as written, as is one written short of
+  its own `Content-Length`, and a request that names no `per_page` is answered as before.
 
 ### Changed
 
