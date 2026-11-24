@@ -623,25 +623,10 @@ RSpec.describe ZammadAPI::Resources::Base do
         expect(group.inspect).to include('destroyed=true')
       end
 
-      it 'refuses a save rather than letting it 404' do
-        expect { group.save }.to raise_error(ZammadAPI::Error, /was destroyed, there is nothing to save/)
-      end
+      it 'leaves a second destroy to Zammad, which answers 404' do
+        stub_request(:delete, "#{url}/1").to_return(status: 404, body: '')
 
-      it 'refuses a reload rather than resurrecting the record' do
-        expect { group.reload }
-          .to raise_error(ZammadAPI::Error, /was destroyed, there is nothing to reload/)
-      end
-
-      it 'stays destroyed after a refused reload' do
-        expect { group.reload }.to raise_error(ZammadAPI::Error)
-
-        expect(group).to be_destroyed
-        expect(group).not_to be_persisted
-      end
-
-      it 'refuses a second destroy rather than surfacing Zammad\'s 404' do
-        expect { group.destroy }
-          .to raise_error(ZammadAPI::Error, /was destroyed, there is nothing to destroy/)
+        expect { group.destroy }.to raise_error(ZammadAPI::NotFoundError)
       end
     end
 
@@ -658,83 +643,6 @@ RSpec.describe ZammadAPI::Resources::Base do
 
         expect(group.name).to eq('Support')
         expect(group.changes).to eq(name: %w[Users Support])
-      end
-
-      it 'refuses the association readers, which would request a record that is gone' do
-        group.destroy
-
-        expect { group.related }.to raise_error(ZammadAPI::Error, /was destroyed/)
-      end
-    end
-
-    context 'when an update is attempted after it was destroyed' do
-      before do
-        stub_request(:delete, "#{url}/1").to_return(status: 200, body: '')
-        group.destroy
-      end
-
-      it 'refuses the update' do
-        expect { group.update(name: 'Renamed') }.to raise_error(ZammadAPI::Error, /was destroyed/)
-      end
-
-      it 'refuses the raising update' do
-        expect { group.update!(name: 'Renamed') }.to raise_error(ZammadAPI::Error, /was destroyed/)
-      end
-
-      it 'leaves nothing staged behind the refusal' do
-        begin
-          group.update(name: 'Renamed')
-        rescue ZammadAPI::Error
-          nil
-        end
-
-        expect(group).not_to be_changed
-        expect(group.changes).to be_empty
-      end
-
-      it 'leaves the attributes as they were' do
-        begin
-          group.update(name: 'Renamed')
-        rescue ZammadAPI::Error
-          nil
-        end
-
-        expect(group.key?(:name)).to be(false)
-      end
-    end
-
-    context 'when an attribute is written after it was destroyed' do
-      subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'A') }
-
-      before do
-        stub_request(:delete, "#{url}/1").to_return(status: 200, body: '')
-        group.destroy
-      end
-
-      it 'refuses a named writer' do
-        expect { group.name = 'Z' }.to raise_error(ZammadAPI::Error, /Group 1 was destroyed, there is nothing to change/)
-      end
-
-      it 'refuses []=' do
-        expect { group[:name] = 'Z' }.to raise_error(ZammadAPI::Error, /was destroyed/)
-      end
-
-      it 'refuses assign_attributes' do
-        expect { group.assign_attributes(name: 'Z') }.to raise_error(ZammadAPI::Error, /was destroyed/)
-      end
-
-      it 'refuses a writer for an attribute the record never carried' do
-        expect { group.note = 'Z' }.to raise_error(ZammadAPI::Error, /was destroyed/)
-      end
-
-      it 'leaves nothing staged behind the refusal' do
-        expect { group.name = 'Z' }.to raise_error(ZammadAPI::Error)
-        expect(group).not_to be_changed
-      end
-
-      it 'leaves the record reading as it last was in Zammad' do
-        expect { group.assign_attributes(note: 'n', name: 'Z') }.to raise_error(ZammadAPI::Error)
-        expect(group.to_h).to eq({ id: 1, name: 'A' })
       end
     end
   end
@@ -815,29 +723,6 @@ RSpec.describe ZammadAPI::Resources::Base do
       user  = ZammadAPI::Resources::User.from_response(unit_transport, id: 1)
 
       expect(group).not_to eq(user)
-    end
-
-    # An id is only unique within one installation. A script that reads two
-    # of them holds a group 1 from each, and they are two records.
-    context 'with records of two Zammad instances' do
-      let(:here)  { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1) }
-      let(:there) { ZammadAPI::Resources::Group.from_response(unit_transport(url: 'http://other.test/'), id: 1) }
-
-      it 'tells the same id apart' do
-        expect(here).not_to eq(there)
-      end
-
-      it 'keeps both through uniq' do
-        expect([here, there].uniq.size).to eq(2)
-      end
-
-      it 'keeps both as members of a Set' do
-        expect(Set[here, there].size).to eq(2)
-      end
-
-      it 'does not answer for one with the value stored under the other' do
-        expect({ here => :handled }[there]).to be_nil
-      end
     end
 
     context 'with a record read through two clients for one instance' do

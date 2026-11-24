@@ -2,9 +2,6 @@
 
 require 'faraday'
 require 'faraday/retry'
-require 'json'
-require 'openssl'
-require 'socket'
 require 'timeout'
 require 'uri'
 
@@ -46,37 +43,17 @@ module ZammadAPI
     # Statuses a read is retried on.
     RETRIABLE_STATUSES = [429, 500, 502, 503, 504].freeze
 
-    # Errors that mean the request timed out.
+    # Errors that mean the request timed out, found inside the
+    # Faraday::ConnectionFailed an adapter wraps an open timeout into.
     TIMEOUT_ERRORS = [Errno::ETIMEDOUT, Timeout::Error].freeze
 
-    # Socket errors an adapter may raise without wrapping them.
-    CONNECTION_ERRORS = [
-      Errno::ECONNREFUSED,
-      Errno::ECONNRESET,
-      Errno::EHOSTUNREACH,
-      Errno::ENETUNREACH,
-      Errno::EPIPE,
-      SocketError
-    ].freeze
+    # Errors a read is retried on. The adapter wraps socket and TLS errors
+    # into Faraday's own classes.
+    RETRIABLE_EXCEPTIONS = [Faraday::RetriableResponse, Faraday::ConnectionFailed, Faraday::TimeoutError].freeze
 
-    # TLS errors an adapter may raise without wrapping them.
-    SSL_ERRORS = [OpenSSL::SSL::SSLError].freeze
-
-    # Errors a read is retried on.
-    RETRIABLE_EXCEPTIONS = [
-      Faraday::RetriableResponse,
-      Faraday::ConnectionFailed,
-      Faraday::TimeoutError,
-      *TIMEOUT_ERRORS,
-      *CONNECTION_ERRORS
-    ].freeze
-
-    # Keys whose values are never written to the log.
-    SENSITIVE_KEY_PATTERN = /
-      password|passwd|pwd|bind_pw|passphrase|token|secret|credential|cookie|authorization|api_?key
-      |(?<![a-z])(?:keys?|[ht]?otp|salt)(?![a-z])
-      |(?-i:(?<=[a-z0-9])Keys?(?![a-z]))
-    /ix
+    # Keys whose values are never written to the log. Matched anywhere in the
+    # name, as Zammad's own log filter does, so +monkey_id+ is hidden too.
+    SENSITIVE_KEY_PATTERN = /passw|pwd|bind_pw|passphrase|secret|token|credential|cookie|authorization|key|otp|salt/i
 
     # What the log shows in place of a sensitive value.
     REDACTED = '[REDACTED]'
@@ -154,22 +131,6 @@ module ZammadAPI
       end
     end
 
-    # A request body as JSON. A String is sent as it is.
-    #
-    # @param body [Hash, Array, String, nil]
-    # @param operation [String] used in the error message
-    # @param resource_class [Class, nil] used in the error message
-    # @return [String, nil]
-    # @raise [Error] when the body cannot be encoded as JSON
-    def self.encode_body(body, operation:, resource_class: nil)
-      return body if body.nil? || body.is_a?(String)
-
-      JSON.generate(body)
-    rescue JSON::GeneratorError => e
-      # Without the cause, whose report quotes the value that failed.
-      raise Error, "Can't #{Error.subject_for(operation, resource_class)}: the request body cannot be encoded as JSON (#{e.message})", cause: nil
-    end
-
     # @param config [Config]
     # @param on_behalf_of [String, nil] see {.on_behalf_of_header}
     # @raise [ConfigurationError] when the connection cannot be built
@@ -201,30 +162,29 @@ module ZammadAPI
     # @param path [String] path relative to {Config#url}
     # @param operation [String] description used in error messages
     # @param query [Hash, nil] query string parameters
-    # @param body [Hash, Array, String, nil] request payload, encoded as JSON
+    # @param body [Hash, Array, String, nil] request payload; a Hash or Array
+    #   is encoded as JSON, a String is sent as it is
     # @param headers [Hash, nil] request headers
     # @param resource_class [Class, nil] used in error messages
     # @return [Response]
     # @raise [ResponseError] for non-2xx responses
     # @raise [TimeoutError] when the request timed out
     # @raise [ConnectionError] when the instance was unreachable
-    # @raise [Error] when the body cannot be encoded as JSON
     def request(method, path, operation:, query: nil, body: nil, headers: nil, resource_class: nil)
-      path    = Transport.relative_path(path)
-      payload = Transport.encode_body(body, operation: operation, resource_class: resource_class)
+      path = Transport.relative_path(path)
       log_request(method, path, query, body, headers)
 
       started  = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      response = decode(perform(method, path, query, payload, headers))
+      response = decode(perform(method, path, query, body, headers))
       log_response(method, path, response, started)
       return response if response.success?
 
       raise ResponseError.build(response, operation: operation, resource_class: resource_class)
-    rescue Faraday::TimeoutError, *TIMEOUT_ERRORS => e
+    rescue Faraday::TimeoutError => e
       raise TimeoutError, "Can't #{operation}: request to #{Transport.redact_path(path)} timed out (#{e.message})"
-    rescue Faraday::SSLError, *SSL_ERRORS => e
+    rescue Faraday::SSLError => e
       raise ConnectionError, "Can't #{operation}: TLS handshake with #{config.url} failed (#{e.message})"
-    rescue Faraday::ConnectionFailed, *CONNECTION_ERRORS => e
+    rescue Faraday::ConnectionFailed => e
       raise TimeoutError, "Can't #{operation}: connecting to #{config.url} timed out (#{e.message})" if timed_out?(e)
 
       raise ConnectionError, "Can't #{operation}: #{config.url} is unreachable (#{e.message})"
@@ -235,17 +195,16 @@ module ZammadAPI
     # Whether a connection failure is a timeout underneath: the default
     # adapter wraps an exceeded +open_timeout+ into Faraday::ConnectionFailed.
     def timed_out?(error)
-      wrapped = error.respond_to?(:wrapped_exception) ? error.wrapped_exception : nil
-
-      [wrapped, error.cause].any? { |inner| TIMEOUT_ERRORS.any? { inner.is_a?(it) } }
+      [error.wrapped_exception, error.cause].any? { |inner| TIMEOUT_ERRORS.any? { inner.is_a?(it) } }
     end
 
-    def perform(method, path, query, payload, headers)
+    # The connection's :json middleware encodes a Hash or Array body.
+    def perform(method, path, query, body, headers)
       @connection.public_send(method, path) do |request|
         request.params.update(query) if query
         headers&.each { |name, value| request.headers[name.to_s] = value.to_s }
         request.headers['From'] = on_behalf_of if on_behalf_of
-        request.body = payload if payload
+        request.body = body if body
       end
     end
 

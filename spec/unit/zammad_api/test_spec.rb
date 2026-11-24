@@ -73,13 +73,6 @@ RSpec.describe ZammadAPI::Test do
         expect(zammad.client.with(timeout: 5).on_behalf_of('agent@example.com').config.timeout).to eq(5)
       end
 
-      # A record names its installation by the URL of its transport.
-      it 'tells a record found through another URL from one of its own' do
-        zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
-
-        expect(zammad.client.with(url: 'https://other.test/').groups.find(1)).not_to eq(zammad.client.groups.find(1))
-      end
-
       it 'still takes two records found through the same derived client as one' do
         zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
         derived = zammad.client.with(timeout: 5)
@@ -127,16 +120,6 @@ RSpec.describe ZammadAPI::Test do
 
     it 'records nothing for a path it refuses' do
       expect { client.get('https://other.example/collect') }.to raise_error(ArgumentError)
-      expect(zammad.requests).to be_empty
-    end
-
-    # The same for a body the wire could not carry: a stand-in that took it
-    # would let a test pass over a save production raises on.
-    it 'refuses a body that cannot be encoded as JSON, the way the real transport does' do
-      zammad.stub(:post, 'api/v1/groups', body: { id: 1 })
-
-      expect { client.groups.create(name: 'Support', weight: Float::NAN) }
-        .to raise_error(ZammadAPI::Error, /the request body cannot be encoded as JSON/)
       expect(zammad.requests).to be_empty
     end
 

@@ -73,7 +73,6 @@ module ZammadAPI
       def initialize_copy: (self source) -> void
       def mark_persisted!: () -> void
       def load_response!: (Response response, String operation) -> void
-      def raise_if_destroyed!: (String action) -> void
       def raise_if_new!: (String operation) -> void
       def writable_attributes?: () -> bool
       def write_attribute: (Symbol, untyped) -> untyped

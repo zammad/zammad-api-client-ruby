@@ -55,9 +55,8 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `DELETE /api/v1/groups/99`.
 - `record.id = ...` raises `ZammadAPI::Error`. The id is what addresses the record, so a
   staged one made `destroy` and `save` act on another record than the one they reported on.
-- `record.destroy` marks the record `destroyed?`, and `persisted?` answers false for one;
-  `save`, `reload` and attribute writers raise for it. 1.x left a destroyed record looking
-  live, so a later `save` went out as a `PUT` to the deleted id.
+- `record.destroy` marks the record `destroyed?`, and `persisted?` answers false for one.
+  1.x left a destroyed record looking live.
 - `record.attributes` and `record.changes` are deeply frozen, and `record.to_h` returns a
   deep copy rather than a shallow one. Writing through either reader used to change what a
   record reported without staging anything, so the next `save` did not send it.
@@ -186,7 +185,7 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - `Client#with(**options)` derives a new client with changed options. The options are
   re-validated and any `on_behalf_of` scope is carried over.
 - `Client.from_env` builds a client from `ZAMMAD_URL`, `ZAMMAD_TOKEN`,
-  `ZAMMAD_HTTP_TOKEN`, `ZAMMAD_OAUTH2_TOKEN`, `ZAMMAD_USER` and `ZAMMAD_PASSWORD`, with
+  `ZAMMAD_OAUTH2_TOKEN`, `ZAMMAD_USER` and `ZAMMAD_PASSWORD`, with
   passed-in options winning. A blank variable counts as unset.
 - `Client#me`, the user the credentials authenticate as, and `Client#version`, the version
   of the Zammad instance.
@@ -199,9 +198,8 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `ticket.customer` keeps returning that name. `Resource.associations` lists what a
   resource declares.
 - Records compare as the Zammad records they came from: two records of the same kind with
-  the same id, read from the same Zammad URL, are equal, and `#hash` agrees, so `uniq`,
-  `Set`, `include?` and records as Hash keys all work. A record with no id stays equal only
-  to itself.
+  the same id are equal, and `#hash` agrees, so `uniq`, `Set`, `include?` and records as
+  Hash keys all work. A record with no id stays equal only to itself.
 - `record.to_json` and `record.as_json` render a record's attributes. `to_json` previously
   fell through to `Object#to_json`, which serialized a record as the string
   `"#<ZammadAPI::Resources::Ticket:0x...>"`.
@@ -258,8 +256,7 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - `client.<resource>` returns the same proxy each time rather than allocating one per call.
   The proxies are built with the client, so a client stays immutable once built and safe to
   share between threads.
-- A request body that cannot be encoded as JSON raises `ZammadAPI::Error` rather than
-  `JSON::GeneratorError`. A String body is sent as it is.
+- A String request body is sent as it is rather than encoded as a JSON string.
 - The recursive copy behind frozen attributes, `to_h` and the test kit's recorded bodies
   lives in one place (`ZammadAPI::DeepCopy`) instead of being written once per caller.
 - Unit specs (`rake spec:unit`) run without a Zammad instance; the specs that need a live

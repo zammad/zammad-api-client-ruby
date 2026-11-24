@@ -133,7 +133,6 @@ module ZammadAPI
     # @raise [UnstubbedRequestError] when no stub matches
     def answer(method, path, operation:, query: nil, body: nil, headers: nil, resource_class: nil, on_behalf_of: nil)
       relative = ::ZammadAPI::Transport.relative_path(path)
-      ::ZammadAPI::Transport.encode_body(body, operation: operation, resource_class: resource_class)
       params   = stringify(query || {})
       request  = Request.new(
         verb:         method,

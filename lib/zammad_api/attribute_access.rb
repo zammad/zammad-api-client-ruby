@@ -70,18 +70,14 @@ module ZammadAPI
     def deconstruct_keys(keys) = keys.nil? ? attributes : attributes.slice(*keys)
 
     # Whether +other+ is the same Zammad record: the same class, carrying the
-    # same id, read from the same Zammad. A record with no id is equal only
-    # to itself.
+    # same id. A record with no id is equal only to itself.
     #
     # @param other [Object]
     # @return [Boolean]
     def ==(other)
-      return true  if equal?(other)
-      return false if !other.instance_of?(self.class)
+      return true if equal?(other)
 
-      # The steep:ignore is for `installation`, which is protected: RBS has
-      # no word for that, so the signature declares it private.
-      !id.nil? && other.id == id && other.installation == installation # steep:ignore NoMethod
+      other.instance_of?(self.class) && !id.nil? && other.id == id
     end
     alias eql? ==
 
@@ -90,7 +86,7 @@ module ZammadAPI
     #
     # @return [Integer]
     def hash
-      id.nil? ? super : [self.class, installation, id].hash
+      id.nil? ? super : [self.class, id].hash
     end
 
     # @return [Hash{Symbol => Object}] the attributes, for a JSON encoder
@@ -113,14 +109,6 @@ module ZammadAPI
 
       attributes.key?(name) || super
     end
-
-    protected
-
-    # The Zammad the record was read from, for {#==}: an id is only unique
-    # within one installation.
-    #
-    # @return [String, nil]
-    def installation = nil
 
     private
 

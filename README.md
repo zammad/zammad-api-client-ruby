@@ -126,8 +126,8 @@ them.
 
 ### From the environment
 
-`from_env` reads `ZAMMAD_URL` and `ZAMMAD_TOKEN` (or `ZAMMAD_HTTP_TOKEN`,
-`ZAMMAD_OAUTH2_TOKEN`, or `ZAMMAD_USER` and `ZAMMAD_PASSWORD`), so a script needs no
+`from_env` reads `ZAMMAD_URL` and `ZAMMAD_TOKEN` (or `ZAMMAD_OAUTH2_TOKEN`, or
+`ZAMMAD_USER` and `ZAMMAD_PASSWORD`), so a script needs no
 configuration of its own. A variable that is empty or blank counts as unset. Anything
 passed in wins over the environment, and credentials passed in replace the ones the
 environment holds:
@@ -349,9 +349,8 @@ text:
 client.get('api/v1/tickets/1', headers: {'Accept-Language' => 'de-de'})
 ```
 
-A `body:` is sent as JSON, and a String body is sent as it is. A body that cannot be
-encoded as JSON raises `ZammadAPI::Error`. A `query:` Hash is encoded by Faraday, nested
-Hashes and lists included.
+A `body:` is sent as JSON, and a String body is sent as it is. A `query:` Hash is encoded
+by Faraday, nested Hashes and lists included.
 
 Each returns a `ZammadAPI::Response`, so the status and headers stay reachable:
 
@@ -592,7 +591,7 @@ shows up. `Ticket.associations` lists what a resource declares.
 ### Comparing and serializing
 
 A record is the Zammad record it came from, not the object that happens to hold it, so two
-records of the same kind carrying the same id, read from the same Zammad URL, are equal.
+records of the same kind carrying the same id are equal.
 That makes `uniq`, `Set`, `include?` and records-as-Hash-keys behave:
 
 ```ruby
@@ -621,8 +620,6 @@ group.destroy # => true
 
 group.destroyed?  # => true
 group.persisted?  # => false, so this is not the inverse of new_record?
-group.save        # raises: the record is gone
-group.name = 'X'  # raises as well
 
 client.groups.destroy(42) # delete by id, without fetching first
 ```

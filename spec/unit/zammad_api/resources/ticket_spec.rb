@@ -33,23 +33,6 @@ RSpec.describe ZammadAPI::Resources::Ticket do
     end
   end
 
-  describe 'once destroyed' do
-    let(:ticket_url) { "#{ClientHelper::BASE_URL}api/v1/tickets/42" }
-
-    before do
-      stub_request(:delete, ticket_url).with(query: hash_including({})).to_return(json_response({}))
-      ticket.destroy
-    end
-
-    it 'refuses the articles reader rather than fetching a deleted ticket' do
-      expect { ticket.articles }.to raise_error(ZammadAPI::Error, /was destroyed/)
-    end
-
-    it 'refuses the related proxy' do
-      expect { ticket.related }.to raise_error(ZammadAPI::Error, /was destroyed/)
-    end
-  end
-
   describe '#add_article' do
     it 'creates the article for this ticket' do
       stub = stub_request(:post, article_url)

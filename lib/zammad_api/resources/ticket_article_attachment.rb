@@ -38,11 +38,6 @@ module ZammadAPI
       def inspect
         "#<#{self.class.name} id=#{id.inspect} filename=#{self[:filename].inspect} size=#{self[:size].inspect}>"
       end
-
-      protected
-
-      # @return [String] the Zammad this attachment was read from
-      def installation = @transport.config.url
     end
   end
 end

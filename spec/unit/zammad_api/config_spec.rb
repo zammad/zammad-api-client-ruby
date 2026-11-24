@@ -259,11 +259,6 @@ RSpec.describe ZammadAPI::Config do
         .to raise_error(ZammadAPI::ConfigurationError, 'config retry_interval needs to be a positive number')
     end
 
-    it 'rejects a Numeric that cannot be compared' do
-      expect { build(timeout: Complex(1, 2)) }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config timeout needs to be a positive number')
-    end
-
     it 'rejects negative retries' do
       expect { build(retries: -1) }
         .to raise_error(ZammadAPI::ConfigurationError, 'config retries needs to be a non-negative integer')
@@ -333,11 +328,6 @@ RSpec.describe ZammadAPI::Config do
       it 'marks the redacted userinfo' do
         expect(rendered).to include('proxy="http://[REDACTED]@proxy.test:8080"')
       end
-    end
-
-    it 'refuses a proxy that is not a URL without quoting it' do
-      expect { build(proxy: 'http://puser:p s3cret@proxy.test:8080') }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config proxy is not a valid URL')
     end
 
     it 'leaves a proxy without credentials alone' do

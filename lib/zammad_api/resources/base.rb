@@ -234,10 +234,7 @@ module ZammadAPI
       #   ticket.related.customer # => the User record, one request
       #
       # @return [Associations::Proxy]
-      # @raise [Error] when the record was destroyed
       def related
-        raise_if_destroyed!('read related records from')
-
         @related ||= Associations::Proxy.new(self)
       end
 
@@ -266,9 +263,7 @@ module ZammadAPI
       #
       # @return [true]
       # @raise [ValidationError] when Zammad rejected the attributes
-      # @raise [Error] when the record was destroyed
       def save!
-        raise_if_destroyed!('save')
         @error = nil
 
         if new_record?
@@ -306,9 +301,8 @@ module ZammadAPI
       # Reads this record again, dropping staged changes.
       #
       # @return [self]
-      # @raise [Error] when the record is new or was destroyed
+      # @raise [Error] when the record is new
       def reload
-        raise_if_destroyed!('reload')
         raise_if_new!('reload')
 
         response = transport.get(member_path, operation: 'reload object', resource_class: self.class, query: { expand: true })
@@ -319,9 +313,8 @@ module ZammadAPI
       # Deletes this record in Zammad.
       #
       # @return [true]
-      # @raise [Error] when the record is new or was destroyed already
+      # @raise [Error] when the record is new
       def destroy
-        raise_if_destroyed!('destroy')
         raise_if_new!('destroy')
 
         transport.delete(member_path, operation: 'destroy object', resource_class: self.class)
@@ -330,10 +323,6 @@ module ZammadAPI
       end
 
       def inspect = "#<#{self.class.name} id=#{id.inspect} new_record=#{new_record?}#{' destroyed=true' if destroyed?} attributes=#{Transport.redact(attributes).inspect}>"
-
-      protected
-
-      def installation = transport.config.url
 
       private
 
@@ -352,14 +341,9 @@ module ZammadAPI
         raise Error, "#{self.class.name} has not been saved, so there is nothing to #{operation}" if new_record?
       end
 
-      def raise_if_destroyed!(action)
-        raise Error, "#{self.class.name} #{id} was destroyed, there is nothing to #{action}" if destroyed?
-      end
-
       def writable_attributes? = true
 
       def write_attribute(key, value)
-        raise_if_destroyed!('change')
         raise Error, "#{self.class.name}#id cannot be changed: it is what addresses this record" if key == :id
 
         staged      = frozen_attributes(value)

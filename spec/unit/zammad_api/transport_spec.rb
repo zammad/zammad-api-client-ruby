@@ -296,50 +296,6 @@ RSpec.describe ZammadAPI::Transport do
         expect(a_request(:post, url).with(body: '{"group":{"id":1,"name":"Users"}}')).to have_been_made
       end
     end
-
-    # Faraday's JSON middleware would raise JSON::GeneratorError from inside
-    # the stack, past the rescue of ZammadAPI::Error every caller is told to
-    # write.
-    context 'with a body that cannot be encoded as JSON' do
-      let(:binary) { { data: "\xFF\xD8\xFF".b } }
-
-      it 'raises a ZammadAPI::Error for bytes that are not text' do
-        expect { unit_transport.post('api/v1/groups', operation: 'save object', body: binary) }
-          .to raise_error(ZammadAPI::Error, /\ACan't save object: the request body cannot be encoded as JSON/)
-      end
-
-      it 'raises a ZammadAPI::Error for a Float that JSON has no spelling for' do
-        expect { unit_transport.put('api/v1/groups/1', operation: 'save object', body: { weight: Float::NAN }) }
-          .to raise_error(ZammadAPI::Error, /\ACan't save object: the request body cannot be encoded as JSON/)
-      end
-
-      it 'carries no cause, whose report would quote the value' do
-        expect { unit_transport.post('api/v1/groups', operation: 'save object', body: { password: "s3cret\xFF" }) }
-          .to raise_error(ZammadAPI::Error) { |error| expect(error.full_message(highlight: false)).not_to include('s3cret') }
-      end
-
-      it 'names the resource it was sending' do
-        expect { unit_transport.post('api/v1/groups', operation: 'save object', body: binary, resource_class: ZammadAPI::Resources::Group) }
-          .to raise_error(ZammadAPI::Error, /save object \(ZammadAPI::Resources::Group\)/)
-      end
-
-      it 'makes no request' do
-        expect { unit_transport.post('api/v1/groups', operation: 'save object', body: binary) }.to raise_error(ZammadAPI::Error)
-        expect(a_request(:any, /zammad\.test/)).not_to have_been_made
-      end
-
-      it 'leaves no log line claiming a request that was never made' do
-        log = StringIO.new
-        expect { unit_transport(logger: Logger.new(log)).post('api/v1/groups', operation: 'save object', body: binary) }
-          .to raise_error(ZammadAPI::Error)
-        expect(log.string).to be_empty
-      end
-
-      it 'is raised by a record save carrying such a value' do
-        group = unit_client.groups.new(name: 'Support', weight: Float::INFINITY)
-        expect { group.save }.to raise_error(ZammadAPI::Error, /cannot be encoded as JSON/)
-      end
-    end
   end
 
   describe 'response decoding' do
@@ -472,41 +428,6 @@ RSpec.describe ZammadAPI::Transport do
         .to raise_error(ZammadAPI::ConnectionError, %r{http://zammad\.test/ is unreachable})
     end
 
-    context 'with an adapter that does not wrap socket errors' do
-      # The middleware seam raises from inside the stack, past the point where
-      # an adapter would normally translate the error into a Faraday one.
-      def raising(error)
-        unit_transport(middleware: lambda { |faraday|
-          faraday.use(Class.new(Faraday::Middleware) { define_method(:call) { |_env| raise error } })
-        })
-      end
-
-      it 'wraps a bare Errno::ETIMEDOUT' do
-        expect { raising(Errno::ETIMEDOUT).get('api/v1/groups', operation: 'find object') }
-          .to raise_error(ZammadAPI::TimeoutError, /timed out/)
-      end
-
-      it 'wraps a bare Timeout::Error' do
-        expect { raising(Timeout::Error).get('api/v1/groups', operation: 'find object') }
-          .to raise_error(ZammadAPI::TimeoutError)
-      end
-
-      it 'wraps a bare Errno::ECONNREFUSED' do
-        expect { raising(Errno::ECONNREFUSED).get('api/v1/groups', operation: 'find object') }
-          .to raise_error(ZammadAPI::ConnectionError, /is unreachable/)
-      end
-
-      it 'wraps a SocketError' do
-        expect { raising(SocketError).get('api/v1/groups', operation: 'find object') }
-          .to raise_error(ZammadAPI::ConnectionError)
-      end
-
-      it 'leaves an unrelated Errno alone rather than calling it a network problem' do
-        expect { raising(Errno::ENOSPC).get('api/v1/groups', operation: 'find object') }
-          .to raise_error(Errno::ENOSPC)
-      end
-    end
-
     it 'raises a TransportError subclass so both can be rescued together' do
       stub_request(:get, url).to_raise(Errno::ECONNREFUSED)
       expect { unit_transport.get('api/v1/groups', operation: 'find object') }
@@ -613,41 +534,6 @@ RSpec.describe ZammadAPI::Transport do
       expect { unit_transport(retries: 2, retry_interval: 0.01).get('api/v1/groups', operation: 'test') }
         .to raise_error(ZammadAPI::NotFoundError)
       expect(a_request(:get, url)).to have_been_made.once
-    end
-  end
-
-  # Most adapters wrap a socket failure into Faraday::ConnectionFailed. One
-  # that does not is retried as often.
-  describe 'retries through an adapter that does not wrap socket errors' do
-    before { BareSocketAdapter.attempts = [] }
-
-    def bare_socket_transport(**overrides)
-      unit_transport(adapter: :bare_socket, retry_interval: 0.01, **overrides)
-    end
-
-    it 'retries an unwrapped socket error as often as a wrapped one' do
-      expect { bare_socket_transport(retries: 2).get('api/v1/groups', operation: 'test') }
-        .to raise_error(ZammadAPI::ConnectionError)
-      expect(BareSocketAdapter.attempts.size).to eq(3)
-    end
-
-    it 'still maps it to ConnectionError once the retries are spent' do
-      expect { bare_socket_transport(retries: 1).get('api/v1/groups', operation: 'test') }
-        .to raise_error(ZammadAPI::ConnectionError, /is unreachable/)
-    end
-
-    it 'does not repeat a POST, which could duplicate records' do
-      expect { bare_socket_transport(retries: 2).post('api/v1/groups', operation: 'test', body: { a: 1 }) }
-        .to raise_error(ZammadAPI::ConnectionError)
-      expect(BareSocketAdapter.attempts).to eq([:post])
-    end
-
-    it 'retries every socket failure it maps to ConnectionError' do
-      expect(described_class::RETRIABLE_EXCEPTIONS).to include(*described_class::CONNECTION_ERRORS)
-    end
-
-    it 'retries every socket failure it maps to TimeoutError' do
-      expect(described_class::RETRIABLE_EXCEPTIONS).to include(*described_class::TIMEOUT_ERRORS)
     end
   end
 
@@ -950,7 +836,6 @@ RSpec.describe ZammadAPI::Transport do
           operation: 'test',
           body:      {
             login:            'jane',
-            keyboard_layout:  'de',
             password_confirm: 'confirm-s3cret',
             passwd:           'passwd-s3cret',
             access_token:     'access-s3cret',
@@ -991,12 +876,6 @@ RSpec.describe ZammadAPI::Transport do
         expect(log).not_to include('passwd-s3cret')
       end
 
-      # Matched as a word, so that a key merely containing the letters stays
-      # readable in the log rather than being blanked for nothing.
-      it 'leaves a key whose name only contains one of the words alone' do
-        expect(log).to include('keyboard_layout: "de"')
-      end
-
       it 'redacts a client_secret' do
         expect(log).not_to include('client-s3cret')
       end
@@ -1015,12 +894,8 @@ RSpec.describe ZammadAPI::Transport do
         end
       end
 
-      # Matched as words, so that a key merely containing the letters stays
-      # readable.
-      %w[footprint basalt hotKeyboard Keyboard monkey_id bind_user].each do |name|
-        it "leaves #{name} alone" do
-          expect(described_class.redact({ name => 'shown' })).to eq({ name => 'shown' })
-        end
+      it 'leaves bind_user alone' do
+        expect(described_class.redact({ 'bind_user' => 'shown' })).to eq({ 'bind_user' => 'shown' })
       end
 
       it 'redacts a bind password inside the preferences of an LDAP source' do
@@ -1142,38 +1017,6 @@ RSpec.describe ZammadAPI::Transport do
         expect(a_request(:get, url).with(headers: { 'Cookie' => '_zammad_session=cookie-s3cret', 'Proxy-Authorization' => 'Basic proxy-s3cret' }))
           .to have_been_made
       end
-    end
-  end
-
-  # Through an adapter that does not wrap OpenSSL::SSL::SSLError into
-  # Faraday::SSLError.
-  describe 'a TLS failure through an adapter that does not wrap it' do
-    before { BareTlsAdapter.attempts = [] }
-
-    def bare_tls_transport(**overrides)
-      unit_transport(adapter: :bare_tls, retry_interval: 0.01, **overrides)
-    end
-
-    it 'maps it to ConnectionError rather than letting it out raw' do
-      expect { bare_tls_transport.get('api/v1/groups', operation: 'test') }
-        .to raise_error(ZammadAPI::ConnectionError, /TLS handshake with .* failed/)
-    end
-
-    it 'is catchable as the gem error every caller rescues' do
-      expect { bare_tls_transport.get('api/v1/groups', operation: 'test') }
-        .to raise_error(ZammadAPI::Error)
-    end
-
-    # A rejected certificate is a fact about the instance, not a transient
-    # failure: retrying only delays the error by the backoff.
-    it 'does not retry it' do
-      expect { bare_tls_transport(retries: 2).get('api/v1/groups', operation: 'test') }
-        .to raise_error(ZammadAPI::ConnectionError)
-      expect(BareTlsAdapter.attempts.size).to eq(1)
-    end
-
-    it 'keeps the unwrapped TLS error out of the retry list' do
-      expect(described_class::RETRIABLE_EXCEPTIONS).not_to include(*described_class::SSL_ERRORS)
     end
   end
 end

@@ -66,7 +66,6 @@ module ZammadAPI
     ENV_OPTIONS = {
       'ZAMMAD_URL'          => :url,
       'ZAMMAD_TOKEN'        => :http_token,
-      'ZAMMAD_HTTP_TOKEN'   => :http_token,
       'ZAMMAD_OAUTH2_TOKEN' => :oauth2_token,
       'ZAMMAD_USER'         => :user,
       'ZAMMAD_PASSWORD'     => :password
@@ -74,10 +73,9 @@ module ZammadAPI
 
     # Builds a client from the environment.
     #
-    # Reads {ENV_OPTIONS}; a variable that is empty or blank counts as unset,
-    # and +ZAMMAD_HTTP_TOKEN+ wins over +ZAMMAD_TOKEN+. Anything passed in wins
-    # over the environment, and credentials passed in replace the ones the
-    # environment holds.
+    # Reads {ENV_OPTIONS}; a variable that is empty or blank counts as unset.
+    # Anything passed in wins over the environment, and credentials passed in
+    # replace the ones the environment holds.
     #
     # @example
     #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=secret ruby report.rb

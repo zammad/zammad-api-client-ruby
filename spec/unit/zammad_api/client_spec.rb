@@ -64,12 +64,6 @@ RSpec.describe ZammadAPI::Client do
       expect(described_class.from_env.config.oauth2_token).to eq('oauth')
     end
 
-    it 'prefers ZAMMAD_HTTP_TOKEN over ZAMMAD_TOKEN' do
-      stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_TOKEN' => 'short', 'ZAMMAD_HTTP_TOKEN' => 'explicit' })
-
-      expect(described_class.from_env.config.http_token).to eq('explicit')
-    end
-
     it 'lets an argument win over the environment' do
       stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_TOKEN' => 'from-env' })
 
@@ -82,12 +76,6 @@ RSpec.describe ZammadAPI::Client do
       def from(variables)
         stub_const('ENV', environment.merge(variables))
         described_class.from_env
-      end
-
-      ['', " \n"].each do |blank|
-        it "reads ZAMMAD_TOKEN past a ZAMMAD_HTTP_TOKEN of #{blank.inspect}" do
-          expect(from('ZAMMAD_HTTP_TOKEN' => blank).config.http_token).to eq('from-env')
-        end
       end
 
       %w[ZAMMAD_USER ZAMMAD_PASSWORD ZAMMAD_OAUTH2_TOKEN].each do |name|
@@ -107,7 +95,7 @@ RSpec.describe ZammadAPI::Client do
       end
 
       it 'strips the whitespace around a token that holds more than that' do
-        expect(from('ZAMMAD_HTTP_TOKEN' => " padded\n").config.http_token).to eq('padded')
+        expect(from('ZAMMAD_TOKEN' => " padded\n").config.http_token).to eq('padded')
       end
 
       it 'still takes a password of spaces that is passed in' do
