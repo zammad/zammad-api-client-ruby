@@ -324,10 +324,52 @@ RSpec.describe ZammadAPI::Transport do
       expect(stub).to have_been_requested
     end
 
-    it 'leaves a value in an encoding ASCII is a part of as it was' do
+    # An encoding ASCII is a part of can be joined to the text around it,
+    # so the value went out as the bytes it was held in: `query=Gr%F6%DFe`,
+    # which Rails answers with 400 for a query that is no UTF-8.
+    %w[ISO-8859-1 Windows-1252 Shift_JIS].each do |encoding|
+      it "sends a value given in #{encoding} as the same text in UTF-8" do
+        text = encoding == 'Shift_JIS' ? '検索 b' : 'Größe b'
+        stub = stub_request(:get, "#{url}/search").with(query: { 'query' => text }).to_return(json_response([]))
+        unit_transport.get('api/v1/groups/search', operation: 'test', query: { query: text.encode(encoding) })
+
+        expect(stub).to have_been_requested
+      end
+    end
+
+    it 'writes the bytes of the UTF-8 text into the query string' do
+      query = described_class.stringify_query(query: 'Größe'.encode('ISO-8859-1'))
+
+      expect(ZammadAPI::QueryEncoder.encode(query)).to eq('query=Gr%C3%B6%C3%9Fe')
+    end
+
+    it 'converts such a value inside a list and a Hash as well' do
+      latin = 'Größe'.encode('ISO-8859-1')
+
+      expect(described_class.stringify_query(tags: [latin], condition: { name: latin }))
+        .to eq('tags' => ['Größe'], 'condition' => { 'name' => 'Größe' })
+    end
+
+    it 'leaves a binary value as it was, which names no characters to convert' do
       value = "caf\xC3\xA9".b
 
       expect(described_class.stringify_query(q: value)['q']).to be(value)
+    end
+
+    it 'leaves a value in UTF-8 or US-ASCII as it was' do
+      utf8  = 'Größe'
+      ascii = 'open'.encode('US-ASCII')
+
+      expect(described_class.stringify_query(a: utf8, b: ascii).values).to match([be(utf8), be(ascii)])
+    end
+
+    it 'refuses a value with a byte its own encoding does not define, without quoting it' do
+      broken = "secret\x81".dup.force_encoding('Windows-1252')
+
+      expect { described_class.stringify_query(token: broken) }
+        .to raise_error(ArgumentError, /\Aquery parameter token was given as Windows-1252 text that cannot be converted to UTF-8/) { |error|
+          expect(error.message).not_to include('secret')
+        }
     end
 
     it 'refuses a value that cannot be converted to UTF-8, without quoting it' do
@@ -754,6 +796,26 @@ RSpec.describe ZammadAPI::Transport do
 
     it 'encodes a multibyte character one byte at a time' do
       expect(described_class.escape_path_segment('ä')).to eq('%C3%A4')
+    end
+
+    # The bytes of the id as it was held went into the path: `%E4` for an
+    # ä in ISO-8859-1, which is no UTF-8 and names no record. In UTF-16 the
+    # pattern raised Encoding::CompatibilityError.
+    %w[ISO-8859-1 Windows-1252 UTF-16LE].each do |encoding|
+      it "encodes the bytes of the UTF-8 text for an id given in #{encoding}" do
+        expect(described_class.escape_path_segment('ä/1'.encode(encoding))).to eq('%C3%A4%2F1')
+      end
+    end
+
+    it 'raises for a dot segment given in UTF-16' do
+      expect { described_class.escape_path_segment('..'.encode('UTF-16LE')) }.to raise_error(ArgumentError, /points at another endpoint/)
+    end
+
+    it 'raises for an id that cannot be converted to UTF-8, without quoting it' do
+      broken = "abc\x81".dup.force_encoding('Windows-1252')
+
+      expect { described_class.escape_path_segment(broken) }
+        .to raise_error(ArgumentError, /\Aa record id was given as Windows-1252 text that cannot be converted to UTF-8/)
     end
 
     it 'raises for an id with nothing to send' do

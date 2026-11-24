@@ -1218,6 +1218,20 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   same way, and only `record.to_h` could be handed to such an encoder. The README and the
   migration table say that `to_h` is what a strict encoder is given. `to_json`, `as_json`
   and `JSON.generate` without `strict:` are unchanged.
+- Text held in ISO-8859-1, Windows-1252 or any other encoding that is not UTF-8 goes into a
+  query and into a request path as the same text in UTF-8. Only an encoding ASCII is no part
+  of, such as UTF-16, was converted, so `client.users.search('Größe')` with the term read
+  from a Latin-1 file was sent as `query=Gr%F6%DFe`, the bytes it was held in, as 1.x sent
+  it. Rails answers a query it cannot read as UTF-8 with a 400, which arrived as a
+  `ClientError` for a term with nothing wrong with it, while the same String in a JSON body
+  was converted and arrived as the text it is. A record id in such an encoding was written
+  into the path the same way, and one in UTF-16 raised `Encoding::CompatibilityError`. A
+  header value and `on_behalf_of` are converted as well. `find_by` holds each hit against
+  the text it searched for: against the value as given, in ISO-8859-1 or UTF-16, the record
+  was found by the search and passed over by the comparison, so `find_by` answered `nil`
+  for a record that exists. Text that cannot be converted raises `ArgumentError`, which
+  names the parameter and does not quote it. A binary String is sent as its bytes, as
+  before.
 
 ### Changed
 

@@ -707,19 +707,35 @@ module ZammadAPI
     # Encoding::CompatibilityError.
     BLANK = /\A[[:space:]]*\z/
 
-    # A value as text a request can carry: in UTF-8 where it was given in an
-    # encoding ASCII is no part of, such as UTF-16.
+    # The encodings a value goes on the wire in as it stands: UTF-8, which is
+    # what Zammad reads, US-ASCII, which is the same bytes, and binary, which
+    # names no characters to convert.
+    WIRE_ENCODINGS = [Encoding::UTF_8, Encoding::US_ASCII, Encoding::BINARY].freeze
+    private_constant :WIRE_ENCODINGS
+
+    # A value as text a request can carry: in UTF-8 where it was given in
+    # another encoding.
     #
-    # Such a String cannot be joined to the ASCII around it. Faraday's
-    # escaping of a query value and Net::HTTP's writing of a header both
-    # raised Encoding::CompatibilityError for one, as did {BLANK} asked of a
-    # +From+ scope or a search keyword: neither a {ZammadAPI::Error} nor the
+    # A String in an encoding ASCII is no part of, such as UTF-16, cannot be
+    # joined to the ASCII around it. Faraday's escaping of a query value and
+    # Net::HTTP's writing of a header both raised
+    # Encoding::CompatibilityError for one, as did {BLANK} asked of a +From+
+    # scope or a search keyword: neither a {ZammadAPI::Error} nor the
     # ArgumentError a malformed value is refused with, and for a non-blank
     # value, one that had nothing wrong with it but its encoding. Converted,
     # it is the same text, in the encoding Zammad reads.
     #
-    # An encoding ASCII is a part of is left as it was, binary included: its
-    # bytes are what went on the wire, and still are.
+    # One in an encoding ASCII is a part of can be joined, and was sent as
+    # the bytes it was held in. `search('Größe')` with the term read from a
+    # file in ISO-8859-1 or Windows-1252 went out as `query=Gr%F6%DFe`,
+    # which is no UTF-8, and Rails answers a query it cannot read as UTF-8
+    # with a 400: a ClientError for a term with nothing wrong with it, while
+    # the same String in a JSON body was converted by the generator and
+    # arrived as the text it is. Converted here as well.
+    #
+    # A binary String is left as it was. It names no characters, so there
+    # is nothing to convert it from, and its bytes are what went on the
+    # wire.
     #
     # @api private
     # @param value [Object]
@@ -728,7 +744,7 @@ module ZammadAPI
     # @raise [ArgumentError] for text that cannot be converted to UTF-8
     def self.wire_text(value, name)
       text = value.to_s
-      return text if text.encoding.ascii_compatible?
+      return text if WIRE_ENCODINGS.include?(text.encoding)
 
       begin
         text.encode(Encoding::UTF_8)
@@ -783,6 +799,11 @@ module ZammadAPI
     # was right there. The message names the class and does not quote the
     # value, which for a record is every attribute it carries.
     #
+    # The bytes that are encoded are those of the id in UTF-8: see
+    # {.wire_text}. An id given in ISO-8859-1 was written as the bytes of
+    # that encoding, which name another record or none, and one given in
+    # UTF-16 raised Encoding::CompatibilityError from the pattern below.
+    #
     # Public for the same reason as {.stringify_query}: {Test} builds the
     # paths it records with it.
     #
@@ -790,12 +811,12 @@ module ZammadAPI
     # @param value [Integer, String, Symbol, nil]
     # @return [String]
     # @raise [ArgumentError] when there is nothing to send, when the value
-    #   is not an id at all, or when the id navigates instead of naming a
-    #   record
+    #   is not an id at all, when it is text that cannot be converted to
+    #   UTF-8, or when the id navigates instead of naming a record
     def self.escape_path_segment(value)
       raise ArgumentError, not_a_record_id_message(value) if !value.nil? && RECORD_ID_TYPES.none? { value.is_a?(it) }
 
-      segment = value.to_s
+      segment = wire_text(value, 'a record id')
       raise ArgumentError, 'a record id is required, and this one is empty' if segment.empty?
       raise ArgumentError, "#{segment.inspect} points at another endpoint rather than naming a record" if DOT_SEGMENTS.include?(segment)
 
