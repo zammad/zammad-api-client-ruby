@@ -65,6 +65,7 @@ module ZammadAPI
     def self.stringify_headers: (Hash[untyped, untyped]) -> Hash[String, String]
     def self.stripped: (String text) -> String
     BLANK: Regexp
+    WIRE_ENCODINGS: Array[Encoding]
     def self.wire_text: (untyped value, String name) -> String
     LINE_BREAK_ADVICE: String
     def self.line_break?: (String text) -> bool

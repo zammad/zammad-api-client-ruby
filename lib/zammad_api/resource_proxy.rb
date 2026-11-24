@@ -239,8 +239,9 @@ module ZammadAPI
       raise ArgumentError, 'find_by needs at least one attribute to match' if params.empty?
 
       id_key = params.keys.find { it.to_s == 'id' }
-      return find_by_id(params[id_key], params.except(id_key)) if id_key
+      return find_by_id(params[id_key], as_served(params.except(id_key))) if id_key
 
+      params     = as_served(params)
       term       = resource_class.searchable? ? search_term_for(params) : nil
       candidates = term ? search(term) : all
 
@@ -693,6 +694,20 @@ module ZammadAPI
 
       Integer(id, 10) if id.is_a?(String) && id.ascii_only? && id.match?(/\A\d+\z/)
     end
+
+    # The values to match, with text as Zammad serves it: in UTF-8.
+    #
+    # A value is searched for as the text {Transport.wire_text} sends, and
+    # every hit was then held against the value as it was given. Ruby takes
+    # two Strings in different encodings for different ones unless both are
+    # plain ASCII, so a name read from a file in ISO-8859-1, or held in
+    # UTF-16, was found by the search and passed over by the comparison:
+    # nil for a record that was among the hits, and
+    # `find_by(...) || create(...)` made its duplicate.
+    #
+    # @return [Hash]
+    # @raise [ArgumentError] for text that cannot be converted to UTF-8
+    def as_served(params) = params.to_h { |key, value| [key, value.is_a?(String) ? Transport.wire_text(value, "find_by #{key}") : value] }
 
     # Whether a record carries every one of these values.
     #

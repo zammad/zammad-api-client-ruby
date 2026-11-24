@@ -64,6 +64,7 @@ module ZammadAPI
     def searchable!: () -> void
     def find_by_id: (untyped id, Hash[Symbol, untyped] others) -> R?
     def record_number: (untyped id) -> Integer?
+    def as_served: (Hash[Symbol, untyped] params) -> Hash[Symbol, untyped]
     def carries?: (Resources::Base record, Hash[Symbol, untyped] params) -> bool
     def search_term_for: (Hash[Symbol, untyped]) -> String?
     def path: () -> String

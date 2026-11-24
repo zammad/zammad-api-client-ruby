@@ -154,6 +154,46 @@ RSpec.describe ZammadAPI::ResourceProxy do
       expect(proxy.find_by(name: 'Users').id).to eq(1)
     end
 
+    # The value is searched for as UTF-8, and Zammad serves UTF-8. Held
+    # against the value as it was given, the hit was passed over: Ruby takes
+    # two Strings in different encodings for different unless both are
+    # ASCII.
+    %w[ISO-8859-1 Windows-1252 UTF-16LE].each do |encoding|
+      context "with a value given in #{encoding}" do
+        let(:value) { 'Größe'.encode(encoding) }
+
+        before do
+          stub_request(:get, search_url).with(query: hash_including('query' => 'Größe', 'page' => '1')).to_return(json_response([{ id: 1, name: 'Größe', note: 'ä' }]))
+          stub_request(:get, search_url).with(query: hash_including('query' => 'Größe', 'page' => '2')).to_return(json_response([]))
+        end
+
+        it 'searches for the text in UTF-8 and returns the record that carries it' do
+          expect(proxy.find_by(name: value).id).to eq(1)
+        end
+
+        it 'matches it beside an id as well' do
+          stub_request(:get, "#{url}/1").with(query: hash_including({})).to_return(json_response({ id: 1, name: 'Größe' }))
+
+          expect(proxy.find_by(id: 1, name: value).id).to eq(1)
+        end
+
+        it 'still answers nil where no hit carries it' do
+          expect(proxy.find_by(name: value, note: 'ö'.encode(encoding))).to be_nil
+        end
+      end
+    end
+
+    it 'matches a value given in another encoding where the index is walked' do
+      stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/ticket_states").with(query: hash_including({})).to_return(json_response([{ id: 4, name: 'geschlossen für immer' }]))
+
+      expect(client.ticket_states.find_by(name: 'geschlossen für immer'.encode('ISO-8859-1')).id).to eq(4)
+    end
+
+    it 'refuses a value that cannot be converted to UTF-8, naming the attribute and not the value' do
+      expect { proxy.find_by(name: "secret\x81".dup.force_encoding('Windows-1252')) }
+        .to raise_error(ArgumentError, /\Afind_by name was given as Windows-1252 text that cannot be converted to UTF-8/)
+    end
+
     # Zammad's search sorts by updated_at, newest first, not by relevance, so
     # the exact match can sit on any page of hits. Reading only the first one
     # answered nil for a record that exists, and find_by(...) || create(...)
