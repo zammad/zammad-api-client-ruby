@@ -1260,6 +1260,14 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   the advice to Base64-encode an attachment, by which version of the generator a bundle
   had resolved to. Bytes that are not valid UTF-8 are binary data and are refused with
   that advice, as before.
+- `Client.from_env` takes an environment variable that holds nothing but whitespace for
+  unset, as it takes an empty one. With `ZAMMAD_TOKEN` holding a token and
+  `ZAMMAD_HTTP_TOKEN` set to a space, the blank variable took the token's place and was
+  then read as no token: `ConfigurationError: missing user in config`, for an environment
+  that held a valid token. A `ZAMMAD_USER` or `ZAMMAD_PASSWORD` of a space beside a token
+  was refused as a second way to authenticate, and a `ZAMMAD_URL` of one was reported as a
+  url with no scheme and is reported as missing now. A password that is nothing but spaces
+  can still be passed as `password:`.
 
 ### Changed
 

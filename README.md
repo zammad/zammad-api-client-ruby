@@ -130,7 +130,8 @@ them.
 `ZAMMAD_PASSWORD`, or `ZAMMAD_OAUTH2_TOKEN`), so a script needs no configuration of its
 own. Anything passed in wins over the environment, credentials included — passing
 `user:` and `password:` replaces a token the environment holds rather than sitting beside
-it. An environment that itself sets more than one way to authenticate is refused, until an
+it. A variable that is empty, or holds nothing but whitespace, counts as unset. An
+environment that itself sets more than one way to authenticate is refused, until an
 argument says which is meant:
 
 ```ruby
