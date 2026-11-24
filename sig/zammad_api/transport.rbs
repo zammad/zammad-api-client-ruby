@@ -107,6 +107,7 @@ module ZammadAPI
     def timed_out?: (untyped error) -> bool
     def perform: (Symbol, String, Hash[Symbol, untyped]?, String?, Hash[untyped, untyped]?) -> untyped
     def build_connection: () -> untyped
+    def configured_proxy: () -> Hash[Symbol, String]
     def apply_middleware_and_adapter: (untyped faraday) -> void
     def refuse_unusable_middleware!: (untyped connection) -> void
     def refused_middleware: (Class klass) -> String?
@@ -121,6 +122,7 @@ module ZammadAPI
     def unlogged_body: (String body) -> String
     def reportable_cause: (StandardError error) -> StandardError?
     def redact_config_values: (untyped message) -> String
+    def shared_proxies: () -> Array[String]
     def environment_proxies: () -> Array[String]
     def quoted_spellings: (String value) -> Array[String]
     def logger: () -> Logger

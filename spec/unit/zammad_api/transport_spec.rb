@@ -1930,6 +1930,50 @@ RSpec.describe ZammadAPI::Transport do
 
       expect(a_request(:get, url).with(query: { 'tenant' => 'a' })).to have_been_made.once
     end
+
+    # A name given as nil stands in for the default as well as one given a
+    # value, and `proxy:` was passed whatever the configuration held. So the
+    # proxy set there was taken off this connection alone, and its requests
+    # went out directly.
+    context 'with a proxy among them' do
+      before { Faraday.default_connection_options.proxy = shared }
+
+      let(:shared) { 'http://shared.proxy.test:3128' }
+
+      def proxy_of(transport) = transport.instance_variable_get(:@connection).proxy&.uri.to_s
+
+      it 'goes through that proxy where the configuration names none' do
+        expect(proxy_of(unit_transport)).to eq(shared)
+      end
+
+      it 'goes through the configured proxy where it names one' do
+        expect(proxy_of(unit_transport(proxy: 'http://own.proxy.test:8080'))).to eq('http://own.proxy.test:8080')
+      end
+
+      it 'takes an empty proxy: for none, as it is everywhere else' do
+        expect(proxy_of(unit_transport(proxy: ''))).to eq(shared)
+      end
+
+      # It is this connection's proxy now, so it is this error that quotes
+      # one URI cannot parse, and it is a value of no option.
+      [
+        'http://puser:pa ss@shared.proxy.test:3128',
+        { uri: 'http://puser:pa ss@shared.proxy.test:3128' }
+      ].each do |unreadable|
+        context "when it is #{unreadable.class} and cannot be parsed" do
+          let(:shared) { unreadable }
+
+          it 'reports it as a configuration error without its password' do
+            expect { unit_transport }.to raise_error(ZammadAPI::ConfigurationError) { |error|
+              report = error.full_message(highlight: false)
+
+              expect(report).to include('[REDACTED]@shared.proxy.test:3128')
+              expect(report).not_to include('pa ss')
+            }
+          end
+        end
+      end
+    end
   end
 
   describe '#with_on_behalf_of' do
