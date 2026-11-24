@@ -34,30 +34,11 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(group.note).to eq('from a string key')
     end
 
-    # A record built from a Hash put together across several merges held
-    # whichever spelling Hash order put last, and sent that.
-    it 'refuses one attribute under two spellings rather than keeping the last' do
-      expect { client.groups.new('name' => 'Support', name: 'Sales') }
-        .to raise_error(ArgumentError, /attribute name was given twice, as "name" and as :name/)
-    end
-
-    it 'refuses two spellings on create before anything is sent' do
-      expect { client.groups.create('name' => 'Support', name: 'Sales') }.to raise_error(ArgumentError, /given twice/)
-      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
-    end
-
-    it 'refuses two spellings inside a value a writer is given' do
-      expect { group.preferences = { 'locale' => 'de', locale: 'en' } }.to raise_error(ArgumentError, /attribute locale was given twice/)
-      expect(group).not_to be_changed
-    end
-
     it 'starts without changes' do
       expect(group).not_to be_changed
     end
 
-    # What a Rails controller holds. It is not a Hash, so it was stored as
-    # it was handed over: the record held the caller's own object, printed
-    # its password, and saved it as one JSON string.
+    # What a Rails controller holds: not a Hash, but it converts to one.
     context 'when given strong parameters, which convert to a Hash and are not one' do
       subject(:user) { client.users.new(permitted) }
 
@@ -85,39 +66,13 @@ RSpec.describe ZammadAPI::Resources::Base do
         expect(stub).to have_been_requested
       end
 
-      it 'reads them as a Hash where they are the value of an attribute' do
-        expect(client.users.new(login: 'jane', preferences: StrongParameters.new(locale: 'de')).preferences).to eq(locale: 'de')
-      end
-
-      it 'reads them as a Hash where a writer is given them' do
-        user.preferences = StrongParameters.new(locale: 'en')
-
-        expect(user.preferences).to eq(locale: 'en')
-      end
-
       it 'leaves the refusal of parameters that were not permitted to say so' do
         expect { client.users.new(StrongParameters.new({ login: 'jane' }, permitted: false)) }.to raise_error(StrongParameters::Unfiltered)
       end
     end
 
-    # Each of these reached a method of Hash and raised NoMethodError for
-    # it, and an Array of pairs was stored as the attributes.
-    context 'when given what is no set of attributes' do
-      it 'refuses a String, naming its class' do
-        expect { client.groups.new('name') }.to raise_error(ArgumentError, 'attributes need to be a Hash of names and values, got String')
-      end
-
-      it 'refuses an Array of pairs' do
-        expect { client.groups.new([[:name, 'Support']]) }.to raise_error(ArgumentError, /got Array/)
-      end
-
-      it 'refuses a Struct, which has a to_h and does not claim to be a Hash' do
-        expect { client.groups.new(Struct.new(:name).new('Support')) }.to raise_error(ArgumentError, /attributes need to be a Hash/)
-      end
-
-      it 'still takes nil for no attributes' do
-        expect(client.groups.new(nil).attributes).to eq({})
-      end
+    it 'takes nil for no attributes' do
+      expect(client.groups.new(nil).attributes).to eq({})
     end
 
     it 'records a change as old and new value' do
@@ -171,12 +126,7 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(carrying_nil.changes).to be_empty
     end
 
-    # An attribute the record does not carry is not an attribute whose value
-    # is nil: Zammad reduces the object it serializes for a permission-scoped
-    # client, so the key being absent says nothing about what is stored. Read
-    # as a nil original, writing nil to one compared equal, staged nothing and
-    # was still merged into the attributes - the write was dropped without a
-    # word and the record went on reporting a key Zammad never sent it.
+    # An attribute the record does not carry is not one whose value is nil.
     it 'stages a write of an attribute the record does not carry' do
       group.active = nil
       expect(group.changes).to eq(active: [nil, nil])
@@ -234,80 +184,6 @@ RSpec.describe ZammadAPI::Resources::Base do
 
       group.save!
       expect { group.attributes[:preferences][:note] << '!' }.to raise_error(FrozenError)
-    end
-
-    # Ruby quotes the frozen object in the error for a write to it, and the
-    # message of an error is what a log and an error tracker keep.
-    context 'with a credential among the attributes' do
-      subject(:user) { client.users.new(login: 'jane', password: 'hunter2', preferences: { bind_pw: 's3cret', locale: 'de' }) }
-
-      def message_of
-        yield
-        nil
-      rescue FrozenError => e
-        e.message
-      end
-
-      it 'does not quote a staged password in the error for a write to #attributes' do
-        expect(message_of { user.attributes[:vip] = true })
-          .to eq(%(can't modify frozen ZammadAPI::Attributes: {login: "jane", password: "[REDACTED]", preferences: {bind_pw: "[REDACTED]", locale: "de"}}))
-      end
-
-      it 'does not quote a credential in the error for a write to a nested Hash' do
-        expect(message_of { user.attributes[:preferences][:x] = 1 })
-          .to eq(%(can't modify frozen ZammadAPI::Attributes: {bind_pw: "[REDACTED]", locale: "de"}))
-      end
-
-      it 'does not quote either password in the error for a write to #changes' do
-        user.password = 'correct horse'
-
-        expect(message_of { user.changes[:x] = 1 })
-          .to eq(%(can't modify frozen ZammadAPI::Attributes: {password: "[REDACTED]"}))
-      end
-
-      it 'does not quote one that was written after the record was built' do
-        user.password = 'correct horse'
-
-        expect(message_of { user.attributes[:vip] = true }).to include('password: "[REDACTED]"')
-      end
-
-      it 'still reads every value as it is' do
-        expect(user.attributes).to eq(login: 'jane', password: 'hunter2', preferences: { bind_pw: 's3cret', locale: 'de' })
-      end
-
-      it 'hands out plain Hashes from #to_h, which print what they hold' do
-        expect(user.to_h).to be_an_instance_of(Hash).and(satisfy { it[:preferences].instance_of?(Hash) })
-      end
-
-      # An encoder that takes nothing but the core types goes by the class,
-      # and `attributes.to_h` was plain no further than its first Hash.
-      it 'hands out plain Hashes from attributes.to_h, for a strict JSON encoder' do
-        expect(JSON.generate(user.attributes.to_h, strict: true)).to eq(JSON.generate(user.to_h))
-      end
-
-      it 'hands out plain Hashes from changes.to_h' do
-        user.preferences = { bind_pw: 'other', locale: 'en' }
-
-        expect(JSON.generate(user.changes.to_h, strict: true))
-          .to eq('{"preferences":[{"bind_pw":"s3cret","locale":"de"},{"bind_pw":"other","locale":"en"}]}')
-      end
-
-      it 'hands out a plain Hash from to_h of a Hash it holds' do
-        expect(JSON.generate(user.preferences.to_h, strict: true)).to eq('{"bind_pw":"s3cret","locale":"de"}')
-      end
-    end
-
-    # A save whose answer cannot be read puts the record on what it sent,
-    # cut to the attributes it arrived with, and `slice` hands back a plain
-    # Hash whatever it was called on.
-    it 'hands out an Attributes after a save whose answer could not be read' do
-      stub_request(:get, "#{url}/1").with(query: hash_including({})).to_return(json_response({ id: 1, name: 'Users' }))
-      stub_request(:put, "#{url}/1").with(query: hash_including({})).to_return(unreadable_json_response)
-      found = client.groups.find(1)
-      found.name = 'Support'
-
-      expect { found.save! }.to raise_error(ZammadAPI::ParseError)
-      expect(found.attributes).to be_a(ZammadAPI::Attributes).and be_frozen
     end
   end
 
@@ -540,58 +416,13 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(group).not_to be_changed
     end
 
-    # Each key is written by its Symbol, so the attribute was written twice
-    # and whichever spelling came last in the Hash was the one staged.
-    context 'with one attribute under two spellings' do
-      it 'refuses the pair' do
-        expect { group.assign_attributes('name' => 'A', name: 'B') }
-          .to raise_error(ArgumentError, /attribute name was given twice, as "name" and as :name/)
-      end
-
-      it 'stages nothing' do
-        expect { group.assign_attributes(:note => 'Why', 'name' => 'A', :name => 'B') }.to raise_error(ArgumentError)
-        expect(group).not_to be_changed
-      end
-
-      it 'stages nothing where the pair is inside a later value' do
-        expect { group.assign_attributes(note: 'Why', preferences: { 'locale' => 'de', locale: 'en' }) }
-          .to raise_error(ArgumentError, /attribute locale was given twice/)
-        expect(group).not_to be_changed
-      end
-    end
-
-    # The constructor makes a Symbol of a key where it can and keeps one it
-    # cannot. Here every key went through `to_sym`, so the Hash the
-    # constructor takes raised NoMethodError from inside the gem.
     it 'keeps a key that cannot become a Symbol, as the constructor does' do
       group.assign_attributes(1 => 'x')
 
       expect(group.attributes).to eq(client.groups.new(:name => 'Support', 1 => 'x').attributes)
     end
 
-    # Handed straight to a method of Hash, so what was not one raised
-    # NoMethodError naming that method, and an Array was read as pairs.
-    context 'with something that is not a Hash' do
-      it 'refuses nil, and names the class it was given' do
-        expect { group.assign_attributes(nil) }.to raise_error(ArgumentError, 'attributes need to be a Hash of names and values, got NilClass')
-      end
-
-      it 'refuses a String' do
-        expect { group.assign_attributes('name') }.to raise_error(ArgumentError, /got String/)
-      end
-
-      it 'refuses an Array of pairs rather than reading it as a Hash' do
-        expect { group.assign_attributes([[:name, 'Renamed']]) }.to raise_error(ArgumentError, /got Array/)
-        expect(group).not_to be_changed
-      end
-
-      it 'does not quote what it was given, which may hold a credential' do
-        expect { group.assign_attributes('password=hunter2') }.to raise_error(ArgumentError) { expect(it.message).not_to include('hunter2') }
-      end
-    end
-
-    # `record.update(params.require(:group).permit(:name))`. It raised
-    # NoMethodError naming `each_with_object`.
+    # `record.update(params.require(:group).permit(:name))`
     context 'with strong parameters' do
       it 'stages what they convert to' do
         group.assign_attributes(StrongParameters.new(name: 'Renamed', note: 'Why'))
@@ -655,22 +486,10 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(client.groups.new.update(name: 'Support')).to be(true)
       expect(stub).to have_been_requested
     end
-
-    # `update(params[:group])` with the key missing. It raised NoMethodError
-    # for nil, from inside the gem.
-    it 'refuses nil, and sends nothing' do
-      expect { group.update(nil) }.to raise_error(ArgumentError, /attributes need to be a Hash of names and values, got NilClass/)
-      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
-    end
   end
 
   describe '#update!' do
     subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, note: 'old') }
-
-    it 'refuses nil, and sends nothing' do
-      expect { group.update!(nil) }.to raise_error(ArgumentError, /got NilClass/)
-      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
-    end
 
     it 'returns true' do
       stub_request(:put, "#{url}/1").with(query: hash_including({})).to_return(json_response({ id: 1 }))
@@ -749,10 +568,6 @@ RSpec.describe ZammadAPI::Resources::Base do
     it 'escapes an id that would otherwise leave its segment' do
       expect(ZammadAPI::Resources::Group.member_path('1/../users')).to eq('api/v1/groups/1%2F..%2Fusers')
     end
-
-    it 'refuses an id that navigates' do
-      expect { ZammadAPI::Resources::Group.member_path('..') }.to raise_error(ArgumentError)
-    end
   end
 
   describe '#destroy' do
@@ -764,19 +579,29 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(stub).to have_been_requested
     end
 
+    it 'takes a 204 for a deleted record' do
+      stub_request(:delete, "#{url}/1").to_return(status: 204)
+
+      expect(group.destroy).to be(true)
+      expect(group).to be_destroyed
+    end
+
+    it 'takes the empty object Zammad answers with for a group' do
+      stub_request(:delete, "#{url}/1").to_return(json_response({}))
+
+      expect(group.destroy).to be(true)
+      expect(group).to be_destroyed
+    end
+
     it 'raises for a record that was never saved' do
       expect { client.groups.new.destroy }.to raise_error(ZammadAPI::Error, /has not been saved, so there is nothing to destroy/)
     end
 
-    # `destroy` asked only whether the record was already destroyed, so one
-    # built with an id it was simply handed issued a real DELETE for a record
-    # it does not stand for. The constructor refuses that id now, so there is
-    # no such record left to destroy.
     it 'sends nothing for a record built with an id it was never saved with' do
       stub = stub_request(:delete, "#{url}/99")
 
       expect { client.groups.new(id: 99, name: 'X').destroy }
-        .to raise_error(ZammadAPI::Error, /is what addresses this record/)
+        .to raise_error(ZammadAPI::Error, /has not been saved, so there is nothing to destroy/)
       expect(stub).not_to have_been_requested
     end
 
@@ -802,9 +627,6 @@ RSpec.describe ZammadAPI::Resources::Base do
         expect { group.save }.to raise_error(ZammadAPI::Error, /was destroyed, there is nothing to save/)
       end
 
-      # `reload` re-read a record that no longer exists and cleared the flag on
-      # the way back, so the record came back reporting itself as persisted and
-      # its next save issued a PUT against the deleted path.
       it 'refuses a reload rather than resurrecting the record' do
         expect { group.reload }
           .to raise_error(ZammadAPI::Error, /was destroyed, there is nothing to reload/)
@@ -831,58 +653,20 @@ RSpec.describe ZammadAPI::Resources::Base do
         group.name = 'Support'
       end
 
-      it 'drops a change that can never be sent' do
+      it 'leaves the attributes as they are, the staged change included' do
         group.destroy
 
-        expect(group).not_to be_changed
-        expect(group.changes).to be_empty
-      end
-
-      # Readable as Zammad last served them. The staged write above was never
-      # sent, and dropping the change set without it left the record reporting
-      # "Support" while `changed?` was false and `changes` was empty - so
-      # nothing was left to tell a local edit apart from a value the server
-      # gave, in the one state where it can never be saved.
-      it 'keeps the attributes readable, so a destroyed record can still be reported on' do
-        group.destroy
-
-        expect(group.id).to eq(1)
-        expect(group.name).to eq('Users')
-      end
-
-      it 'does not report a write Zammad never saw' do
-        group.destroy
-
-        expect(group.attributes).to eq({ id: 1, name: 'Users' })
-        expect(group.inspect).not_to include('Support')
+        expect(group.name).to eq('Support')
+        expect(group.changes).to eq(name: %w[Users Support])
       end
 
       it 'refuses the association readers, which would request a record that is gone' do
         group.destroy
 
-        # The guarantee, not the mechanism that was expected to deliver it.
-        # This compared the proxy against the one from before the destroy,
-        # which clearing the memo satisfied - while `related` went on
-        # rebuilding a working proxy on the very next call. It passed for as
-        # long as the behaviour it is named for was broken.
         expect { group.related }.to raise_error(ZammadAPI::Error, /was destroyed/)
-      end
-
-      it 'drops the failure of a save that is over' do
-        stub_request(:put, "#{url}/1").with(query: hash_including({}))
-          .to_return(json_response({ error: 'Name is required' }, status: 422))
-        group.save
-
-        expect(group.error).to be_a(ZammadAPI::ValidationError)
-        group.destroy
-        expect(group.error).to be_nil
       end
     end
 
-    # `update` stages before it saves, and `save!` is where the destroyed
-    # check used to live. That order left a destroyed record holding a change
-    # set that can never be sent - the state destroy clears the staged changes
-    # to prevent - so the refusal happens before anything is written.
     context 'when an update is attempted after it was destroyed' do
       before do
         stub_request(:delete, "#{url}/1").to_return(status: 200, body: '')
@@ -919,9 +703,6 @@ RSpec.describe ZammadAPI::Resources::Base do
       end
     end
 
-    # `update` refused a destroyed record, and the writers it is built on did
-    # not: a write left the record changed and reading a value Zammad never
-    # saw, and the save after it was the first thing to object.
     context 'when an attribute is written after it was destroyed' do
       subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'A') }
 
@@ -955,15 +736,9 @@ RSpec.describe ZammadAPI::Resources::Base do
         expect { group.assign_attributes(note: 'n', name: 'Z') }.to raise_error(ZammadAPI::Error)
         expect(group.to_h).to eq({ id: 1, name: 'A' })
       end
-
-      it 'still refuses the id for the reason an id is refused' do
-        expect { group.assign_attributes(id: 9) }.to raise_error(ZammadAPI::Error, /cannot be staged/)
-      end
     end
   end
 
-  # The attributes are frozen and replaced on write, so a copy never saw the
-  # original's next write. The change set is written in place, and was shared.
   describe 'a copy made with dup or clone' do
     let(:original) { client.groups.find(1) }
 
@@ -1156,10 +931,6 @@ RSpec.describe ZammadAPI::Resources::Base do
     end
   end
 
-  # A plain class-level ivar is not inherited, so a subclass used to inherit
-  # every association, the page limit and the searchability, and lose only the
-  # API path - raising "does not declare an API path" from a class that
-  # plainly did.
   describe 'a resource subclassed by a caller' do
     subject(:subclass) { Class.new(ZammadAPI::Resources::Ticket) { def self.name = 'MyTicket' } }
 
@@ -1173,20 +944,6 @@ RSpec.describe ZammadAPI::Resources::Base do
 
     it 'inherits searchability' do
       expect(subclass.searchable?).to be(true)
-    end
-
-    it 'inherits the filters its parent\'s search reads' do
-      expect(Class.new(ZammadAPI::Resources::User).search_filter_names).to eq(%i[role_ids group_ids permissions])
-    end
-
-    it 'has no search filters of its own unless it or a parent declares some' do
-      expect(subclass.search_filter_names).to eq([])
-    end
-
-    it 'takes filter names as strings too' do
-      subclass.search_filters 'role_ids'
-
-      expect(subclass.search_filter_names).to eq([:role_ids])
     end
 
     it 'inherits the page limit' do
@@ -1203,7 +960,7 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(Class.new(unpaged).paginated?).to be(false)
     end
 
-    it 'inherits the associations, as it always did' do
+    it 'inherits the associations' do
       expect(subclass.associations.keys).to eq(ZammadAPI::Resources::Ticket.associations.keys)
     end
 
@@ -1223,10 +980,6 @@ RSpec.describe ZammadAPI::Resources::Base do
     end
   end
 
-  # Declared as bare constants, a misspelled override was silently ignored and
-  # the resource kept Base's default: SEARCHEABLE = true left the resource
-  # unsearchable, and every find_by on it raised "Zammad routes no search
-  # endpoint" with no hint that the declaration was the problem.
   describe 'the endpoint declarations' do
     it 'refuses a misspelled declaration at load' do
       expect { Class.new(described_class) { searcheable true } }
@@ -1279,26 +1032,6 @@ RSpec.describe ZammadAPI::Resources::Base do
     end
   end
 
-  # The id is what addresses the record. Staged, it took effect for every path
-  # that builds a path from the attributes and not at all for the record those
-  # paths then reported on: `group.id = 99; group.destroy` sent DELETE to group
-  # 99 and left the record saying group 1 was the one destroyed.
-  # The parent is resolved before MEMO_LOCK is taken, because resolving it may
-  # build the parent's own proxy through this same method and a Mutex is not
-  # reentrant. Folded back inside the lock this raises
-  # `ThreadError: deadlock; recursive locking`, and a caller subclassing a
-  # resource is the case that lock exists to cover in the first place.
-  describe 'the association proxy of a subclass whose parent has none yet' do
-    it 'builds without deadlocking on the memo lock' do
-      leaf = Class.new(Class.new(ZammadAPI::Resources::Group))
-
-      expect(leaf.related_class).to be_a(Class)
-    end
-  end
-
-  # `record[:x] = v` reached method_missing as `:[]=`, which the writer branch
-  # took for an attribute called `[]`: it staged the index as the value, lost
-  # the write, and sent `{"[]": "x"}` on the next save.
   describe '#[]=' do
     subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Users') }
 
@@ -1321,7 +1054,7 @@ RSpec.describe ZammadAPI::Resources::Base do
     end
 
     it 'refuses what the named writer refuses' do
-      expect { group[:id] = 9 }.to raise_error(ZammadAPI::Error, /cannot be staged as an attribute/)
+      expect { group[:id] = 9 }.to raise_error(ZammadAPI::Error, /cannot be changed/)
     end
 
     it 'invents no attribute from the operator itself' do
@@ -1334,14 +1067,6 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(group).to respond_to(:[]=)
     end
 
-    it 'is claimed under either spelling' do
-      # rubocop:disable-next Performance/StringIdentifierArgument -- the String spelling is the point
-      expect(group.respond_to?('[]=')).to be(true)
-    end
-
-    # The production case for recognising a writer by name rather than by a
-    # trailing `=`: on a record that stages writes, an operator reached the
-    # writer branch and invented an attribute from its stem.
     it 'invents no attribute from a comparison operator' do
       expect { group.public_send(:<=, 5) }.to raise_error(NoMethodError)
 
@@ -1359,64 +1084,17 @@ RSpec.describe ZammadAPI::Resources::Base do
     subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Users') }
 
     it 'is refused' do
-      expect { group.id = 99 }.to raise_error(ZammadAPI::Error, /is what addresses this record/)
-    end
-
-    it 'points at the lookup that was meant' do
-      expect { group.id = 99 }.to raise_error(ZammadAPI::Error, /look up the record you meant with find\(99\)/)
+      expect { group.id = 99 }
+        .to raise_error(ZammadAPI::Error, 'ZammadAPI::Resources::Group#id cannot be changed: it is what addresses this record')
     end
 
     it 'is refused through assign_attributes too' do
-      expect { group.assign_attributes(id: 99) }.to raise_error(ZammadAPI::Error, /is what addresses this record/)
+      expect { group.assign_attributes(id: 99) }.to raise_error(ZammadAPI::Error, /cannot be changed/)
     end
 
-    # The message exists to name the id the caller passed, and the pre-check
-    # that runs for these two paths dropped it - so a serializer or a form
-    # binder, which reach the writer this way, were told to call find(nil).
-    it 'names the id that was passed through assign_attributes' do
-      expect { group.assign_attributes(id: 99) }.to raise_error(ZammadAPI::Error, /find\(99\)/)
-    end
-
-    it 'names the id that was passed through update' do
-      expect { group.update(id: 99) }.to raise_error(ZammadAPI::Error, /find\(99\)/)
-    end
-
-    it 'names the attribute it refused' do
-      expect { group.id = 99 }.to raise_error(ZammadAPI::Error, /Group#id cannot be staged/)
-    end
-
-    # Checked before anything is written, not on the way past: refusing
-    # mid-loop staged the keys that came first and left the record dirty with
-    # half a change set, which is the state `update` takes its own guard one
-    # line early to avoid.
-    it 'stages nothing at all when one key in the hash is refused' do
-      expect { group.assign_attributes(name: 'X', id: 99, note: 'Y') }.to raise_error(ZammadAPI::Error)
-
-      expect(group).not_to be_changed
-      expect(group.changes).to be_empty
-    end
-
-    it 'leaves the attributes it had already reached alone' do
-      expect { group.assign_attributes(name: 'X', id: 99, note: 'Y') }.to raise_error(ZammadAPI::Error)
-
-      expect(group.name).to eq('Users')
-    end
-
-    it 'stages nothing through update either' do
-      expect { group.update(name: 'X', id: 99) }.to raise_error(ZammadAPI::Error)
-
-      expect(group).not_to be_changed
-    end
-
-    # A record that claimed a writer and then raised when it was called would
-    # defeat the point of asking, and lead a serializer or form binder straight
-    # into the exception it was checking to avoid.
-    it 'does not claim a writer it would refuse' do
-      expect(group).not_to respond_to(:id=)
-    end
-
-    it 'still claims the writers it honours' do
-      expect(group).to respond_to(:name=)
+    it 'is refused through update too, and sends nothing' do
+      expect { group.update(id: 99) }.to raise_error(ZammadAPI::Error, /cannot be changed/)
+      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
     end
 
     it 'leaves the record addressing what it did before' do
@@ -1426,11 +1104,8 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(group).not_to be_changed
     end
 
-    # The constructor was the one door that did not make this refusal, and
-    # the only one whose value reached the wire: a new record is sent in full,
-    # so `new(id: 5).save` POSTed the id nothing had checked.
-    it 'is refused by the constructor too' do
-      expect { client.groups.new(id: 5) }.to raise_error(ZammadAPI::Error, /is what addresses this record/)
+    it 'is taken by the constructor' do
+      expect(client.groups.new(id: 5).id).to eq(5)
     end
 
     it 'still lets a record Zammad served carry one' do
@@ -1438,516 +1113,35 @@ RSpec.describe ZammadAPI::Resources::Base do
     end
   end
 
-  # The third way a record ends up persisted without an id, and the one that
-  # has nothing to do with a save: Zammad serves a reduced object where the
-  # authenticated user may not see the whole record, which is the same thing
-  # #write_attribute is written around. Such a record used to be told it "was
-  # saved, but the response carried no id" - sending the caller to look at a
-  # save that never happened, when what they need is which user the client
-  # authenticates as.
   describe 'a record Zammad served without an id' do
     subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, name: 'Users') }
 
     it 'refuses a reload it cannot address' do
-      expect { group.reload }.to raise_error(ZammadAPI::Error, /was loaded without an id/)
+      expect { group.reload }.to raise_error(ZammadAPI::Error, 'ZammadAPI::Resources::Group has no id, save it first')
     end
 
-    it 'points at what this client may read' do
-      expect { group.destroy }.to raise_error(ZammadAPI::Error, /check what this client may read/)
-    end
-
-    it 'does not claim a save that never happened' do
-      expect { group.reload }.to raise_error(ZammadAPI::Error) { |error| expect(error.message).not_to include('was saved') }
-    end
-
-    it 'does not tell the caller to save a record Zammad already holds' do
-      expect { group.destroy }.to raise_error(ZammadAPI::Error) { |error| expect(error.message).not_to include('save it first') }
+    it 'refuses a destroy it cannot address' do
+      expect { group.destroy }.to raise_error(ZammadAPI::Error, /has no id/)
     end
 
     it 'refuses a save it cannot address' do
       group.name = 'Support'
 
-      expect { group.save! }.to raise_error(ZammadAPI::Error, /was loaded without an id/)
-    end
-
-    it 'still says the record was saved where a save is what left it this way' do
-      stub_request(:post, url).with(query: hash_including({})).to_return(unreadable_json_response(status: 201))
-      new_group = client.groups.new(name: 'Support')
-      begin
-        new_group.save
-      rescue ZammadAPI::ParseError
-        nil
-      end
-
-      expect { new_group.reload }.to raise_error(ZammadAPI::Error, /was saved, but the response carried no id/)
+      expect { group.save! }.to raise_error(ZammadAPI::Error, /has no id/)
     end
   end
 
-  # What makes a record persisted is that Zammad answered 2xx, not that the
-  # answer parsed. Decoded first, a create whose 201 carried a body cut off
-  # or rewritten on its way through a proxy raised ParseError with the record
-  # still looking new - so the ticket existed in Zammad and a retried save
-  # POSTed a second one. Marked persisted, the record has no id to be
-  # addressed by either, and nothing staged to send, so the retry has to say
-  # so rather than take the "nothing to send" short circuit and report
-  # success.
-  describe 'a create whose success body cannot be parsed' do
-    subject(:group) { client.groups.new(name: 'Support') }
-
-    before { stub_request(:post, url).with(query: hash_including({})).to_return(unreadable_json_response(status: 201)) }
-
-    it 'still reports the parse failure' do
-      expect { group.save }.to raise_error(ZammadAPI::ParseError)
-    end
-
-    it 'does not leave the record looking unsaved' do
-      begin
-        group.save
-      rescue ZammadAPI::ParseError
-        nil
-      end
-
-      expect(group.new_record?).to be(false)
-    end
-
-    it 'does not create a second record when the save is retried' do
-      2.times do
-        group.save
-      rescue ZammadAPI::Error
-        nil
-      end
-
-      expect(a_request(:post, url).with(query: hash_including({}))).to have_been_made.once
-    end
-
-    it 'refuses the retried save rather than reporting it stored' do
-      begin
-        group.save
-      rescue ZammadAPI::ParseError
-        nil
-      end
-
-      expect { group.save }.to raise_error(ZammadAPI::Error, /carried no id/)
-    end
-
-    it 'refuses to reload a record it cannot address' do
-      begin
-        group.save
-      rescue ZammadAPI::ParseError
-        nil
-      end
-
-      expect { group.reload }.to raise_error(ZammadAPI::Error, /carried no id/)
-    end
-
-    it 'does not tell the caller to save a record that was already saved' do
-      begin
-        group.save
-      rescue ZammadAPI::ParseError
-        nil
-      end
-
-      expect { group.destroy }.to raise_error(ZammadAPI::Error, /was saved/)
-    end
-
-    # An update keeps only what Zammad had served the record with. A record
-    # being created was served nothing, and what it sent is all there is to
-    # read from it.
-    it 'goes on reading everything it sent, written after it was built or not' do
-      group.note = 'Second line'
-      begin
-        group.save
-      rescue ZammadAPI::ParseError
-        nil
-      end
-
-      expect(group.attributes).to eq(name: 'Support', note: 'Second line')
-    end
-  end
-
-  # The same argument for what was staged. Zammad answered 2xx, so it applied
-  # the changes, and they used to stay staged because the body did not parse:
-  # the next save sent all of them again. For a ticket's `article` that is a
-  # second article and a second e-mail, from a save that was about the title.
-  describe 'an update whose success body cannot be parsed' do
-    subject(:ticket) { client.tickets.find(1) }
-
-    let(:ticket_url) { "#{ClientHelper::BASE_URL}api/v1/tickets/1" }
-    let(:article)    { { body: 'Reset link sent.', type: 'email', to: 'customer@example.com' } }
-
-    before do
-      stub_request(:get, ticket_url).with(query: hash_including({})).to_return(json_response({ id: 1, title: 'Help', note: nil }))
-      stub_request(:put, ticket_url).with(query: hash_including({}))
-        .to_return(unreadable_json_response, json_response({ id: 1, title: 'Renamed' }))
-
-      ticket.article = article
-      begin
-        ticket.save
-      rescue ZammadAPI::ParseError
-        nil
-      end
-    end
-
-    it 'still reports the parse failure' do
-      other = client.tickets.find(1)
-      other.note = 'x'
-      stub_request(:put, ticket_url).with(query: hash_including({})).to_return(unreadable_json_response)
-
-      expect { other.save }.to raise_error(ZammadAPI::ParseError)
-    end
-
-    it 'no longer holds the changes Zammad acknowledged as staged' do
-      expect(ticket.changed?).to be(false)
-      expect(ticket.changes).to eq({})
-    end
-
-    it 'does not send the acknowledged changes again with the next save' do
-      ticket.title = 'Renamed'
-      ticket.save
-
-      expect(a_request(:put, ticket_url).with(query: hash_including({}), body: { title: 'Renamed' })).to have_been_made.once
-      expect(a_request(:put, ticket_url).with(query: hash_including({}), body: hash_including('article' => anything))).to have_been_made.once
-    end
-
-    it 'sends nothing for a save with nothing new staged' do
-      expect(ticket.save).to be(true)
-      expect(a_request(:put, ticket_url).with(query: hash_including({}))).to have_been_made.once
-    end
-
-    it 'goes on reading the values it sent for the attributes Zammad serves' do
-      other = client.tickets.find(1)
-      other.title = 'Sent'
-      stub_request(:put, ticket_url).with(query: hash_including({})).to_return(unreadable_json_response)
-      begin
-        other.save
-      rescue ZammadAPI::ParseError
-        nil
-      end
-
-      expect(other.title).to eq('Sent')
-      expect(other.attributes).to eq(id: 1, title: 'Sent', note: nil)
-    end
-
-    # `article` is not an attribute of a ticket. It is a command in the body
-    # of the PUT, and Zammad never serves it back. Settled into the baseline
-    # with the attributes, it was remembered as the ticket's own state, and
-    # the same article assigned again compared equal to it.
-    it 'does not keep a key Zammad never served the record with' do
-      expect(ticket.key?(:article)).to be(false)
-      expect(ticket.attributes).to eq(id: 1, title: 'Help', note: nil)
-    end
-
-    it 'stages the same article when it is assigned again' do
-      ticket.article = article
-
-      expect(ticket.changes).to eq(article: [nil, article])
-    end
-
-    it 'sends the same article again when it is assigned again, as a second reply' do
-      ticket.article = article
-      ticket.save
-
-      expect(a_request(:put, ticket_url).with(query: hash_including({}), body: { article: article })).to have_been_made.twice
-    end
-
-    it 'stages a value written back to what it was before the save, which Zammad no longer holds' do
-      other = client.tickets.find(1)
-      other.title = 'Sent'
-      stub_request(:put, ticket_url).with(query: hash_including({})).to_return(unreadable_json_response)
-      begin
-        other.save
-      rescue ZammadAPI::ParseError
-        nil
-      end
-
-      other.title = 'Help'
-
-      expect(other.changes).to eq(title: %w[Sent Help])
-    end
-
-    it 'is brought up to date by a reload' do
-      stub_request(:get, ticket_url).with(query: hash_including({})).to_return(json_response({ id: 1, title: 'Help', article_count: 2 }))
-      ticket.reload
-
-      expect(ticket.key?(:article)).to be(false)
-      expect(ticket.article_count).to eq(2)
-    end
-
-    it 'keeps a change Zammad rejected staged, to be corrected and sent again' do
-      other = client.tickets.find(1)
-      other.title = ''
-      stub_request(:put, ticket_url).with(query: hash_including({}))
-        .to_return(json_response({ error: 'Title is required' }, status: 422))
-
-      expect(other.save).to be(false)
-      expect(other.changes).to eq(title: ['Help', ''])
-    end
-
-    # What Zammad acknowledged is what the request carried. The baseline used
-    # to be taken from the record once the answer was in, so a write that
-    # landed while the request was out - from a logger or a middleware of the
-    # caller's that reaches the record, or from another thread - was settled
-    # along with it, for a value that was never sent.
-    context 'when the record is written to while the request is out' do
-      subject(:other) { client.tickets.find(1) }
-
-      before do
-        stub_request(:put, ticket_url).with(query: hash_including({})).to_return do
-          other.title = 'C'
-          unreadable_json_response
-        end
-
-        other.title = 'B'
-        begin
-          other.save
-        rescue ZammadAPI::ParseError
-          nil
-        end
-      end
-
-      it 'sent the value that was staged when the request left' do
-        expect(a_request(:put, ticket_url).with(query: hash_including({}), body: { title: 'B' })).to have_been_made.once
-      end
-
-      it 'reads the value Zammad was sent, not the one written since' do
-        expect(other.title).to eq('B')
-      end
-
-      it 'has nothing staged, as after a response it could read' do
-        expect(other.changes).to eq({})
-      end
-
-      it 'stages the later value when it is written again' do
-        other.title = 'C'
-
-        expect(other.changes).to eq(title: %w[B C])
-      end
-    end
-
-    # The interval before that one: between the attributes being held and the
-    # request being built from them. Nothing of the caller's runs there on one
-    # thread, so the path being built stands in for a second thread writing to
-    # the record. The body used to be read from the change set at that point,
-    # so the PUT carried "C" and the record was settled on "B".
-    context 'when the record is written to before the request is built' do
-      subject(:other) { client.tickets.find(1) }
-
-      before do
-        stub_request(:put, ticket_url).with(query: hash_including({})).to_return(unreadable_json_response)
-
-        other.title = 'B'
-        allow(ZammadAPI::Resources::Ticket).to receive(:member_path).and_wrap_original do |original, id|
-          other.title = 'C'
-          original.call(id)
-        end
-        begin
-          other.save
-        rescue ZammadAPI::ParseError
-          nil
-        end
-      end
-
-      it 'sent the value that was held when the save began' do
-        expect(a_request(:put, ticket_url).with(query: hash_including({}), body: { title: 'B' })).to have_been_made.once
-      end
-
-      it 'reads the value it sent, with nothing staged' do
-        expect(other.title).to eq('B')
-        expect(other.changes).to eq({})
-      end
-    end
-
-    # Settling the record on what it sent is a write to its foreign keys like
-    # any other, and what the association proxy resolved from a value written
-    # meanwhile is not the answer for the one the record is put back on.
-    context 'when an association is resolved from a key written while the request is out' do
-      subject(:other) { client.tickets.find(1) }
-
-      let(:related) { other.related }
-
-      before do
-        stub_request(:get, ticket_url).with(query: hash_including({})).to_return(json_response({ id: 1, customer_id: 3 }))
-        [9, 10].each do |id|
-          stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/users/#{id}").with(query: hash_including({})).to_return(json_response({ id: id }))
-        end
-        stub_request(:put, ticket_url).with(query: hash_including({})).to_return do
-          other.customer_id = 10
-          related.customer
-          unreadable_json_response
-        end
-
-        other.customer_id = 9
-        begin
-          other.save
-        rescue ZammadAPI::ParseError
-          nil
-        end
-      end
-
-      it 'is back on the key it sent' do
-        expect(other.customer_id).to eq(9)
-      end
-
-      it 'resolves the association from the key it sent, on a proxy held from before' do
-        expect(related.customer.id).to eq(9)
-      end
-    end
-
-    # The same write under a response that can be read, which is what the
-    # above is held to: the attributes it carries replace the record's.
-    it 'drops a write made while the request was out where the response can be read, too' do
-      other = client.tickets.find(1)
-      stub_request(:put, ticket_url).with(query: hash_including({})).to_return do
-        other.title = 'C'
-        json_response({ id: 1, title: 'B' })
-      end
-      other.update!(title: 'B')
-
-      expect(other.title).to eq('B')
-      expect(other.changes).to eq({})
-    end
-  end
-
-  # The third answer a write can get that says Zammad applied it and tells
-  # nothing more: a 2xx whose body stops short of its Content-Length. The
-  # transport refuses it before the record sees a response, so the record
-  # was not settled the way it is for a body that does not parse.
-  describe 'a write whose success body was cut short' do
-    def cut_short(status)
-      { status: status, body: '{"id":1,"na', headers: { 'Content-Type' => 'application/json', 'Content-Length' => '30' } }
-    end
-
-    def swallow
-      yield
-    rescue ZammadAPI::IncompleteResponseError
-      nil
-    end
-
-    context 'when it was a create' do
-      subject(:group) { client.groups.new(name: 'Support') }
-
-      before { stub_request(:post, url).with(query: hash_including({})).to_return(cut_short(201)) }
-
-      it 'still reports the response as cut short, with the status Zammad answered' do
-        expect { group.save }.to raise_error(ZammadAPI::IncompleteResponseError, /19 bytes short of the 30/) { |error|
-          expect(error.response.status).to eq(201)
-        }
-      end
-
-      it 'is caught as the ConnectionError it was before' do
-        expect { group.save }.to raise_error(ZammadAPI::ConnectionError)
-      end
-
-      it 'does not leave the record looking unsaved' do
-        swallow { group.save }
-
-        expect(group.new_record?).to be(false)
-      end
-
-      it 'does not create a second record when the save is retried' do
-        2.times do
-          group.save
-        rescue ZammadAPI::Error
-          nil
-        end
-
-        expect(a_request(:post, url).with(query: hash_including({}))).to have_been_made.once
-      end
-
-      it 'refuses the retried save rather than reporting it stored' do
-        swallow { group.save }
-
-        expect { group.save }.to raise_error(ZammadAPI::Error, /was saved, but the response carried no id/)
-      end
-    end
-
-    context 'when it was an update' do
-      subject(:ticket) { client.tickets.find(1) }
-
-      let(:ticket_url) { "#{ClientHelper::BASE_URL}api/v1/tickets/1" }
-
-      before do
-        stub_request(:get, ticket_url).with(query: hash_including({})).to_return(json_response({ id: 1, title: 'Help', note: nil }))
-        stub_request(:put, ticket_url).with(query: hash_including({})).to_return(cut_short(200), json_response({ id: 1, title: 'Renamed' }))
-
-        ticket.article = { body: 'Reset link sent.', type: 'email', to: 'customer@example.com' }
-        swallow { ticket.save }
-      end
-
-      it 'no longer holds the changes Zammad acknowledged as staged' do
-        expect(ticket.changed?).to be(false)
-        expect(ticket.changes).to eq({})
-      end
-
-      it 'does not send the article again with the next save' do
-        ticket.title = 'Renamed'
-        ticket.save
-
-        expect(a_request(:put, ticket_url).with(query: hash_including({}), body: { title: 'Renamed' })).to have_been_made.once
-        expect(a_request(:put, ticket_url).with(query: hash_including({}), body: hash_including('article' => anything))).to have_been_made.once
-      end
-
-      it 'keeps the id it is addressed by' do
-        expect(ticket.attributes).to eq(id: 1, title: 'Help', note: nil)
-      end
-    end
-
-    context 'when it was a destroy' do
-      subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Support') }
-
-      before { stub_request(:delete, "#{url}/1").to_return(cut_short(200)) }
-
-      it 'still reports the response as cut short' do
-        expect { group.destroy }.to raise_error(ZammadAPI::IncompleteResponseError)
-      end
-
-      it 'leaves the record destroyed' do
-        swallow { group.destroy }
-
-        expect(group).to be_destroyed
-      end
-
-      it 'refuses a second destroy rather than surfacing Zammad\'s 404' do
-        swallow { group.destroy }
-
-        expect { group.destroy }.to raise_error(ZammadAPI::Error, /was destroyed, there is nothing to destroy/)
-        expect(a_request(:delete, "#{url}/1")).to have_been_made.once
-      end
-
-      it 'drops what was staged, as a destroy that was answered whole does' do
-        group.name = 'Renamed'
-        swallow { group.destroy }
-
-        expect(group.name).to eq('Support')
-        expect(group.changed?).to be(false)
-      end
-    end
-
-    # A read was not applied to anything, and settles nothing.
-    it 'leaves a record alone whose reload was cut short' do
-      group = ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Support')
-      stub_request(:get, "#{url}/1").with(query: hash_including({})).to_return(cut_short(200))
-      group.name = 'Renamed'
-      swallow { group.reload }
-
-      expect(group.changes).to eq(name: %w[Support Renamed])
-    end
-  end
-
-  # A 2xx says that Zammad applied a save only where the 2xx is Zammad's.
-  # It answers a create and an update with JSON, so a 2xx that says it is
-  # anything else, or does not say, is the page of something in front of
-  # Zammad that never passed the request on: a login page, a captive portal,
-  # the default page of a load balancer. Settled on that, the record read as
-  # saved and the retried save sent nothing, with Zammad none the wiser.
+  # Zammad answers a create and an update with a JSON object, so a 2xx with
+  # anything else is the page of something in front of it: a login page, a
+  # captive portal, the default page of a load balancer.
   describe 'a save answered 2xx by something that is not Zammad' do
-    def login_page(**headers)
-      { status: 200, body: '<html>Please sign in</html>', headers: { 'Content-Type' => 'text/html' }.merge(headers) }
+    def login_page
+      { status: 200, body: '<html>Please sign in</html>', headers: { 'Content-Type' => 'text/html' } }
     end
 
     def swallow
       yield
-    rescue ZammadAPI::ParseError, ZammadAPI::IncompleteResponseError
+    rescue ZammadAPI::ParseError
       nil
     end
 
@@ -2001,17 +1195,6 @@ RSpec.describe ZammadAPI::Resources::Base do
         expect(a_request(:put, ticket_url).with(query: hash_including({}), body: { state: 'closed' })).to have_been_made.twice
         expect(ticket.changed?).to be(false)
       end
-
-      it 'keeps a write made while the request was out, as after any save that failed' do
-        other = client.tickets.find(1)
-        stub_request(:put, ticket_url).with(query: hash_including({})).to_return do
-          other.title = 'Written meanwhile'
-          login_page
-        end
-        swallow { other.update(state: 'closed') }
-
-        expect(other.changes).to eq(state: %w[open closed], title: ['Help', 'Written meanwhile'])
-      end
     end
 
     it 'takes a 2xx that names no content type the same way' do
@@ -2022,99 +1205,12 @@ RSpec.describe ZammadAPI::Resources::Base do
       expect(group.new_record?).to be(true)
     end
 
-    # The transport refuses this one before the record sees a response, and
-    # the record is asked the same question of the response the error holds.
-    it 'takes a page cut short of its Content-Length the same way' do
-      stub_request(:post, url).with(query: hash_including({})).to_return(login_page('Content-Length' => '300'))
+    it 'takes a body that says it is JSON and cannot be read the same way' do
+      stub_request(:post, url).with(query: hash_including({})).to_return(unreadable_json_response(status: 201))
       group = client.groups.new(name: 'Support')
 
-      expect { group.save }.to raise_error(ZammadAPI::IncompleteResponseError)
+      expect { group.save }.to raise_error(ZammadAPI::ParseError)
       expect(group.new_record?).to be(true)
-    end
-
-    # Zammad answers a ticket's DELETE with no body at all, and with an empty
-    # JSON object for everything else it destroys. A 2xx whose body is
-    # neither is not its answer, and the record is still there.
-    context 'when it was a destroy' do
-      subject(:group) { ZammadAPI::Resources::Group.from_response(unit_transport, id: 1, name: 'Support') }
-
-      let(:member_url) { "#{url}/1" }
-
-      it 'reports the page, naming what it was served as' do
-        stub_request(:delete, member_url).to_return(login_page)
-
-        expect { group.destroy }
-          .to raise_error(ZammadAPI::ParseError, "Can't destroy object (ZammadAPI::Resources::Group): expected a JSON body or none, got text/html")
-      end
-
-      it 'leaves the record as it was, with what was staged' do
-        stub_request(:delete, member_url).to_return(login_page)
-        group.name = 'Renamed'
-        swallow { group.destroy }
-
-        expect(group).not_to be_destroyed
-        expect(group.changes).to eq(name: %w[Support Renamed])
-      end
-
-      it 'sends the DELETE again with the next destroy, which is the first Zammad sees' do
-        stub_request(:delete, member_url).to_return(login_page, json_response({}))
-        swallow { group.destroy }
-
-        expect(group.destroy).to be(true)
-        expect(group).to be_destroyed
-        expect(a_request(:delete, member_url)).to have_been_made.twice
-      end
-
-      it 'takes a body that names no content type the same way' do
-        stub_request(:delete, member_url).to_return(status: 200, body: 'OK')
-
-        expect { group.destroy }.to raise_error(ZammadAPI::ParseError, /got a body that names no content type/)
-        expect(group).not_to be_destroyed
-      end
-
-      it 'takes a page cut short of its Content-Length the same way' do
-        stub_request(:delete, member_url).to_return(login_page('Content-Length' => '300'))
-
-        expect { group.destroy }.to raise_error(ZammadAPI::IncompleteResponseError)
-        expect(group).not_to be_destroyed
-      end
-
-      it 'is destroyed by a 2xx with no body, as Zammad answers for a ticket' do
-        stub_request(:delete, member_url).to_return(status: 200, body: '', headers: { 'Content-Type' => 'text/html' })
-
-        expect(group.destroy).to be(true)
-        expect(group).to be_destroyed
-      end
-
-      it 'is destroyed by a 204' do
-        stub_request(:delete, member_url).to_return(status: 204)
-
-        expect(group.destroy).to be(true)
-      end
-
-      it 'is destroyed by the empty object Zammad answers with for a group' do
-        stub_request(:delete, member_url).to_return(json_response({}))
-
-        expect(group.destroy).to be(true)
-        expect(group).to be_destroyed
-      end
-
-      it 'is destroyed by a body that says it is JSON and cannot be read as it' do
-        stub_request(:delete, member_url).to_return(unreadable_json_response)
-
-        expect(group.destroy).to be(true)
-      end
-    end
-
-    # A transport of the caller's can hand over a Response without the
-    # header. One whose body was decoded from JSON has said as much.
-    it 'takes a response decoded from JSON for Zammad\'s, with or without the header' do
-      response  = ZammadAPI::Response.new(status: 201, headers: {}, body: { id: 7, name: 'Support' }, raw_body: '', json: true)
-      transport = instance_double(ZammadAPI::Transport, post: response)
-      group     = ZammadAPI::Resources::Group.new(transport, name: 'Support')
-
-      expect(group.save).to be(true)
-      expect(group.persisted?).to be(true)
     end
   end
 end

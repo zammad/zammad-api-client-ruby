@@ -11,22 +11,12 @@ module ZammadAPI
     DEFAULT_OPEN_TIMEOUT: Integer
     DEFAULT_RETRIES: Integer
     DEFAULT_RETRY_INTERVAL: Float
-    MAX_SECONDS: Integer
-    REDACTED_ATTRIBUTES: Array[Symbol]
     REDACTION: String
     DEFAULT_USER_AGENT: String
-    SCHEME_PATTERN: Regexp
-    URL_PATTERN: Regexp
-    URL_SUFFIX_PATTERN: Regexp
-    URL_SCHEME_PATTERN: Regexp
-    URL_AUTHORITY_PATTERN: Regexp
     CREDENTIAL_OPTIONS: Hash[Symbol, Array[Symbol]]
 
     def self.new: (**untyped) -> instance
-    TOKEN_OPTIONS: Array[Symbol]
     def self.merge_options: (Hash[Symbol, untyped] options, Hash[Symbol, untyped] overrides) -> Hash[Symbol, untyped]
-    def self.names_credential?: (Symbol name, untyped value) -> bool
-    def self.blank_token?: (untyped value) -> bool
 
     attr_reader url: String
     attr_reader user: String?
@@ -50,7 +40,7 @@ module ZammadAPI
       ?password: String?,
       ?http_token: String?,
       ?oauth2_token: String?,
-      ?user_agent: String,
+      ?user_agent: String?,
       ?timeout: untyped,
       ?open_timeout: untyped,
       ?retries: untyped,
@@ -62,46 +52,22 @@ module ZammadAPI
       ?logger: Logger?
     ) -> void
 
-    def redacted_url: () -> String
-    def redacted: (String value) -> String
     def authentication_scheme: () -> Symbol
     def with: (**untyped) -> Config
     def inspect: () -> String
     def to_s: () -> String
     def pretty_print: (untyped printer) -> void
-    def as_json: (*untyped) -> Hash[Symbol, untyped]
-    def to_json: (?untyped state) -> String
-    def encode_with: (untyped coder) -> void
     def to_h: () -> Hash[Symbol, untyped]
 
     private
 
-    def redact_userinfo: (String) -> String
-    def normalize_token: (Symbol name, untyped value) -> String?
-    def normalize_user_agent: (untyped value) -> untyped
-    def normalize_proxy: (untyped) -> String?
-    def normalize_adapter: (untyped) -> Symbol?
     def render: (Symbol, untyped) -> String
-    def placeholder: (Symbol, untyped) -> String?
-    def printable: (Symbol, untyped) -> untyped
     def normalize_url: (untyped) -> String
-    def hostless?: (String) -> bool
-    def inline_credentials?: (String) -> bool
-    def inline_credentials_message: (String) -> String
+    def validate!: () -> void
     def validate_credentials!: () -> void
-    def multiple_credentials_message: (Array[Symbol] schemes) -> String
-    def positive_number?: (untyped) -> bool
     def validate_numbers!: () -> void
-    def too_long_message: (Symbol name, untyped value) -> String
-    def validate_user_agent!: () -> void
-    HEADER_OPTIONS: Array[Symbol]
-    def validate_header_options!: () -> void
-    def header_text: (Symbol name, String value) -> String
-    def validate_ssl_verify!: () -> void
-    def validate_middleware!: () -> void
-    def validate_logger!: () -> void
-    def debug_needs_argument?: () -> bool
-    def non_empty: (untyped) -> untyped
-    def immutable: (untyped) -> untyped
+    def validate_proxy!: () -> void
+    def present: (untyped) -> untyped
+    def stripped: (untyped) -> String?
   end
 end

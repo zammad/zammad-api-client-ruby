@@ -1,13 +1,8 @@
 module ZammadAPI
   class Test
-    # Both are deliberately outside ZammadAPI::Error: they say the test is
-    # wrong, not that Zammad refused anything, and the signature said
-    # otherwise - so a `rescue ZammadAPI::Error` type-checked as catching a
-    # forgotten stub that it does not in fact catch.
+    # Deliberately outside ZammadAPI::Error: it says the test is wrong, not
+    # that Zammad refused anything.
     class UnstubbedRequestError < ::StandardError
-    end
-
-    class AmbiguousStubError < ::StandardError
     end
 
     class Request < ::Data
@@ -26,10 +21,7 @@ module ZammadAPI
 
     @stubs: Hash[[Symbol, String], Array[Hash[Symbol, untyped]]]
     @requests: Array[Request]
-    @served: Hash[[[Symbol, String], Hash[String, untyped]?], Hash[Symbol, untyped]]
     @monitor: Thread::Mutex
-    @transport: Test::Transport
-    @client: Client
 
     def initialize: (**untyped options) -> void
     def stub: (Symbol method, String path, ?status: Integer, ?body: untyped, ?headers: Hash[untyped, untyped], ?query: Hash[untyped, untyped]?) -> self
@@ -46,35 +38,21 @@ module ZammadAPI
       ?body: untyped,
       ?headers: Hash[untyped, untyped]?,
       ?resource_class: Class?,
-      ?on_behalf_of: String?,
-      ?config: Config
+      ?on_behalf_of: String?
     ) -> Response
 
     private
 
-    def attempt: (Request request) -> Response
-    def key: (Symbol method, String path) -> [Symbol, String]
-    def raw_body_for: (untyped body) -> String
-    def response_headers: (Hash[untyped, untyped] headers, untyped body) -> Hash[String, String]
-    def snapshot: (untyped) -> untyped
-    def take: (Symbol method, String path, Hash[String, untyped] params) -> Hash[Symbol, untyped]?
-    def later_page?: (Hash[String, untyped]? scope, Hash[String, untyped] params) -> bool
-    def advance: (Array[Hash[Symbol, untyped]] queued, Array[Integer] group, bool turn_over) -> Hash[Symbol, untyped]
-    def count_request?: (Hash[String, untyped]? scope, Hash[String, untyped] params) -> bool
-    def counted_alone?: (Hash[Symbol, untyped] stub) -> bool
-    def most_specific: (Array[Hash[Symbol, untyped]] queued, Array[Integer] matching, Symbol method, String path) -> Array[Integer]
-    def ambiguous_message: (Symbol method, String path, Array[Hash[String, untyped]?] scopes) -> String
-    def matches?: (Hash[untyped, untyped]? expected, Hash[String, untyped] params) -> bool
-    PAGE_NUMBER: Regexp
+    # private_constant in the source; RBS has no way to say so.
+    EMPTY_PAGE: Hash[Symbol, untyped]
 
-    def paged_body: (Hash[Symbol, untyped] stub, Hash[String, untyped] params, untyped body) -> untyped
-    def page_of: (Array[untyped] records, [Integer, Integer]? window) -> Array[untyped]
-    def page_window: (Hash[String, untyped] params) -> [Integer, Integer]?
-    def response_for: (Hash[Symbol, untyped] stub, Hash[String, untyped] params) -> Response
-    def recounted: (Hash[String, String] headers, String raw_body) -> Hash[String, String]
-    def build_response: (Hash[Symbol, untyped] stub, untyped body, String raw_body, json: bool, ?headers: Hash[String, String]) -> Response
-    def unstubbed_message: (Symbol method, String path, Hash[String, untyped] params) -> String
-    def unmatched_query_message: (String request, Hash[String, untyped] params, Array[Hash[String, untyped]?] scopes) -> String
+    def key: (Symbol method, String path) -> [Symbol, String]
+    def stringify: (untyped value) -> untyped
+    def take: (Symbol method, String path, Hash[String, untyped] params) -> Hash[Symbol, untyped]?
+    def matches?: (Hash[String, untyped]? expected, Hash[String, untyped] params) -> bool
+    def response_for: (Hash[Symbol, untyped] stub) -> Response
+    def stubbed_endpoints: () -> Array[String]
+    def unstubbed_message: (Request request) -> String
 
     class Transport
       include ::ZammadAPI::Transport::Verbs
@@ -83,11 +61,9 @@ module ZammadAPI
       attr_reader config: Config
       attr_reader on_behalf_of: String?
 
-      def initialize: (Test test, ?on_behalf_of: (String | Integer)?, ?config: Config) -> void
-      def with_on_behalf_of: ((String | Integer)? identifier) -> Test::Transport
+      def initialize: (Test test, ?on_behalf_of: String?, ?config: Config) -> void
+      def with_on_behalf_of: (String? identifier) -> Test::Transport
       def with_config: (Config) -> Test::Transport
-      def encode_with: (untyped coder) -> void
-
 
       def request: (Symbol method, String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?, ?resource_class: Class?) -> Response
     end

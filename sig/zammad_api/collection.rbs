@@ -5,10 +5,6 @@ module ZammadAPI
   class Collection[R < Resources::Base]
     include Enumerable[R]
 
-    # Both are private_constant in the source; RBS has no way to say so.
-    SORT_DIRECTIONS: Array[String]
-    SORT_ATTRIBUTE: Regexp
-
     @transport: Transport
     @resource_class: untyped
     @path: String
@@ -16,11 +12,9 @@ module ZammadAPI
     @query: Hash[Symbol, untyped]
     @max_per_page: Integer
     @sortable: bool
-    @unsortable_hint: String
     @per_page: Integer
     @page: Integer?
     @search: bool
-    @widens: bool
     @paginated: bool
 
     def initialize: (
@@ -30,12 +24,10 @@ module ZammadAPI
       operation: String,
       max_per_page: Integer,
       sortable: bool,
-      unsortable_hint: String,
       ?query: Hash[Symbol, untyped],
       ?per_page: Integer?,
       ?page: Integer?,
       ?search: bool,
-      ?widens: bool,
       ?paginated: bool
     ) -> void
 
@@ -48,50 +40,20 @@ module ZammadAPI
     def page: (Integer number, ?per_page: Integer?) -> Collection[R]
     def first: () -> R?
              | (Integer count) -> Array[R]
-    def take: (Integer count) -> Array[R]
     def find: (?untyped ifnone) { (R) -> boolish } -> R?
             | (*untyped) -> untyped
     def order: (*(Symbol | String) attributes, **(Symbol | String) directions) -> Collection[R]
     def pluck: (*(Symbol | String) keys) -> Array[untyped]
     def count: (*untyped) ?{ (R) -> boolish } -> Integer
-    def size: (*untyped) ?{ (R) -> boolish } -> Integer
-    def length: (*untyped) ?{ (R) -> boolish } -> Integer
-    def each_slice: (Integer size) { (Array[R]) -> void } -> Collection[R]
-                  | (Integer size) -> Enumerator[Array[R], untyped]
-    def each_cons: (Integer size) { (Array[R]) -> void } -> Collection[R]
-                 | (Integer size) -> Enumerator[Array[R], untyped]
-    def lazy: () -> Enumerator::Lazy[R, void]
     def empty?: () -> bool
-    def any?: () -> bool
-           | ...
-    def none?: () -> bool
-            | ...
     def inspect: () -> String
 
     private
 
-    def own_request_for_first?: (untyped count) -> bool
-    def find_by_id_message: (untyped) -> String
-    def resource_reader: () -> String
-    def sort_columns: (Array[untyped] attributes, Hash[untyped, untyped] directions) -> Hash[String, String]
-    def sort_attribute!: (untyped attribute) -> String
-    def sort_direction!: (String name, untyped direction) -> String
-    def sorted_by: () -> Hash[String, String]
-    def positive_integer!: (untyped, String) -> Integer
-    def page_size!: (untyped, String) -> Integer
     def walk: () { (Array[R]) -> void } -> void
-    def read_whole: () { (Array[R]) -> void } -> void
-    def refuse_ignored_page!: (Integer page, Integer per_page, Integer digest) -> void
-    def page_after: (Integer page, Integer per_page, Integer received, Integer? total) -> [ Integer, Integer ]
-    def widened: (Integer covered, Integer? total) -> [ Integer, Integer ]
-    def each_distinct: () { (Resources::Base) -> void } -> void
-    def with: (?page: Integer?, ?per_page: Integer, ?query: Hash[Symbol, untyped], ?widens: bool) -> Collection[R]
-    def hits_past?: (Integer covered, Integer? total) -> bool
-    def fetch: (Integer, Integer) -> [ Array[R], Integer, Integer? ]
-    def page_query: (Integer page, Integer per_page) -> Hash[Symbol, untyped]
-    def tie_broken: () -> Hash[Symbol, untyped]
-    def page_digest: (Array[Hash[Symbol, untyped]] decoded) -> Integer
+    def fetch: (Integer? number) -> Array[R]
     def total_count: () -> Integer?
-    def clamp_per_page: (untyped) -> Integer
+    def sorted_by: () -> Hash[String, String]
+    def with: (?page: Integer?, ?per_page: Integer?, ?query: Hash[Symbol, untyped]) -> Collection[R]
   end
 end

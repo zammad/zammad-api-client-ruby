@@ -14,7 +14,7 @@ client = ZammadAPI::Client.from_env
 # `me` answers for any account. `client.version` would name the Zammad
 # version as well, but Zammad serves it to administrators only, and an
 # agent's token is answered with ZammadAPI::AuthorizationError.
-puts "connected to #{client.config.redacted_url} as #{client.me.email}"
+puts "connected to #{client.config.url} as #{client.me.email}"
 
 # Create a ticket together with its first article.
 ticket = client.tickets.create(

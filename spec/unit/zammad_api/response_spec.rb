@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 RSpec.describe ZammadAPI::Response do
-  def build(status: 200, body: { a: 1 }, raw_body: '{"a":1}', headers: {}, json: !body.is_a?(String))
-    described_class.new(status: status, headers: headers, body: body, raw_body: raw_body, json: json)
+  def build(status: 200, body: { a: 1 }, raw_body: '{"a":1}', headers: {})
+    described_class.new(status: status, headers: headers, body: body, raw_body: raw_body)
   end
 
   describe '#success?' do
@@ -19,41 +19,25 @@ RSpec.describe ZammadAPI::Response do
     end
   end
 
-  describe '#json?' do
-    it 'is true when the body was decoded' do
-      expect(build).to be_json
+  describe '.decode_body' do
+    it 'decodes a JSON body with symbol keys' do
+      expect(described_class.decode_body('application/json; charset=utf-8', '{"a":{"b":1}}')).to eq(a: { b: 1 })
     end
 
-    it 'is false when the body is the untouched raw body' do
-      raw = '<html></html>'
-      expect(build(body: raw, raw_body: raw)).not_to be_json
+    it 'leaves a body of another content type as it is' do
+      expect(described_class.decode_body('text/html', '{"a":1}')).to eq('{"a":1}')
     end
 
-    it 'reports what the decoder recorded, not whether the two bodies differ' do
-      expect(build(body: '"a string"', raw_body: '"a string"', json: true)).to be_json
-    end
-  end
-
-  # What a response says it carries, which is not what it turned out to: a
-  # JSON body that did not parse still came from something that speaks JSON.
-  describe '#json_content_type?' do
-    it 'is true for a JSON content type' do
-      expect(build(headers: { 'content-type' => 'application/json; charset=utf-8' })).to be_json_content_type
+    it 'leaves a body as it is when there is no content type' do
+      expect(described_class.decode_body(nil, '{"a":1}')).to eq('{"a":1}')
     end
 
-    it 'is true where the body then did not decode' do
-      response = build(body: '{"id":', raw_body: '{"id":', headers: { 'content-type' => 'application/json' })
-
-      expect(response).to be_json_content_type
-      expect(response).not_to be_json
+    it 'leaves an empty JSON body as it is' do
+      expect(described_class.decode_body('application/json', '')).to eq('')
     end
 
-    it 'is false for another content type' do
-      expect(build(headers: { 'content-type' => 'text/html' })).not_to be_json_content_type
-    end
-
-    it 'is false where the response names none' do
-      expect(build).not_to be_json_content_type
+    it 'leaves a JSON body that does not parse as it is' do
+      expect(described_class.decode_body('application/json', '{"id":')).to eq('{"id":')
     end
   end
 
@@ -88,90 +72,6 @@ RSpec.describe ZammadAPI::Response do
 
     it 'accepts an empty list' do
       expect(build(body: []).decoded(:array, operation: 'get list')).to eq([])
-    end
-
-    # An unexpanded search answers with ids. Passing them on stored an Integer
-    # as a record's attributes, and the first reader died with a TypeError
-    # from deep inside the gem.
-    it 'raises for a list of scalars rather than building records from them' do
-      expect { build(body: [1, 2, 3]).decoded(:array, operation: 'get list') }
-        .to raise_error(ZammadAPI::ParseError, "Can't get list: expected a JSON array of objects, got an array holding Integer")
-    end
-
-    it 'raises for a list that is only partly objects' do
-      expect { build(body: [{ id: 1 }, 'nope']).decoded(:array, operation: 'get list') }
-        .to raise_error(ZammadAPI::ParseError, /an array holding String/)
-    end
-
-    # `find` cannot tell "no offender" from "the offender is nil", so a null
-    # passed as an object and the first read of it died with NoMethodError.
-    it 'raises for a list holding a null' do
-      expect { build(body: [nil]).decoded(:array, operation: 'get list') }
-        .to raise_error(ZammadAPI::ParseError, "Can't get list: expected a JSON array of objects, got an array holding NilClass")
-    end
-
-    it 'raises for a null among the objects of a list' do
-      expect { build(body: [{ id: 1 }, nil, { id: 3 }]).decoded(:array, operation: 'get list') }
-        .to raise_error(ZammadAPI::ParseError, /an array holding NilClass/)
-    end
-
-    it 'names the resource class when a list element has the wrong shape' do
-      expect { build(body: [1]).decoded(:array, operation: 'get list', resource_class: ZammadAPI::Resources::User) }
-        .to raise_error(/\(ZammadAPI::Resources::User\)/)
-    end
-  end
-
-  # A list is an array, and a search asked for its total answers with an
-  # object holding the array and the figure. A walk reads either.
-  describe '#decoded_list' do
-    it 'returns an array body, and no total' do
-      expect(build(body: [{ a: 1 }]).decoded_list(operation: 'get list')).to eq([[{ a: 1 }], nil])
-    end
-
-    it 'returns the records and the total of a counted list' do
-      expect(build(body: { records: [{ a: 1 }], total_count: 7 }).decoded_list(operation: 'get list')).to eq([[{ a: 1 }], 7])
-    end
-
-    it 'accepts a counted list with no records' do
-      expect(build(body: { records: [], total_count: 0 }).decoded_list(operation: 'get list')).to eq([[], 0])
-    end
-
-    it 'reports a negative total as none, and keeps the records' do
-      expect(build(body: { records: [{ a: 1 }], total_count: -1 }).decoded_list(operation: 'get list')).to eq([[{ a: 1 }], nil])
-    end
-
-    it 'reports a total that is not a number as none' do
-      expect(build(body: { records: [], total_count: '7' }).decoded_list(operation: 'get list')).to eq([[], nil])
-    end
-
-    it 'raises for records that are not objects' do
-      expect { build(body: { records: [1, 2], total_count: 2 }).decoded_list(operation: 'get list') }
-        .to raise_error(ZammadAPI::ParseError, "Can't get list: expected a JSON array of objects, got an array holding Integer")
-    end
-
-    it 'raises for a null among the records of a counted list' do
-      expect { build(body: { records: [nil, { a: 1 }], total_count: 2 }).decoded_list(operation: 'get list') }
-        .to raise_error(ZammadAPI::ParseError, "Can't get list: expected a JSON array of objects, got an array holding NilClass")
-    end
-
-    it 'raises for an object that holds no records' do
-      expect { build(body: { total_count: 2 }).decoded_list(operation: 'get list') }
-        .to raise_error(ZammadAPI::ParseError, "Can't get list: expected a JSON array, got Hash")
-    end
-
-    it 'raises for records that are not a list' do
-      expect { build(body: { records: 'none', total_count: 0 }).decoded_list(operation: 'get list') }
-        .to raise_error(ZammadAPI::ParseError, /expected a JSON array, got Hash/)
-    end
-
-    it 'raises when the body was never JSON' do
-      expect { build(body: '<html>', raw_body: '<html>').decoded_list(operation: 'get list') }
-        .to raise_error(ZammadAPI::ParseError, /got String/)
-    end
-
-    it 'names the resource class in the message' do
-      expect { build(body: {}).decoded_list(operation: 'get list', resource_class: ZammadAPI::Resources::User) }
-        .to raise_error(/\(ZammadAPI::Resources::User\)/)
     end
   end
 

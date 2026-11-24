@@ -57,12 +57,9 @@ end
 # 3. A resumable page loop ---------------------------------------------------
 #
 # Own the page number when the job has to survive being interrupted. The
-# loop ends on a page with nothing on it, and not on a page short of
-# PER_PAGE: that is the size asked for, and what counts is the size served.
-# An instance that serves 25 where 50 were asked for hands back a "short"
-# page every time, and a loop that stops on one has stopped after the first
-# with the checkpoint cleared. `find_each` and `in_batches` learn the size
-# from the first page; here one more request at the end does the same job.
+# loop ends on a page with nothing on it rather than on one short of
+# PER_PAGE, at the cost of one more request at the end, so an instance that
+# serves fewer records than were asked for is still read to the end.
 #
 # A page number is a position, not a record, so it only resumes where it left
 # off while nothing before it goes away. Delete one ticket from a page already

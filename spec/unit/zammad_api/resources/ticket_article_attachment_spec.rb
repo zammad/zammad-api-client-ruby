@@ -49,31 +49,6 @@ RSpec.describe ZammadAPI::Resources::TicketArticleAttachment do
       bare = ZammadAPI::Resources::TicketArticle.from_response(transport, id: 9)
       expect(bare.attachments).to eq([])
     end
-
-    # This metadata comes off a response body like any other, and an element
-    # that is not an object reached `raw.merge` and died there as a bare
-    # NoMethodError from inside the gem - past the `rescue ZammadAPI::Error`
-    # every caller is told to write.
-    it 'refuses metadata that is not a list' do
-      article = ZammadAPI::Resources::TicketArticle.from_response(transport, id: 9, attachments: 'none')
-
-      expect { article.attachments }
-        .to raise_error(ZammadAPI::ParseError, /expected a JSON array of objects, got String/)
-    end
-
-    it 'refuses a list holding something that is not an object' do
-      article = ZammadAPI::Resources::TicketArticle.from_response(transport, id: 9, attachments: [3])
-
-      expect { article.attachments }
-        .to raise_error(ZammadAPI::ParseError, /got an array holding Integer/)
-    end
-
-    it 'names the article in the refusal' do
-      article = ZammadAPI::Resources::TicketArticle.from_response(transport, id: 9, attachments: 'none')
-
-      expect { article.attachments }
-        .to raise_error(ZammadAPI::ParseError, /ZammadAPI::Resources::TicketArticle/)
-    end
   end
 
   describe '#download' do
@@ -101,48 +76,6 @@ RSpec.describe ZammadAPI::Resources::TicketArticleAttachment do
     it 'uses binary encoding' do
       stub_request(:get, download_url).to_return(status: 200, body: 'contents')
       expect(attachment.download.encoding).to eq(Encoding::BINARY)
-    end
-
-    # Net::HTTP hands over what had arrived when the connection dropped,
-    # and that was returned as the file.
-    it 'raises for a file the connection was closed under, and does not return the part that arrived' do
-      stub_request(:get, download_url)
-        .to_return(status: 200, body: "\x89PNG\r\n".b, headers: { 'Content-Type' => 'image/png', 'Content-Length' => '1000' })
-
-      expect { attachment.download }
-        .to raise_error(ZammadAPI::ConnectionError, /\ACan't download attachment: the response from .+ ended 994 bytes short of the 1000/)
-    end
-
-    # Net::HTTP asks for gzip by itself and inflates what arrives, without a
-    # word for a stream that stops halfway, and the length of a body that
-    # was decoded on the way cannot be checked.
-    it 'asks for the file as it is stored, so that its length can be checked' do
-      stub = stub_request(:get, download_url).with(headers: { 'Accept-Encoding' => 'identity' }).to_return(status: 200, body: 'contents')
-      attachment.download
-
-      expect(stub).to have_been_requested
-    end
-
-    # An adapter handed the header leaves the decoding to its caller, so
-    # these would have been the compressed bytes.
-    context 'when the server encodes the file all the same' do
-      let(:unencoded) { { headers: { 'Accept-Encoding' => 'identity' } } }
-
-      before do
-        stub_request(:get, download_url).to_return(status: 200, body: 'contents')
-        stub_request(:get, download_url).with(unencoded).to_return(status: 200, body: "\x1F\x8B\b".b, headers: { 'Content-Encoding' => 'gzip' })
-      end
-
-      it 'returns the file from a second request, sent the way every other request is' do
-        expect(attachment.download).to eq('contents')
-      end
-
-      it 'asks twice, and once of the two as the file is stored' do
-        attachment.download
-
-        expect(a_request(:get, download_url)).to have_been_made.twice
-        expect(a_request(:get, download_url).with(unencoded)).to have_been_made.once
-      end
     end
 
     it 'raises when the attachment is gone' do

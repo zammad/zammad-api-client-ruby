@@ -1,18 +1,21 @@
 module ZammadAPI
   module Associations
-    # The readers are defined by the belongs_to and has_many declarations in
-    # lib/zammad_api/resources, onto a per-resource subclass of this one that
-    # has no name to declare. They are listed here so that callers get types
-    # and completion; every name is declared once and means the same target
-    # wherever it is declared, so the type of a given reader is accurate. The
-    # class is wider than any one resource, so a reader the record does not
-    # declare type-checks here and raises NoMethodError at runtime.
+    # The readers are answered through method_missing, from the belongs_to
+    # and has_many declarations in lib/zammad_api/resources. The ones this gem
+    # declares are listed here so that callers get types and completion; every
+    # name means the same target wherever it is declared, so the type of a
+    # given reader is accurate. The class is wider than any one resource, so
+    # a reader the record does not declare type-checks here and raises
+    # NoMethodError at runtime.
     class Proxy
       @record: Resources::Base
       @cache: Hash[Symbol, untyped]
 
       def initialize: (Resources::Base record) -> void
       def inspect: () -> String
+      def forget: () -> void
+      def method_missing: (Symbol, *untyped) -> untyped
+      def respond_to_missing?: (Symbol, ?bool) -> bool
 
       def created_by: () -> Resources::User?
       def updated_by: () -> Resources::User?
@@ -27,10 +30,9 @@ module ZammadAPI
 
       private
 
-      def belongs_to_target: (Symbol name, String class_name, Symbol foreign_key) -> untyped
-      def has_many_target: (Symbol name, String class_name, ^(String) -> String path) -> Array[untyped]
-      def forget_targets: () -> void
-      def refuse_destroyed!: (Symbol name) -> void
+      def associations: () -> Hash[Symbol, Hash[Symbol, untyped]]
+      def belongs_to_target: (Symbol name, Hash[Symbol, untyped] spec) -> untyped
+      def has_many_target: (Symbol name, Hash[Symbol, untyped] spec) -> Array[untyped]
       def resolve: (String class_name) -> untyped
     end
   end

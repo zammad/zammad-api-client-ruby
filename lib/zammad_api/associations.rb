@@ -32,107 +32,57 @@ module ZammadAPI
       end
 
       def inspect
-        "#<#{Proxy.name} #{@record.class.name} id=#{@record.id.inspect} #{@record.class.associations.keys.join(', ')}>"
+        "#<#{Proxy.name} #{@record.class.name} id=#{@record.id.inspect} #{associations.keys.join(', ')}>"
       end
+
+      # Drops the records read so far, so the next read follows the record's
+      # current foreign keys.
+      #
+      # @api private
+      # @return [void]
+      def forget
+        @cache = {}
+      end
+
+      def method_missing(name, *args)
+        spec = associations[name]
+        return super if spec.nil? || !args.empty?
+
+        spec[:type] == :belongs_to ? belongs_to_target(name, spec) : has_many_target(name, spec)
+      end
+
+      def respond_to_missing?(name, include_private = false) = associations.key?(name) || super
 
       private
 
-      # Memoized: the record an id points at does not change under the caller,
-      # and an unmemoized reader would turn a loop over tickets into a request
-      # per ticket per mention. The record empties the memo through
-      # {#forget_targets} when what it was resolved from may no longer hold.
-      #
-      # What is resolved goes into the memo this call began with, not the one
-      # that is current once the request is back. They differ where the
-      # record was written to while the request was out - by a logger or a
-      # middleware of the caller's that reaches the record, or by another
-      # thread - and {#forget_targets} has swapped the memo for an empty one.
-      # Written to the current memo, the user fetched for `customer_id` 7
-      # became the memoized answer for a record that by then says 9, and
-      # stayed it until the next write.
-      def belongs_to_target(name, class_name, foreign_key)
-        refuse_destroyed!(name)
-        memo = @cache
-        return memo[name] if memo.key?(name)
+      def associations = @record.class.associations
 
-        id = @record[foreign_key]
-        # {Resources::Base.fetch_one} rather than a ResourceProxy built for the
-        # one call: {Client#setup} builds and freezes one proxy per resource so
-        # that callers get one proxy per resource, and a reader here that built
-        # a fresh one per association turned a walk over ten thousand tickets
-        # reading two associations each into twenty thousand objects that exist
-        # for a single method call. It is the read {ResourceProxy#find} makes
-        # too, so there is one of it rather than one here and one there.
-        memo[name] = id.nil? ? nil : resolve(class_name).fetch_one(@record.transport, id)
+      # The record a foreign key points at, read once and kept: nil when the
+      # key is nil.
+      def belongs_to_target(name, spec)
+        return @cache[name] if @cache.key?(name)
+
+        id = @record[spec[:foreign_key]]
+        @cache[name] = id.nil? ? nil : resolve(spec[:class_name]).fetch_one(@record.transport, id)
       end
 
-      # Deliberately not memoized: a list can grow while the record is held,
-      # and +ticket.related.articles+ after +ticket.add_article(...)+ has to show
-      # the article that was just added.
-      #
-      # The path proc is handed the escaped id rather than the record, so that
-      # a declaration cannot paste a raw id into a path. One that did resolved
-      # `related.articles` on a record carrying `id: "1/../../users"` onto the
-      # users endpoint, the same way an unescaped {Resources::Base#member_path}
-      # used to - and a proc is exactly where that is easy to forget.
-      def has_many_target(name, class_name, path)
-        refuse_destroyed!(name)
+      # The list an association endpoint serves, read anew on every call.
+      def has_many_target(name, spec)
         raise Error, "#{@record.class.name} has no id, so it has no #{name} to read; save it first" if @record.id.nil?
 
-        target_class = resolve(class_name)
+        target_class = resolve(spec[:class_name])
         operation    = "get #{name}"
-
-        response = @record.transport.get(
-          path.call(Transport.escape_path_segment(@record.id)),
+        response     = @record.transport.get(
+          spec[:path].call(Transport.escape_path_segment(@record.id)),
           operation:      operation,
           resource_class: target_class,
           query:          { expand: true }
         )
-        records = response.decoded(:array, operation: operation, resource_class: target_class)
-        records.map { target_class.from_response(@record.transport, it) }
+
+        response.decoded(:array, operation: operation, resource_class: target_class).map { target_class.from_response(@record.transport, it) }
       end
 
-      # Drops every resolved target, so that the next read fetches it again.
-      #
-      # Called by the record, which keeps one proxy for as long as it lives
-      # and empties it on a save, a reload, a destroy and a write to a foreign
-      # key. It used to drop the proxy and build another on the next call to
-      # {Resources::Base#related}, which reached only the callers that asked
-      # again: `related = ticket.related`, the natural thing to write before
-      # reading two associations, kept the proxy that had been dropped, and
-      # after `ticket.customer_id = 9` or a reload `related.customer` went on
-      # answering with the user it had resolved before. A memo can only be
-      # emptied where it is held, so it is emptied here.
-      #
-      # Replaced rather than cleared, so that a lookup still on the wire has
-      # nowhere to put what it resolved from the value before: see
-      # {#belongs_to_target}.
-      def forget_targets
-        @cache = {}
-      end
-
-      # Refuses to read through a record that was destroyed.
-      #
-      # {Resources::Base#related} asks the same question, but a proxy handed
-      # out before the destroy is already past that door: it answered from
-      # its memo, and `articles` requested the articles of a ticket that is
-      # gone.
-      def refuse_destroyed!(name)
-        return if !@record.destroyed?
-
-        raise Error, "#{@record.class.name} #{@record.id} was destroyed, there is nothing to read #{name} from"
-      end
-
-      # The target is named rather than referenced so that resources may point
-      # at each other without a load order between their files. The name comes
-      # from a declaration in code - this gem's, or a resource class a caller
-      # wrote - and never from data.
-      #
-      # A resource of this gem is named on its own, +'User'+, and wins: an
-      # application is likely to have a +User+ of its own at the top level,
-      # and that is not what a ticket's customer is. Any other name is read
-      # from the top level, so that a resource a caller declares can point at
-      # another of theirs: +belongs_to :role, class_name: 'Acme::Role'+.
+      # A resource of this gem by its own name, or any class by its full name.
       def resolve(class_name)
         return Resources.const_get(class_name, false) if Resources.const_defined?(class_name, false)
 

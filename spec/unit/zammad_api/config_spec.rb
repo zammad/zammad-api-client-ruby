@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'pp'
-require 'yaml'
 
 RSpec.describe ZammadAPI::Config do
   def build(url: 'https://zammad.example.com', http_token: 'token', **overrides)
@@ -34,69 +33,31 @@ RSpec.describe ZammadAPI::Config do
 
     it 'rejects a non-http scheme' do
       expect { build(url: 'ftp://example.com') }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config url needs to start with http:// or https://')
+        .to raise_error(ZammadAPI::ConfigurationError, 'config url needs to start with http:// or https:// and name a host')
     end
 
-    # Appended blindly, the slash landed behind the query string and every
-    # request was resolved against a base ending in `?tenant=acme/`.
-    it 'puts the trailing slash on the path, not behind a query string' do
-      expect(build(url: 'https://example.com/zammad?tenant=acme').url)
-        .to eq('https://example.com/zammad/?tenant=acme')
-    end
-
-    it 'puts the trailing slash on the path, not behind a fragment' do
-      expect(build(url: 'https://example.com/zammad#top').url)
-        .to eq('https://example.com/zammad/#top')
-    end
-
-    # Accepted, this failed deep inside the adapter on the first request
-    # instead of here.
-    it 'rejects a scheme with no host after it' do
+    it 'rejects a url without a host' do
       expect { build(url: 'https://') }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config url needs a host after the scheme, got "https://"')
+        .to raise_error(ZammadAPI::ConfigurationError, 'config url needs to start with http:// or https:// and name a host')
     end
 
-    # What `"http://#{ENV['ZAMMAD_HOST']}:3000/"` comes to with the variable
-    # unset. Net::HTTP connects to localhost for an empty host, so every
-    # request went, token and all, to whatever listens on that port.
-    ['http://:3000/', 'http://:3000', 'https://:443/zammad/', 'http://:/'].each do |url|
-      it "rejects #{url}, which has a port where the host belongs" do
-        expect { build(url: url) }
-          .to raise_error(ZammadAPI::ConfigurationError, "config url needs a host after the scheme, got #{url.inspect}")
-      end
+    it 'rejects a url that does not parse' do
+      expect { build(url: 'https://zammad example.com') }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config url is not a valid URL')
     end
 
-    it 'rejects a url with a user and no host, without quoting the user' do
-      expect { build(url: 'http://admin:url-s3cret@:3000/') }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config url needs a host after the scheme, got "http://[REDACTED]@:3000/"')
+    it 'refuses credentials in the url, without quoting them' do
+      expect { build(url: 'https://admin:url-s3cret@zammad.example.com/') }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config url carries credentials: pass user: and password:, or a token, instead')
     end
 
-    ['http://localhost:3000/', 'http://[::1]:3000/', 'http://192.168.0.1:8080/api/', 'http://host:/'].each do |url|
-      it "accepts #{url}, which names one" do
-        expect(build(url: url).url).to eq(url)
-      end
+    it 'refuses a user name in the url without a password' do
+      expect { build(url: 'https://admin@zammad.example.com/') }
+        .to raise_error(ZammadAPI::ConfigurationError, /config url carries credentials/)
     end
 
-    # The value was quoted as it stood, and what stands where the host
-    # belongs may be credentials: a slash too many, and the userinfo is the
-    # start of a path as far as the syntax goes.
-    it 'does not quote the credentials of a url with a slash too many' do
-      expect { build(url: 'https:///admin:url-s3cret@zammad.example.com/') }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config url needs a host after the scheme, got "https://[REDACTED]@zammad.example.com/"')
-    end
-
-    it 'does not quote them where a ? or a # stands in for the host' do
-      %w[https://?admin:url-s3cret@zammad.example.com/ https://#admin:url-s3cret@zammad.example.com/].each do |url|
-        expect { build(url: url) }.to raise_error(ZammadAPI::ConfigurationError) { expect(it.message).not_to include('s3cret') }
-      end
-    end
-
-    # URI(...) is what a caller reaches for, and it prints as the URL, so it
-    # reached String#end_with? and died there as a NoMethodError - past the
-    # ConfigurationError the constructor is documented to raise.
-    it 'rejects a url that is not a string' do
-      expect { build(url: URI('https://example.com/')) }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config url needs to be a string, got URI::HTTPS')
+    it 'accepts a url whose path merely contains an @' do
+      expect(build(url: 'https://zammad.example.com/tenant@acme/').url).to eq('https://zammad.example.com/tenant@acme/')
     end
   end
 
@@ -113,9 +74,6 @@ RSpec.describe ZammadAPI::Config do
       expect(build(http_token: nil, user: 'u', password: 'p').authentication_scheme).to eq(:basic)
     end
 
-    # Several used to be accepted together, and the first in a fixed order
-    # was sent without a word about the others - which is what let an override
-    # leave the credential it was meant to replace in charge.
     context 'with more than one way to authenticate' do
       it 'refuses a token beside a user and password' do
         expect { build(http_token: 'token', user: 'u', password: 'p') }
@@ -134,10 +92,9 @@ RSpec.describe ZammadAPI::Config do
 
       it 'says what to pass instead' do
         expect { build(http_token: 'token', oauth2_token: 'other') }
-          .to raise_error(ZammadAPI::ConfigurationError, /Pass http_token:, or oauth2_token:, or user: and password:, and leave the others out/)
+          .to raise_error(ZammadAPI::ConfigurationError, /: pass http_token:, or oauth2_token:, or user: and password:\z/)
       end
 
-      # Half a scheme is still a second one being named.
       it 'refuses a token beside a user that has no password' do
         expect { build(http_token: 'token', user: 'u') }
           .to raise_error(ZammadAPI::ConfigurationError, /more than one way to authenticate/)
@@ -168,15 +125,14 @@ RSpec.describe ZammadAPI::Config do
         .to raise_error(ZammadAPI::ConfigurationError, 'missing user in config')
     end
 
-    # What reading an empty token file gives. The transport takes the
-    # whitespace off the token it sends, so the client was built, reported
-    # auth=http_token and sent `Authorization: Token` with nothing after it.
-    context 'with a token of nothing but whitespace' do
-      ["  \n", "\t", "\r\n", ' '].each do |blank|
-        it "treats #{blank.inspect} as absent, for either token" do
-          expect { build(http_token: blank) }.to raise_error(ZammadAPI::ConfigurationError, 'missing user in config')
-          expect { build(http_token: nil, oauth2_token: blank) }.to raise_error(ZammadAPI::ConfigurationError, 'missing user in config')
-        end
+    it 'strips whitespace around a token' do
+      expect(build(http_token: " secret\n").http_token).to eq('secret')
+    end
+
+    context 'with a token of only whitespace' do
+      it 'treats it as absent, for either token' do
+        expect { build(http_token: "  \n") }.to raise_error(ZammadAPI::ConfigurationError, 'missing user in config')
+        expect { build(http_token: nil, oauth2_token: "  \n") }.to raise_error(ZammadAPI::ConfigurationError, 'missing user in config')
       end
 
       it 'does not count it as a second way to authenticate' do
@@ -186,35 +142,10 @@ RSpec.describe ZammadAPI::Config do
       it 'leaves the scheme it would have replaced in an override alone' do
         expect(build(http_token: nil, user: 'u', password: 'p').with(http_token: "  \n")).to have_attributes(http_token: nil, user: 'u', password: 'p')
       end
-
-      it 'still replaces the scheme for a token with something in it' do
-        expect(build(http_token: nil, user: 'u', password: 'p').with(http_token: " abc\n")).to have_attributes(http_token: " abc\n", user: nil, password: nil)
-      end
-
-      it 'keeps a password of spaces, which basic authentication carries as it is' do
-        expect(build(http_token: nil, user: 'u', password: '   ').password).to eq('   ')
-      end
     end
 
-    # It was sent as it prints, and a Symbol holding a line break passed the
-    # check that asks a String for one.
-    context 'with a token that is no String' do
-      { 12_345 => 'Integer', :abc => 'Symbol', ['a'] => 'Array', true => 'TrueClass' }.each do |value, kind|
-        it "rejects #{kind == 'Integer' ? 'an' : 'a'} #{kind}" do
-          expect { build(http_token: value) }
-            .to raise_error(ZammadAPI::ConfigurationError, "config http_token needs to be a string, got #{kind}")
-        end
-      end
-
-      it 'rejects one for oauth2_token' do
-        expect { build(http_token: nil, oauth2_token: 99) }
-          .to raise_error(ZammadAPI::ConfigurationError, 'config oauth2_token needs to be a string, got Integer')
-      end
-
-      it 'rejects a Symbol that holds a line break, which was never asked for one' do
-        expect { build(http_token: :"abc\r\nX-Injected: 1") }
-          .to raise_error(ZammadAPI::ConfigurationError, 'config http_token needs to be a string, got Symbol')
-      end
+    it 'keeps a password of spaces, which basic authentication carries as it is' do
+      expect(build(http_token: nil, user: 'u', password: '   ').password).to eq('   ')
     end
   end
 
@@ -253,9 +184,6 @@ RSpec.describe ZammadAPI::Config do
   end
 
   describe 'the user agent' do
-    # Handed to Faraday as a nil header, Faraday filled in its own, so the gem
-    # stopped identifying itself in the instance log an operator greps to find
-    # its requests - on every request, with nothing said about it.
     it 'falls back to the default when it is nil' do
       expect(build(user_agent: nil).user_agent).to eq("zammad_api-ruby/#{ZammadAPI::VERSION}")
     end
@@ -264,78 +192,12 @@ RSpec.describe ZammadAPI::Config do
       expect(build(user_agent: '').user_agent).to eq("zammad_api-ruby/#{ZammadAPI::VERSION}")
     end
 
-    # The transport takes the whitespace off the value it sends, so this one
-    # went out as a User-Agent header with nothing in it.
-    ['  ', "\n", " \t\r\n"].each do |blank|
-      it "falls back to the default when it is #{blank.inspect}, which a header would carry nothing of" do
-        expect(build(user_agent: blank).user_agent).to eq("zammad_api-ruby/#{ZammadAPI::VERSION}")
-      end
+    it 'falls back to the default when it is only whitespace' do
+      expect(build(user_agent: " \t\n").user_agent).to eq("zammad_api-ruby/#{ZammadAPI::VERSION}")
     end
 
-    it 'keeps one with whitespace around it, which is taken off where it is sent' do
-      expect(build(user_agent: ' my-app/1.0 ').user_agent).to eq(' my-app/1.0 ')
-    end
-
-    it 'rejects one that is not a string' do
-      expect { build(user_agent: 42) }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config user_agent needs to be a string')
-    end
-  end
-
-  # Each is sent as a header. Net::HTTP refused a line break inside one at
-  # the first request, with an ArgumentError that quoted the value.
-  describe 'a line break in an option sent as a header' do
-    {
-      http_token:   { http_token: "secret-abc\nsecret-def" },
-      oauth2_token: { http_token: nil, oauth2_token: "secret-abc\r\nsecret-def" },
-      user_agent:   { user_agent: "my-app\nsecret-def" }
-    }.each do |name, options|
-      it "refuses one inside #{name}, without quoting it" do
-        expect { build(**options) }.to raise_error(ZammadAPI::ConfigurationError) { |error|
-          expect(error.message).to start_with("config #{name} holds a line break, which a header cannot carry")
-          expect(error.message).not_to include('secret-def')
-        }
-      end
-    end
-
-    # `strip` raises for text holding a byte sequence that is invalid in its
-    # encoding, and the error was read as "no line break": the token was
-    # taken, and an adapter that checks nothing sent the second line.
-    it 'refuses one beside a byte sequence that is invalid in the encoding' do
-      expect { build(http_token: "secret-abc\xFF\nX-Injected: secret-def") }.to raise_error(ZammadAPI::ConfigurationError) { |error|
-        expect(error.message).to start_with('config http_token holds a line break, which a header cannot carry')
-        expect(error.message).not_to include('secret-def')
-      }
-    end
-
-    it 'refuses one in a token given as binary text' do
-      expect { build(http_token: "secret-abc\xFF\nsecret-def".b) }
-        .to raise_error(ZammadAPI::ConfigurationError, /\Aconfig http_token holds a line break/)
-    end
-
-    # It cannot be shown to hold no line break, and was passed as holding
-    # none.
-    it 'refuses UTF-16 text that cannot be converted, without quoting it or the error underneath' do
-      broken = "secret-abc\nsecret-def".encode('UTF-16LE').b[0..-2].force_encoding('UTF-16LE')
-
-      expect { build(user_agent: broken) }.to raise_error(ZammadAPI::ConfigurationError) { |error|
-        expect(error.message).to start_with('config user_agent was given as UTF-16LE text that cannot be converted to UTF-8')
-        expect(error.cause).to be_nil
-      }
-    end
-
-    # Net::HTTP strips it, so a token read from a file with its newline on
-    # worked, and still does.
-    it 'takes a token that only ends in one' do
-      expect(build(http_token: "secret\n").http_token).to eq("secret\n")
-    end
-
-    it 'takes a token that only ends in one after bytes that are invalid in the encoding' do
-      expect(build(http_token: "secret\xFF\n").http_token).to eq("secret\xFF\n")
-    end
-
-    it 'does not check a password, which basic authentication encodes' do
-      expect(build(http_token: nil, user: 'agent', password: "pass\nword").password).to eq("pass\nword")
+    it 'strips whitespace around it' do
+      expect(build(user_agent: ' my-app/1.0 ').user_agent).to eq('my-app/1.0')
     end
   end
 
@@ -375,53 +237,13 @@ RSpec.describe ZammadAPI::Config do
       expect(build(logger: logger).logger).to be(logger)
     end
 
-    # 1.x took `logger: true` as "log to $stderr".
-    it 'rejects a boolean, as 1.x accepted' do
+    it 'rejects a logger that cannot log at debug' do
       expect { build(logger: true) }
         .to raise_error(ZammadAPI::ConfigurationError, 'config logger needs to respond to debug')
-    end
-
-    # Each line is handed over as a block, so this was accepted and raised
-    # a bare ArgumentError at every request.
-    it 'rejects a debug that requires an argument' do
-      logger = Class.new { def debug(message) = message }.new
-
-      expect { build(logger: logger) }
-        .to raise_error(ZammadAPI::ConfigurationError, /\Aconfig logger needs a debug that can be called with a block and no argument/)
-    end
-
-    it 'rejects a debug that requires a keyword' do
-      logger = Class.new { def debug(message = nil, level:) = [message, level] }.new
-
-      expect { build(logger: logger) }.to raise_error(ZammadAPI::ConfigurationError, /requires an argument/)
-    end
-
-    it 'accepts a debug that takes its message as an option, as Logger#debug does' do
-      logger = Class.new { def debug(message = nil) = message || yield }.new
-
-      expect(build(logger: logger).logger).to be(logger)
-    end
-
-    # Such a logger cannot be asked what its debug takes.
-    it 'accepts a logger that forwards debug without having the method' do
-      logger = Class.new do
-        def respond_to?(name, *) = name == :debug || super
-        def method_missing(name, *) = name == :debug ? nil : super # rubocop:disable Style/MissingRespondToMissing
-      end.new
-
-      expect(build(logger: logger).logger).to be(logger)
     end
   end
 
   describe 'numeric validation' do
-    # Complex is a Numeric and answers neither `positive?` nor `>`, so this
-    # left a NoMethodError where every other rejected option raises the error
-    # building a client is documented to need.
-    it 'rejects a Numeric that cannot be compared, as a configuration error' do
-      expect { build(timeout: Complex(1, 2)) }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config timeout needs to be a positive number')
-    end
-
     it 'rejects a zero timeout' do
       expect { build(timeout: 0) }
         .to raise_error(ZammadAPI::ConfigurationError, 'config timeout needs to be a positive number')
@@ -432,52 +254,23 @@ RSpec.describe ZammadAPI::Config do
         .to raise_error(ZammadAPI::ConfigurationError, 'config open_timeout needs to be a positive number')
     end
 
-    it 'rejects a non-numeric timeout' do
-      expect { build(timeout: 'soon') }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config timeout needs to be a positive number')
+    it 'rejects a non-numeric retry_interval' do
+      expect { build(retry_interval: 'soon') }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config retry_interval needs to be a positive number')
     end
 
-    # The natural way to ask for no timeout, which is what 1.x had. Accepted,
-    # every request raised a bare RangeError from inside Net::HTTP.
-    it 'rejects an infinite timeout' do
-      expect { build(timeout: Float::INFINITY) }
-        .to raise_error(ZammadAPI::ConfigurationError, /\Aconfig timeout needs to be at most 100000000 seconds, got Infinity\. No value stands for no timeout/)
-    end
-
-    it 'rejects an infinite open_timeout' do
-      expect { build(open_timeout: Float::INFINITY) }
-        .to raise_error(ZammadAPI::ConfigurationError, /config open_timeout needs to be at most 100000000 seconds, got Infinity/)
-    end
-
-    # It raised the same from the sleep before the first retry.
-    it 'rejects an infinite retry_interval' do
-      expect { build(retry_interval: Float::INFINITY) }
-        .to raise_error(ZammadAPI::ConfigurationError, /config retry_interval needs to be at most 100000000 seconds, got Infinity\. No value stands for no limit/)
-    end
-
-    it 'rejects a timeout too large for a C long' do
-      expect { build(timeout: 10**20) }
-        .to raise_error(ZammadAPI::ConfigurationError, /config timeout needs to be at most 100000000 seconds, got 100000000000000000000/)
-    end
-
-    # macOS refuses a wait on a socket that is longer, and that came back as
-    # a ConnectionError calling the instance unreachable.
-    it 'rejects a timeout one second past the longest every platform takes' do
-      expect { build(timeout: 100_000_001) }.to raise_error(ZammadAPI::ConfigurationError, /at most 100000000 seconds/)
-    end
-
-    it 'accepts the longest one' do
-      expect(build(timeout: 100_000_000, open_timeout: 100_000_000.0, retry_interval: Rational(100_000_000)))
-        .to have_attributes(timeout: 100_000_000, open_timeout: 100_000_000.0, retry_interval: Rational(100_000_000))
-    end
-
-    it 'still says a Float that is no number needs to be one' do
-      expect { build(timeout: Float::NAN) }
+    it 'rejects a Numeric that cannot be compared' do
+      expect { build(timeout: Complex(1, 2)) }
         .to raise_error(ZammadAPI::ConfigurationError, 'config timeout needs to be a positive number')
     end
 
     it 'rejects negative retries' do
       expect { build(retries: -1) }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config retries needs to be a non-negative integer')
+    end
+
+    it 'rejects retries that are not an integer' do
+      expect { build(retries: 1.5) }
         .to raise_error(ZammadAPI::ConfigurationError, 'config retries needs to be a non-negative integer')
     end
 
@@ -542,75 +335,13 @@ RSpec.describe ZammadAPI::Config do
       end
     end
 
-    it 'redacts a proxy password carrying an unencoded @' do
-      rendered = build(proxy: 'http://puser:pa@ss-s3cret@proxy.test:8080').inspect
-
-      expect(rendered).to include('proxy="http://[REDACTED]@proxy.test:8080"')
-      expect(rendered).not_to include('ss-s3cret')
-    end
-
-    # A password is not obliged to be URL-safe, and each of these ends the
-    # authority early as far as the syntax goes: `user:p` is all that is left
-    # of it, with no @ in it, so a search bounded by the authority found no
-    # credential to blank and printed the password.
-    {
-      'a #' => 'http://puser:pa#ss-s3cret@proxy.test:8080',
-      'a /' => 'http://puser:pa/ss-s3cret@proxy.test:8080',
-      'a ?' => 'http://puser:pa?ss-s3cret@proxy.test:8080'
-    }.each do |character, proxy|
-      it "redacts a proxy password carrying #{character}" do
-        rendered = build(proxy: proxy).inspect
-
-        expect(rendered).to include('proxy="http://[REDACTED]@proxy.test:8080"')
-        expect(rendered).not_to match(/pa.ss|s3cret/)
-      end
-    end
-
-    it 'redacts such a password on a proxy configured without a scheme' do
-      rendered = build(proxy: 'puser:pa#ss-s3cret@proxy.test:8080').inspect
-
-      expect(rendered).to include('proxy="[REDACTED]@proxy.test:8080"')
-      expect(rendered).not_to include('s3cret')
+    it 'refuses a proxy that is not a URL without quoting it' do
+      expect { build(proxy: 'http://puser:p s3cret@proxy.test:8080') }
+        .to raise_error(ZammadAPI::ConfigurationError, 'config proxy is not a valid URL')
     end
 
     it 'leaves a proxy without credentials alone' do
       expect(build(proxy: 'http://proxy.test:8080').inspect).to include('proxy="http://proxy.test:8080"')
-    end
-
-    # The shape an http_proxy style setting is copied out of. Anchored on a
-    # `://` lookbehind, the redaction never fired and the password went into
-    # every log line and exception report this class promises to be safe in.
-    it 'redacts the credentials of a proxy configured without a scheme' do
-      rendered = build(proxy: 'puser:pproxy-s3cret@proxy.test:8080').inspect
-
-      expect(rendered).to include('proxy="[REDACTED]@proxy.test:8080"')
-      expect(rendered).not_to include('pproxy-s3cret')
-    end
-
-    it 'leaves a scheme-less proxy without credentials alone' do
-      expect(build(proxy: 'proxy.test:8080').inspect).to include('proxy="proxy.test:8080"')
-    end
-
-    # A proxy written with the slashes and without the scheme, or with a
-    # slash too many. The authority was looked for where the scheme ended,
-    # and found to end at once, at the slash it began with: an empty
-    # authority holds no colon and no @, so nothing was blanked.
-    {
-      'two slashes and no scheme' => ['//puser:pproxy-s3cret@proxy.test:8080', '[REDACTED]@proxy.test:8080'],
-      'one slash'                 => ['/puser:pproxy-s3cret@proxy.test:8080', '[REDACTED]@proxy.test:8080'],
-      'a scheme and three'        => ['http:///puser:pproxy-s3cret@proxy.test:8080', 'http://[REDACTED]@proxy.test:8080'],
-      'two and a # in a password' => ['//puser:pa#ss-s3cret@proxy.test:8080', '[REDACTED]@proxy.test:8080']
-    }.each do |opening, (proxy, redacted)|
-      it "redacts the credentials of a proxy that opens with #{opening}" do
-        rendered = build(proxy: proxy).inspect
-
-        expect(rendered).to include("proxy=#{redacted.inspect}")
-        expect(rendered).not_to include('s3cret')
-      end
-    end
-
-    it 'leaves a proxy that opens with two slashes and has no credentials alone' do
-      expect(build(proxy: '//proxy.test:8080').inspect).to include('proxy="//proxy.test:8080"')
     end
 
     it 'leaves a url without credentials alone' do
@@ -618,9 +349,6 @@ RSpec.describe ZammadAPI::Config do
     end
   end
 
-  # pp has a printer of its own for a Data object, which renders the members
-  # without going through #inspect - and pp is what IRB and the Rails console
-  # print a value with.
   describe 'pretty printing' do
     it 'redacts the password' do
       expect(build(http_token: nil, user: 'u', password: 'pw-s3cret').pretty_inspect).not_to include('pw-s3cret')
@@ -648,227 +376,6 @@ RSpec.describe ZammadAPI::Config do
     end
   end
 
-  # ActiveSupport gives a Data an as_json that is its members as they are,
-  # and builds to_json on it, so in a Rails app `config.to_json` wrote the
-  # credentials in full. It is not loaded here: what is asked is what it
-  # asks, and that the answer is this class's own.
-  describe 'serializing as JSON' do
-    it 'answers as_json itself, where ActiveSupport would answer for a Data' do
-      expect(described_class.instance_method(:as_json).owner).to be(described_class)
-    end
-
-    it 'redacts the password' do
-      expect(build(http_token: nil, user: 'u', password: 'pw-s3cret').as_json).to include(user: 'u', password: '[REDACTED]')
-    end
-
-    it 'redacts the access token' do
-      expect(build(http_token: 'tok-s3cret').as_json).to include(http_token: '[REDACTED]', password: nil)
-    end
-
-    it 'redacts the OAuth2 token' do
-      expect(build(http_token: nil, oauth2_token: 'oauth-s3cret').as_json).to include(oauth2_token: '[REDACTED]')
-    end
-
-    it 'redacts the proxy credentials' do
-      expect(build(proxy: 'http://puser:pproxy-s3cret@proxy.test:8080').as_json).to include(proxy: 'http://[REDACTED]@proxy.test:8080')
-    end
-
-    it 'names the logger and the middleware, and does not hand them to the encoder' do
-      expect(build(middleware: ->(faraday) { faraday }).as_json).to include(logger: '#<Logger>', middleware: '#<Proc>')
-    end
-
-    it 'keeps every other option as it is' do
-      expect(build(timeout: 7, adapter: :net_http).as_json).to include(url: 'https://zammad.example.com/', timeout: 7, adapter: :net_http, ssl_verify: true)
-    end
-
-    it 'writes that as a JSON object' do
-      written = JSON.parse(build(http_token: 'tok-s3cret', timeout: 7).to_json)
-
-      expect(written).to include('url' => 'https://zammad.example.com/', 'http_token' => '[REDACTED]', 'timeout' => 7, 'logger' => '#<Logger>')
-    end
-
-    it 'holds no credential in what it writes' do
-      config = build(http_token: nil, user: 'u', password: 'pw-s3cret', proxy: 'http://puser:pproxy-s3cret@proxy.test:8080')
-
-      expect(config.to_json).not_to match(/pw-s3cret|pproxy-s3cret/)
-    end
-
-    it 'stays redacted nested inside another structure' do
-      expect(JSON.generate(config: build(http_token: 'tok-s3cret'))).not_to include('tok-s3cret')
-    end
-  end
-
-  # Psych writes the members of a Data as they are and asks neither inspect
-  # nor as_json, so `config.to_yaml` held every credential in full. It is
-  # what Rails' `debug` view helper and a Delayed::Job handler write.
-  describe 'serializing as YAML' do
-    let(:config) { build(http_token: nil, user: 'u', password: 'pw-s3cret', proxy: 'http://puser:pproxy-s3cret@proxy.test:8080') }
-
-    it 'holds no credential in what it writes' do
-      expect(config.to_yaml).not_to match(/pw-s3cret|pproxy-s3cret/)
-    end
-
-    it 'writes neither token' do
-      expect(build(http_token: 'tok-s3cret').to_yaml + build(http_token: nil, oauth2_token: 'oauth-s3cret').to_yaml).not_to match(/tok-s3cret|oauth-s3cret/)
-    end
-
-    it 'writes what its JSON holds, as a mapping any loader reads' do
-      expect(YAML.safe_load(config.to_yaml)).to eq(JSON.parse(config.to_json))
-    end
-
-    it 'keeps the options that are no secret readable' do
-      expect(YAML.safe_load(build(timeout: 7).to_yaml)).to include('url' => 'https://zammad.example.com/', 'timeout' => 7, 'http_token' => '[REDACTED]', 'logger' => '#<Logger>')
-    end
-
-    it 'stays redacted nested inside another structure' do
-      expect({ config: config, list: [config] }.to_yaml).not_to match(/pw-s3cret|pproxy-s3cret/)
-    end
-  end
-
-  # ActiveSupport gives every object a public `presence`. A private helper of
-  # that name here answered in its place, so `config.presence` raised
-  # NoMethodError. It is not loaded here: what is asked is that the name is
-  # left to it.
-  describe 'the names ActiveSupport gives every object' do
-    it 'defines no presence of its own' do
-      expect(described_class.private_method_defined?(:presence)).to be(false)
-    end
-
-    it 'still reads an empty option as one that was not given' do
-      expect(build(http_token: nil, user: 'u', password: 'p', oauth2_token: '', proxy: '')).to have_attributes(oauth2_token: nil, proxy: nil)
-    end
-  end
-
-  # Faraday turns the userinfo of a URL into a Basic Authorization header, and
-  # its authorization middleware leaves a header that is already set alone -
-  # so the credentials in the URL were sent in place of the configured ones.
-  describe 'credentials in the instance url' do
-    it 'refuses them' do
-      expect { build(url: 'https://admin:url-s3cret@zammad.example.com/') }
-        .to raise_error(ZammadAPI::ConfigurationError, /config url carries credentials of its own/)
-    end
-
-    it 'says where they belong instead' do
-      expect { build(url: 'https://admin:url-s3cret@zammad.example.com/') }
-        .to raise_error(ZammadAPI::ConfigurationError, /pass user: and password:/)
-    end
-
-    it 'keeps the password out of the message' do
-      expect { build(url: 'https://admin:url-s3cret@zammad.example.com/') }
-        .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.message).not_to include('url-s3cret') }
-    end
-
-    it 'still names the instance in the message' do
-      expect { build(url: 'https://admin:url-s3cret@zammad.example.com/') }
-        .to raise_error(ZammadAPI::ConfigurationError, %r{https://\[REDACTED\]@zammad\.example\.com/})
-    end
-
-    it 'refuses them beside basic authentication too, where they would win just the same' do
-      expect { build(url: 'https://old:creds@zammad.example.com/', http_token: nil, user: 'u', password: 'p') }
-        .to raise_error(ZammadAPI::ConfigurationError, /config url carries credentials of its own/)
-    end
-
-    it 'refuses a user name without a password' do
-      expect { build(url: 'https://admin@zammad.example.com/') }
-        .to raise_error(ZammadAPI::ConfigurationError, /config url carries credentials of its own/)
-    end
-
-    it 'accepts a url whose path merely contains an @' do
-      expect(build(url: 'https://zammad.example.com/tenant@acme/').url).to eq('https://zammad.example.com/tenant@acme/')
-    end
-  end
-
-  describe '#redacted' do
-    it 'blanks inline credentials' do
-      expect(build.redacted('https://admin:s3cret@zammad.example.com/'))
-        .to eq('https://[REDACTED]@zammad.example.com/')
-    end
-
-    # Anchoring on the first @ left the tail of the password in the rendered
-    # URL, which is interpolated into every ConnectionError message.
-    it 'blanks a password carrying an unencoded @' do
-      expect(build.redacted('https://admin:pa@ss-s3cret@zammad.example.com/'))
-        .to eq('https://[REDACTED]@zammad.example.com/')
-    end
-
-    # The same three characters, in the instance url. URI cannot read these,
-    # so they are not refused the way a readable url with credentials is, and
-    # stay printable until the connection rejects them.
-    it 'blanks a password carrying a #, which ends the authority early' do
-      expect(build.redacted('https://admin:pa#ss-s3cret@zammad.example.com/'))
-        .to eq('https://[REDACTED]@zammad.example.com/')
-    end
-
-    it 'blanks a password carrying a /' do
-      expect(build.redacted('https://admin:pa/ss-s3cret@zammad.example.com/'))
-        .to eq('https://[REDACTED]@zammad.example.com/')
-    end
-
-    it 'blanks a password carrying a ?' do
-      expect(build.redacted('https://admin:pa?ss-s3cret@zammad.example.com/'))
-        .to eq('https://[REDACTED]@zammad.example.com/')
-    end
-
-    it 'blanks a password carrying both an @ and a /' do
-      expect(build.redacted('https://admin:pa@ss/w0rd@zammad.example.com/'))
-        .to eq('https://[REDACTED]@zammad.example.com/')
-    end
-
-    it 'leaves a host and port alone' do
-      expect(build.redacted('https://zammad.example.com:8443/helpdesk/')).to eq('https://zammad.example.com:8443/helpdesk/')
-    end
-
-    it 'leaves an IPv6 host alone' do
-      expect(build.redacted('http://[::1]:3128')).to eq('http://[::1]:3128')
-    end
-
-    # A colon cannot tell a port from a password, and `user:8443/s3cret@host`
-    # is a password with a slash in it just as much as it is a port and a
-    # path. Blanking too much shows a wrong host; blanking too little shows a
-    # password.
-    it 'blanks rather than guesses where a colon could be either a port or a password' do
-      expect(build.redacted('https://zammad.example.com:8443/tenant@acme/')).to eq('https://[REDACTED]@acme/')
-    end
-
-    # No host stands in an empty authority, so there is none to blank by
-    # mistake, and what follows it is searched to its last @.
-    it 'blanks what stands behind an empty authority' do
-      expect(build.redacted('https:///admin:s3cret@zammad.example.com/')).to eq('https://[REDACTED]@zammad.example.com/')
-    end
-
-    it 'leaves a value with an empty authority and no @ alone' do
-      expect(build.redacted('https:///helpdesk/')).to eq('https:///helpdesk/')
-    end
-  end
-
-  describe '#redacted_url' do
-    it 'blanks a password the url is too malformed to be refused for' do
-      expect(build(url: 'https://admin:pa#ss-s3cret@zammad.example.com/').redacted_url)
-        .to eq('https://[REDACTED]@zammad.example.com/')
-    end
-
-    it 'leaves an @ in the path alone' do
-      expect(build(url: 'https://zammad.example.com/tenant@acme/').redacted_url)
-        .to eq('https://zammad.example.com/tenant@acme/')
-    end
-
-    # Bounded only by the path, the match crossed into the query string and
-    # rendered a host that does not exist - into every ConnectionError message.
-    it 'leaves an @ in a query string alone' do
-      expect(build(url: 'https://zammad.example.com?tenant=a@acme').redacted_url)
-        .to eq('https://zammad.example.com/?tenant=a@acme')
-    end
-
-    it 'leaves an @ in a fragment alone' do
-      expect(build(url: 'https://zammad.example.com#a@b').redacted_url)
-        .to eq('https://zammad.example.com/#a@b')
-    end
-
-    it 'leaves a url without credentials alone' do
-      expect(build(url: 'https://zammad.example.com/').redacted_url).to eq('https://zammad.example.com/')
-    end
-  end
-
   describe '#with' do
     it 'changes an option' do
       expect(build.with(timeout: 5).timeout).to eq(5)
@@ -891,8 +398,6 @@ RSpec.describe ZammadAPI::Config do
       expect(build.with(oauth2_token: nil).authentication_scheme).to eq(:http_token)
     end
 
-    # The refusal of two schemes is what makes this necessary: merged beside
-    # the token, the new credential would no longer be ignored but refused.
     it 'can switch to any scheme from any other without naming two at once' do
       switched = build.with(oauth2_token: 'o').with(user: 'u', password: 'p').with(http_token: 't')
       expect(switched.to_h.slice(:http_token, :oauth2_token, :user, :password))
@@ -924,78 +429,11 @@ RSpec.describe ZammadAPI::Config do
     end
   end
 
-  describe 'immutability of string members' do
-    it 'freezes the url' do
-      expect(build.url).to be_frozen
-    end
-
-    it 'does not share the url with the caller' do
-      supplied = +'https://zammad.example.com/'
-      config   = described_class.new(url: supplied, http_token: 'tok')
-      supplied << 'mutated'
-      expect(config.url).to eq('https://zammad.example.com/')
-    end
-
-    it 'freezes the credentials' do
-      config = build(user: 'u', password: +'pw', http_token: nil)
-      expect(config.password).to be_frozen
-    end
-
-    it 'freezes the proxy' do
-      expect(build(proxy: +'http://proxy.test:8080').proxy).to be_frozen
-    end
-
-    it 'freezes the user agent' do
-      expect(build(user_agent: +'custom/1.0').user_agent).to be_frozen
-    end
-  end
-
   it 'is immutable' do
     expect(build).to be_frozen
   end
 
-  # Every other option is checked up front; these three were not, so a bad
-  # value escaped the ConfigurationError that building a client is documented
-  # to need - two as a bare NoMethodError, one by silently staying on.
-  describe 'option validation' do
-    it 'rejects a proxy that is not a string' do
-      expect { build(proxy: URI('http://user:secret@proxy:3128')) }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config proxy needs to be a string, got URI::HTTP')
-    end
-
-    # The whole point of refusing it: a URI reached String#sub inside #inspect
-    # and died there, so the object this class documents as safe to log raised
-    # at the moment something logged it.
-    it 'keeps a proxy-bearing config renderable' do
-      expect { build(proxy: 'http://user:secret@proxy:3128').inspect }.not_to raise_error
-    end
-
-    it 'redacts the credentials in a proxy it renders' do
-      rendered = build(proxy: 'http://user:secret@proxy:3128').inspect
-
-      expect(rendered).to include('proxy="http://[REDACTED]@proxy:3128"')
-      expect(rendered).not_to include('secret')
-    end
-
-    it 'rejects an adapter that cannot be a symbol' do
-      expect { build(adapter: 1) }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config adapter needs to be a symbol or a string, got Integer')
-    end
-
-    # `adapter: true` is the 1.x-flavoured mistake: it answered to_sym on
-    # nothing and raised NoMethodError from inside the constructor.
-    it 'rejects a boolean adapter' do
-      expect { build(adapter: true) }
-        .to raise_error(ZammadAPI::ConfigurationError, /config adapter needs to be a symbol or a string/)
-    end
-
-    it 'accepts an adapter named as a string' do
-      expect(build(adapter: 'net_http').adapter).to eq(:net_http)
-    end
-
-    # Read from an environment variable this is the string "false", which is
-    # truthy, so verification stayed on while the caller believed they had
-    # turned it off.
+  describe 'other options' do
     it 'rejects an ssl_verify that is not a boolean' do
       expect { build(ssl_verify: 'false') }
         .to raise_error(ZammadAPI::ConfigurationError, 'config ssl_verify needs to be true or false, got "false"')
@@ -1003,6 +441,10 @@ RSpec.describe ZammadAPI::Config do
 
     it 'accepts ssl_verify: false' do
       expect(build(ssl_verify: false).ssl_verify).to be(false)
+    end
+
+    it 'reads an empty proxy as none' do
+      expect(build(proxy: '').proxy).to be_nil
     end
   end
 end

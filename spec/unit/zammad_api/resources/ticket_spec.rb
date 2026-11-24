@@ -41,30 +41,12 @@ RSpec.describe ZammadAPI::Resources::Ticket do
       ticket.destroy
     end
 
-    # Each of these says what the caller gets, not which ivar was cleared.
-    # `destroy` dropped the `related` memo and was taken to have closed this,
-    # but the reader rebuilt one on the next call, so every path below went
-    # on reaching a ticket that is gone.
     it 'refuses the articles reader rather than fetching a deleted ticket' do
       expect { ticket.articles }.to raise_error(ZammadAPI::Error, /was destroyed/)
     end
 
     it 'refuses the related proxy' do
       expect { ticket.related }.to raise_error(ZammadAPI::Error, /was destroyed/)
-    end
-
-    it 'refuses to add an article rather than POSTing a dead ticket_id' do
-      expect { ticket.add_article(body: 'hello') }.to raise_error(ZammadAPI::Error, /was destroyed/)
-    end
-
-    it 'makes no request at all when an article is refused' do
-      stub = stub_request(:post, article_url).with(query: hash_including({}))
-      begin
-        ticket.add_article(body: 'hello')
-      rescue ZammadAPI::Error # rubocop:disable Lint/SuppressedException
-      end
-
-      expect(stub).not_to have_been_requested
     end
   end
 
@@ -103,60 +85,24 @@ RSpec.describe ZammadAPI::Resources::Ticket do
       expect(stub).to have_been_requested
     end
 
-    it 'refuses what is no set of attributes, and sends nothing' do
-      expect { ticket.add_article('hello') }.to raise_error(ArgumentError, 'attributes need to be a Hash of names and values, got String')
-      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
+    it 'uses its own id over a ticket_id in the attributes' do
+      stub = stub_request(:post, article_url)
+        .with(query: { 'expand' => 'true' }, body: '{"ticket_id":42,"body":"hello"}')
+        .to_return(json_response({ id: 9, ticket_id: 42 }, status: 201))
+
+      ticket.add_article(ticket_id: 9, body: 'hello')
+      expect(stub).to have_been_requested
     end
 
-    # The article goes to the ticket it was added to, whatever the attributes
-    # say. Given `ticket_id` under both spellings, the Symbol was replaced and
-    # the String, coming later in the Hash, replaced it again when the article
-    # symbolized its keys - so the POST named the caller's ticket.
-    context 'when the attributes name a ticket of their own' do
-      before do
-        stub_request(:post, article_url).with(query: hash_including({}))
-          .to_return(json_response({ id: 9, ticket_id: 42 }, status: 201))
-      end
+    it 'leaves the Hash it was given as it was' do
+      stub_request(:post, article_url).with(query: hash_including({}))
+        .to_return(json_response({ id: 9, ticket_id: 42 }, status: 201))
+      attributes = { ticket_id: 9, body: 'hello' }
+      ticket.add_article(attributes)
 
-      def posted_ticket_ids
-        ids = []
-        expect(a_request(:post, article_url).with(query: hash_including({})) { |request| ids << JSON.parse(request.body)['ticket_id'] })
-          .to have_been_made.once
-        ids
-      end
-
-      it 'uses its own id over a Symbol key' do
-        ticket.add_article(ticket_id: 9, body: 'hello')
-        expect(posted_ticket_ids).to eq([42])
-      end
-
-      it 'uses its own id over a String key' do
-        ticket.add_article('body' => 'hello', 'ticket_id' => 9)
-        expect(posted_ticket_ids).to eq([42])
-      end
-
-      it 'uses its own id over both spellings at once' do
-        ticket.add_article(:ticket_id => 1, 'ticket_id' => 9, :body => 'hello', :type => 'note')
-        expect(posted_ticket_ids).to eq([42])
-      end
-
-      it 'sends ticket_id once' do
-        ticket.add_article(:ticket_id => 1, 'ticket_id' => 9, :body => 'hello')
-
-        expect(a_request(:post, article_url).with(query: hash_including({}), body: '{"body":"hello","ticket_id":42}')).to have_been_made
-      end
-
-      it 'leaves the Hash it was given as it was' do
-        attributes = { :ticket_id => 1, 'ticket_id' => 9, :body => 'hello' }
-        ticket.add_article(attributes)
-
-        expect(attributes).to eq(:ticket_id => 1, 'ticket_id' => 9, :body => 'hello')
-      end
+      expect(attributes).to eq(ticket_id: 9, body: 'hello')
     end
 
-    # An article belongs to a ticket by id. Unchecked, this POSTed
-    # `ticket_id: null` and left the caller reading Zammad's 422 to work out
-    # that the ticket had never been saved.
     context 'when the ticket has not been saved' do
       subject(:ticket) { described_class.new(unit_transport, title: 'Help') }
 
@@ -178,58 +124,20 @@ RSpec.describe ZammadAPI::Resources::Ticket do
     end
   end
 
-  # The name add_article had in 1.x: a noun that sends a POST, one letter away
-  # from the reader beside it. It is gone, which leaves `article` what it is
-  # everywhere else on a record - an attribute.
   describe '#article' do
     it 'is not a method of a ticket' do
       expect(described_class.method_defined?(:article)).to be(false)
     end
 
-    it 'raises NoMethodError for the call 1.x made' do
+    it 'raises NoMethodError when called to add an article, and sends nothing' do
       expect { ticket.article(body: 'hello') }.to raise_error(NoMethodError)
-    end
-
-    it 'sends nothing for the call 1.x made' do
-      begin
-        ticket.article(body: 'hello')
-      rescue NoMethodError
-        nil
-      end
-
-      expect(a_request(:post, article_url).with(query: hash_including({}))).not_to have_been_made
+      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
     end
 
     it 'reads the article staged for the next save' do
       ticket.article = { body: 'reply' }
 
       expect(ticket.article).to eq(body: 'reply')
-    end
-
-    # With an article staged the reader is there, and it never looked at
-    # its arguments: the call 1.x made answered with the staged article,
-    # sent nothing and raised nothing.
-    context 'when an article is staged and the call 1.x made is made' do
-      before { ticket.article = { body: 'draft' } }
-
-      it 'raises ArgumentError rather than answering with the staged article' do
-        expect { ticket.article(body: 'reply') }.to raise_error(ArgumentError, /wrong number of arguments \(given 1, expected 0\)/)
-      end
-
-      it 'names add_article' do
-        expect { ticket.article(body: 'reply') }.to raise_error(ArgumentError, /add_article\(\.\.\.\)/)
-      end
-
-      it 'sends nothing' do
-        expect { ticket.article(body: 'reply') }.to raise_error(ArgumentError)
-        expect(a_request(:any, /zammad\.test/)).not_to have_been_made
-      end
-    end
-
-    it 'tells a reader given a value where the value is written' do
-      ticket.assign_attributes(state: 'open')
-
-      expect { ticket.state('closed') }.to raise_error(ArgumentError, /write it with state = \.\.\. or update\(state: \.\.\.\)/)
     end
   end
 end

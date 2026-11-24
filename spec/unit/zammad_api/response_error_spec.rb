@@ -6,8 +6,7 @@ RSpec.describe ZammadAPI::ResponseError do
       status:   status,
       headers:  headers,
       body:     body,
-      raw_body: body.is_a?(String) ? body : JSON.generate(body),
-      json:     !body.is_a?(String)
+      raw_body: body.is_a?(String) ? body : JSON.generate(body)
     )
   end
 
@@ -16,6 +15,7 @@ RSpec.describe ZammadAPI::ResponseError do
       ZammadAPI::ConfigurationError   => ZammadAPI::Error,
       ZammadAPI::UnknownResourceError => ZammadAPI::Error,
       ZammadAPI::ParseError           => ZammadAPI::Error,
+      ZammadAPI::PaginationError      => ZammadAPI::Error,
       ZammadAPI::ConnectionError      => ZammadAPI::TransportError,
       ZammadAPI::TimeoutError         => ZammadAPI::TransportError,
       ZammadAPI::ClientError          => described_class,
@@ -151,9 +151,6 @@ RSpec.describe ZammadAPI::ResponseError do
       expect([bare.status, bare.body, bare.headers, bare.server_message]).to eq([nil, nil, {}, nil])
     end
 
-    # A NotFoundError this gem raises itself - find_by! finding nothing - used
-    # to answer nil here, so `retry if e.status == 404` stopped retrying for
-    # the one NotFoundError that did not come from Zammad.
     it 'reports the status its class is the name for, without a response' do
       bare = ZammadAPI::NotFoundError.new(operation: 'find object by name', detail: 'no record matched')
       expect(bare.status).to eq(404)
@@ -170,56 +167,34 @@ RSpec.describe ZammadAPI::ResponseError do
   end
 
   describe ZammadAPI::RateLimitError do
+    def retry_after(value)
+      headers = value.nil? ? {} : { 'retry-after' => value }
+
+      ZammadAPI::ResponseError.build(response(429, {}, headers), operation: 'find object').retry_after
+    end
+
     it 'exposes Retry-After as an integer' do
-      error = ZammadAPI::ResponseError.build(
-        ZammadAPI::Response.new(status: 429, headers: { 'retry-after' => '30' }, body: {}, raw_body: '{}', json: true),
-        operation: 'find object'
-      )
-      expect(error.retry_after).to eq(30)
+      expect(retry_after('30')).to eq(30)
     end
 
     it 'returns nil when the header is absent' do
-      error = ZammadAPI::ResponseError.build(
-        ZammadAPI::Response.new(status: 429, headers: {}, body: {}, raw_body: '{}', json: true),
-        operation: 'find object'
-      )
-      expect(error.retry_after).to be_nil
+      expect(retry_after(nil)).to be_nil
     end
 
     it 'returns nil when the header is not a number' do
-      error = ZammadAPI::ResponseError.build(
-        ZammadAPI::Response.new(status: 429, headers: { 'retry-after' => 'later' }, body: {}, raw_body: '{}', json: true),
-        operation: 'find object'
-      )
-      expect(error.retry_after).to be_nil
+      expect(retry_after('later')).to be_nil
     end
 
-    # Integer reads a prefix as a radix unless it is told the base, so a
-    # zero in front made the figure octal: `010` was 8, and `08` was nil.
     it 'reads a figure with a zero in front in base ten' do
-      figures = %w[010 08 0030].map do |value|
-        response = ZammadAPI::Response.new(status: 429, headers: { 'retry-after' => value }, body: {}, raw_body: '{}', json: true)
-
-        ZammadAPI::ResponseError.build(response, operation: 'find object').retry_after
-      end
-
-      expect(figures).to eq([10, 8, 30])
+      expect(%w[010 08 0030].map { retry_after(it) }).to eq([10, 8, 30])
     end
 
     it 'returns nil for a figure in another base' do
-      error = ZammadAPI::ResponseError.build(
-        ZammadAPI::Response.new(status: 429, headers: { 'retry-after' => '0x10' }, body: {}, raw_body: '{}', json: true),
-        operation: 'find object'
-      )
-      expect(error.retry_after).to be_nil
+      expect(retry_after('0x10')).to be_nil
     end
 
     it 'reads a figure held as an Integer' do
-      error = ZammadAPI::ResponseError.build(
-        ZammadAPI::Response.new(status: 429, headers: { 'retry-after' => 30 }, body: {}, raw_body: '{}', json: true),
-        operation: 'find object'
-      )
-      expect(error.retry_after).to eq(30)
+      expect(retry_after(30)).to eq(30)
     end
   end
 end

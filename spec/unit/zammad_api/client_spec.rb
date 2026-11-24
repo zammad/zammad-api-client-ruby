@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'zammad_api/test'
-
 RSpec.describe ZammadAPI::Client do
   let(:url) { "#{ClientHelper::BASE_URL}api/v1/users/1" }
 
@@ -15,8 +13,6 @@ RSpec.describe ZammadAPI::Client do
       expect(described_class.new(url: 'http://zammad.test/', http_token: 'token')).to be_a(described_class)
     end
 
-    # A required keyword, this was Ruby's `ArgumentError: missing keyword`,
-    # past the rescue written for an incomplete configuration.
     it 'surfaces configuration errors' do
       expect { described_class.new(http_token: 'token') }
         .to raise_error(ZammadAPI::ConfigurationError, 'missing url in config')
@@ -80,10 +76,7 @@ RSpec.describe ZammadAPI::Client do
       expect(described_class.from_env(http_token: 'passed in').config.http_token).to eq('passed in')
     end
 
-    # Only an empty variable counted as unset. One holding a space was taken
-    # for a value, took the place of the variable beside it, and was then
-    # read as no credential, or as a second one.
-    context 'with a variable that holds nothing but whitespace' do
+    context 'with a variable that is empty or only whitespace' do
       let(:environment) { { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_TOKEN' => 'from-env' } }
 
       def from(variables)
@@ -91,14 +84,10 @@ RSpec.describe ZammadAPI::Client do
         described_class.from_env
       end
 
-      [' ', "\t", "\n", " \r\n "].each do |blank|
+      ['', " \n"].each do |blank|
         it "reads ZAMMAD_TOKEN past a ZAMMAD_HTTP_TOKEN of #{blank.inspect}" do
           expect(from('ZAMMAD_HTTP_TOKEN' => blank).config.http_token).to eq('from-env')
         end
-      end
-
-      it 'reads ZAMMAD_TOKEN past an empty ZAMMAD_HTTP_TOKEN, as it did' do
-        expect(from('ZAMMAD_HTTP_TOKEN' => '').config.http_token).to eq('from-env')
       end
 
       %w[ZAMMAD_USER ZAMMAD_PASSWORD ZAMMAD_OAUTH2_TOKEN].each do |name|
@@ -117,12 +106,8 @@ RSpec.describe ZammadAPI::Client do
         expect { described_class.from_env }.to raise_error(ZammadAPI::ConfigurationError, /missing user in config/)
       end
 
-      it 'keeps the whitespace around a value that holds more than that' do
-        expect(from('ZAMMAD_HTTP_TOKEN' => " padded\n").config.http_token).to eq(" padded\n")
-      end
-
-      it 'takes a variable with a byte that is not text for the value it is' do
-        expect(from('ZAMMAD_USER' => "j\xFFne", 'ZAMMAD_PASSWORD' => 'p', 'ZAMMAD_TOKEN' => ' ').config.authentication_scheme).to eq(:basic)
+      it 'strips the whitespace around a token that holds more than that' do
+        expect(from('ZAMMAD_HTTP_TOKEN' => " padded\n").config.http_token).to eq('padded')
       end
 
       it 'still takes a password of spaces that is passed in' do
@@ -132,9 +117,6 @@ RSpec.describe ZammadAPI::Client do
       end
     end
 
-    # A credential is read in a fixed order, so a plain merge left the
-    # environment's token in charge of a client that was handed another way to
-    # authenticate - and nothing said so.
     context 'when an argument names another way to authenticate' do
       before do
         stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_TOKEN' => 'from-env' })
@@ -162,8 +144,6 @@ RSpec.describe ZammadAPI::Client do
       end
     end
 
-    # Two ways to authenticate in the environment, and nothing passed in to
-    # say which is meant.
     it 'refuses an environment that sets more than one way to authenticate' do
       stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_TOKEN' => 't', 'ZAMMAD_USER' => 'u', 'ZAMMAD_PASSWORD' => 'p' })
 
@@ -285,9 +265,6 @@ RSpec.describe ZammadAPI::Client do
     end
   end
 
-  # A proxy is Enumerable over every record of its kind, so the readers are
-  # plural. The singular names are what they were called in 1.x, when a proxy
-  # was only a dispatcher for find and create, and they are gone.
   describe 'the singular names the readers had in 1.x' do
     %i[group organization ticket ticket_article ticket_priority ticket_state user].each do |old_name|
       it "does not answer ##{old_name}" do
@@ -324,9 +301,6 @@ RSpec.describe ZammadAPI::Client do
       expect { unit_client.resource(:unicorn) }.to raise_error(/available resources are: groups, organizations/)
     end
 
-    # The way to the parts of the API this gem does not model: 1.x reached any
-    # subclass of Base through const_get, 2.0 closed that, and raw requests
-    # were all that was left.
     context 'with a resource class a caller declared' do
       let(:client)    { unit_client }
       let(:roles_url) { "#{ClientHelper::BASE_URL}api/v1/roles" }
@@ -398,15 +372,10 @@ RSpec.describe ZammadAPI::Client do
           .to raise_error(ArgumentError, /resource takes the name of a resource or a subclass of ZammadAPI::Resources::Base, and String is neither/)
       end
 
-      # Reported by the call that named the class, not by its first request.
       it 'refuses a resource class that declares no path' do
         stub_const('Pathless', Class.new(ZammadAPI::Resources::Base))
 
         expect { client.resource(Pathless) }.to raise_error(ZammadAPI::Error, /Pathless does not declare an API path/)
-      end
-
-      it 'names the class in the hint a collection gives for a lookup by id' do
-        expect { client.resource(Role).all.find(1) }.to raise_error(ArgumentError, /client\.resource\(Role\)\.find\(1\)/)
       end
     end
 
@@ -482,8 +451,6 @@ RSpec.describe ZammadAPI::Client do
         expect(stub).to have_been_requested
       end
 
-      # Faraday lets an absolute URL replace the instance URL and still sends
-      # the client's headers, so this handed the access token to another host.
       it 'refuses an absolute URL rather than sending the credentials to another host' do
         expect { client.get('https://other.example/collect') }
           .to raise_error(ArgumentError, /a request path is relative to the instance URL/)
@@ -504,17 +471,8 @@ RSpec.describe ZammadAPI::Client do
         expect { client.get('/https://other.example/collect') }.to raise_error(ArgumentError, /absolute URL/)
       end
 
-      # The guard asked for `://` after the scheme. Faraday 2.9.0 and 2.9.1
-      # join such a path to the instance URL as URI does, which makes it an
-      # absolute URL with no host, and send the client's headers there.
-      ['http:/collect', 'HTTP:/collect', 'http:collect', '/http:/collect', 'file:/etc/hosts', 'api:v1/tickets'].each do |path|
-        it "refuses #{path}, which opens with a scheme and no host" do
-          expect { client.get(path) }.to raise_error(ArgumentError, /opens with a scheme, which makes it an absolute URL/)
-        end
-      end
-
-      it 'reads such a path as URI does, which is what an older Faraday resolves it with' do
-        expect(URI('https://zammad.test/').merge('http:/collect').host).to be_nil
+      it 'refuses a path that opens with a scheme and no host' do
+        expect { client.get('http:/collect') }.to raise_error(ArgumentError, /absolute URL/)
       end
 
       it 'takes a colon after the first segment, which leaves the path relative' do
@@ -540,154 +498,17 @@ RSpec.describe ZammadAPI::Client do
           .to raise_error(ArgumentError) { |error| expect(error.message).not_to include('s3cret') }
       end
 
-      # A path is joined to the instance URL the way a link is resolved, so
-      # `..` climbs out of the sub-path a Zammad is served from, and the
-      # request went to whatever else the host serves with the token on it.
-      context 'with a path that climbs out of the instance URL' do
-        let(:client) { unit_client(url: 'http://zammad.test/helpdesk/') }
+      it 'sends a query string written into the path' do
+        stub = stub_request(:get, roles_url).with(query: { 'name' => 'prüfung', 'page' => '2' }).to_return(json_response([]))
 
-        before { stub_request(:any, /zammad\.test/).to_return(json_response({})) }
-
-        it 'refuses it rather than sending the credentials to another application' do
-          expect { client.get('../billing/export') }
-            .to raise_error(ArgumentError, /holds a '\.\.' segment, which climbs out of it/)
-        end
-
-        it 'makes no request for it' do
-          expect { client.get('../billing/export') }.to raise_error(ArgumentError)
-          expect(a_request(:any, /zammad\.test/)).not_to have_been_made
-        end
-
-        ['api/v1/../../../billing', 'api/v1/tickets/..', '..', '/../billing', '%2e%2e/billing', 'api/%2E%2e/x', 'api/.%2e/x'].each do |path|
-          it "refuses #{path}" do
-            expect { client.get(path) }.to raise_error(ArgumentError, /climbs out of it/)
-          end
-        end
-
-        # An id is escaped into one segment, slashes included, and a segment
-        # that holds `..` among other things is not one that climbs.
-        it 'still sends a record id that was escaped into its segment' do
-          stub = stub_request(:get, 'http://zammad.test/helpdesk/api/v1/groups/1%2F..%2F..%2Fbilling').with(query: hash_including({}))
-            .to_return(json_response({ error: 'not found' }, status: 404))
-
-          expect { client.groups.find('1/../../billing') }.to raise_error(ZammadAPI::NotFoundError)
-          expect(stub).to have_been_requested
-        end
-
-        it 'refuses it for every verb' do
-          %i[post put delete].each do |verb|
-            expect { client.public_send(verb, '../billing/export') }.to raise_error(ArgumentError, /climbs out of it/)
-          end
-        end
-
-        it 'refuses it for a client whose instance is served from the root as well' do
-          expect { unit_client.get('api/v1/../../x') }.to raise_error(ArgumentError, /climbs out of it/)
-        end
-
-        it 'does not quote the path it refuses, which may carry a secret' do
-          expect { client.get('../billing/export?token=s3cret') }
-            .to raise_error(ArgumentError) { |error| expect(error.message).not_to include('s3cret') }
-        end
-
-        ['api/v1/roles?path=../x', 'api/v1/roles#../x', 'api/v1/a..b', 'api/v1/.../x', './api/v1/roles', 'api/v1/..x'].each do |path|
-          it "takes #{path}, which holds two dots and no such segment" do
-            expect(client.get(path).status).to eq(200)
-          end
-        end
-      end
-
-      # Faraday reads the path with URI, and URI raises an error of its own
-      # for one it cannot read: neither a ZammadAPI::Error nor the
-      # ArgumentError a path is documented to raise, and raised after the
-      # request had been logged.
-      describe 'a path that cannot be read as a URL' do
-        it 'refuses one holding a character outside ASCII' do
-          expect { client.get('api/v1/tägs') }
-            .to raise_error(ArgumentError, /this one cannot be read as one: it holds a character outside ASCII/)
-        end
-
-        it 'refuses one holding a space' do
-          expect { client.get(' api/v1/roles') }.to raise_error(ArgumentError, /it holds a space, or another character a URL does not allow/)
-        end
-
-        it 'refuses one holding a % that begins no escape' do
-          expect { client.get('api/v1/roles%zz') }.to raise_error(ArgumentError, /cannot be read as one/)
-        end
-
-        it 'refuses one whose query string holds what a URL cannot' do
-          expect { client.get('api/v1/roles?name=prüfung') }.to raise_error(ArgumentError, /a character outside ASCII/)
-        end
-
-        it 'says how to write it' do
-          expect { client.get('api/v1/tägs') }.to raise_error(ArgumentError, /a space is %20, and ä is %C3%A4 - or pass a parameter as query:/)
-        end
-
-        it 'refuses a query string that names a parameter as two kinds of thing' do
-          expect { client.get('api/v1/roles?a=1&a[b]=2') }
-            .to raise_error(ArgumentError, /the query string written into this request path cannot be read as parameters/)
-        end
-
-        it 'does not quote the path, which may carry a secret' do
-          expect { client.get('api/v1/ro les?token=s3cret') }
-            .to raise_error(ArgumentError) { |error| expect(error.message).not_to include('s3cret') }
-        end
-
-        # Ruby attaches the error a rescue raised in to the one it raises,
-        # and prints it with it. URI's quotes the path.
-        it 'does not carry the error that quotes the path along as its cause' do
-          expect { client.get('api/v1/ro les?token=s3cret') }.to raise_error(ArgumentError) { |error|
-            expect(error.cause).to be_nil
-            expect(error.full_message(highlight: false)).not_to include('s3cret')
-          }
-        end
-
-        it 'does not carry one along for a query string it cannot read either' do
-          expect { client.get('api/v1/roles?token=s3cret&token[b]=2') }
-            .to raise_error(ArgumentError) { |error| expect(error.cause).to be_nil }
-        end
-
-        it 'refuses it for every verb' do
-          %i[post put delete].each do |verb|
-            expect { client.public_send(verb, 'api/v1/tägs') }.to raise_error(ArgumentError, /cannot be read as one/)
-          end
-        end
-
-        it 'makes no request and leaves no log line for one' do
-          log    = StringIO.new
-          logged = unit_client(logger: Logger.new(log, level: Logger::DEBUG))
-          stub_request(:any, /zammad\.test/)
-
-          expect { logged.get('api/v1/tägs') }.to raise_error(ArgumentError)
-          expect(a_request(:any, /zammad\.test/)).not_to have_been_made
-          expect(log.string).to be_empty
-        end
-
-        it 'still sends the same path percent-encoded' do
-          stub = stub_request(:get, 'http://zammad.test/api/v1/t%C3%A4gs').to_return(json_response([]))
-
-          client.get('api/v1/t%C3%A4gs')
-          expect(stub).to have_been_requested
-        end
-
-        it 'still sends a query string written into the path' do
-          stub = stub_request(:get, roles_url).with(query: { 'name' => 'prüfung', 'page' => '2' }).to_return(json_response([]))
-
-          client.get('api/v1/roles?name=pr%C3%BCfung&page=2')
-          expect(stub).to have_been_requested
-        end
+        client.get('api/v1/roles?name=pr%C3%BCfung&page=2')
+        expect(stub).to have_been_requested
       end
 
       it 'keeps a protocol-relative path on the instance' do
         stub = stub_request(:get, 'http://zammad.test/other.example/collect').to_return(json_response([]))
 
         client.get('//other.example/collect')
-        expect(stub).to have_been_requested
-      end
-
-      it 'still sends a path that merely contains a colon' do
-        stub = stub_request(:get, 'http://zammad.test/api/v1/tags:search').to_return(json_response([]))
-
-        client.get('api/v1/tags:search')
         expect(stub).to have_been_requested
       end
 
@@ -716,8 +537,6 @@ RSpec.describe ZammadAPI::Client do
         expect(stub).to have_been_requested
       end
 
-      # An escape hatch that cannot set a header does not reach an endpoint
-      # that needs one.
       it 'sends the headers it was given' do
         stub = stub_request(:get, roles_url)
           .with(headers: { 'Accept-Language' => 'de-de' })
@@ -727,53 +546,13 @@ RSpec.describe ZammadAPI::Client do
         expect(stub).to have_been_requested
       end
 
-      it 'stringifies a header value the wire could not carry' do
+      it 'sends a header value that is not a String as text' do
         stub = stub_request(:get, roles_url)
           .with(headers: { 'X-Retry' => '3' })
           .to_return(json_response([]))
 
         client.get('api/v1/roles', headers: { 'X-Retry' => 3 })
         expect(stub).to have_been_requested
-      end
-
-      # Faraday's authorization middleware leaves a header that is already set
-      # alone, so this would have replaced the client's own credentials -
-      # quietly, while #inspect went on reporting the scheme it was built with.
-      it 'refuses to replace the configured authentication' do
-        expect { client.get('api/v1/roles', headers: { 'Authorization' => 'Token other' }) }
-          .to raise_error(ArgumentError, /header authorization is set by this client/)
-      end
-
-      it 'names the option that does mean it' do
-        expect { client.get('api/v1/roles', headers: { 'Authorization' => 'Token other' }) }
-          .to raise_error(ArgumentError, /pass http_token:, oauth2_token:, or user: and password:/)
-      end
-
-      it 'refuses the From header that on_behalf_of owns' do
-        expect { client.get('api/v1/roles', headers: { from: 'agent@example.com' }) }
-          .to raise_error(ArgumentError, /use client\.on_behalf_of/)
-      end
-
-      it 'refuses a nil header value rather than sending an empty one' do
-        expect { client.get('api/v1/roles', headers: { 'X-Trace' => nil }) }
-          .to raise_error(ArgumentError, /header x-trace is nil/)
-      end
-
-      it 'refuses a header value that is not text' do
-        expect { client.get('api/v1/roles', headers: { 'X-Trace' => ['a'] }) }
-          .to raise_error(ArgumentError, /a header is always text/)
-      end
-
-      # HTTP reads the two names as one header, so a merge would send whichever
-      # Hash order put last and drop the other without a word.
-      it 'refuses two spellings of one header' do
-        expect { client.get('api/v1/roles', headers: { 'Accept-Language' => 'de', 'accept-language' => 'en' }) }
-          .to raise_error(ArgumentError, /header accept-language was given twice/)
-      end
-
-      it 'makes no request for a header it refuses' do
-        expect { client.get('api/v1/roles', headers: { 'X-Trace' => nil }) }.to raise_error(ArgumentError)
-        expect(a_request(:any, /zammad\.test/)).not_to have_been_made
       end
 
       it 'raises the mapped error class' do
@@ -789,13 +568,11 @@ RSpec.describe ZammadAPI::Client do
           .to raise_error(ZammadAPI::ServerError, "Can't GET api/v1/roles: HTTP 500")
       end
 
-      # The path names the request in every error it raises, and a query
-      # written into it went along: a token in an exception report.
-      it 'names it without a credential in a query written into the path' do
+      it 'leaves a query string written into the path out of the error message' do
         stub_request(:get, roles_url).with(query: hash_including({})).to_return(json_response({}, status: 500))
 
         expect { client.get('api/v1/roles?token=path-s3cret&page=2') }
-          .to raise_error(ZammadAPI::ServerError, "Can't GET api/v1/roles?token=[REDACTED]&page=2: HTTP 500")
+          .to raise_error(ZammadAPI::ServerError, "Can't GET api/v1/roles: HTTP 500")
       end
 
       it 'hands back a non-JSON body untouched' do
@@ -886,8 +663,6 @@ RSpec.describe ZammadAPI::Client do
       end
     end
 
-    # The scope is set after the caller's headers, so a request cannot take the
-    # header out from under the client that was scoped.
     it 'keeps the on_behalf_of scope alongside a caller header' do
       stub = stub_request(:get, roles_url)
         .with(headers: { 'From' => 'agent@example.com', 'X-Trace' => 'abc' })
@@ -938,62 +713,26 @@ RSpec.describe ZammadAPI::Client do
         .to have_been_made.twice
     end
 
-    # `client.on_behalf_of(user)` built a client whose From header carried
-    # the record as it prints.
-    describe 'the record of a user where its login belongs' do
-      let(:user) { unit_client.users.find(1) }
+    it 'takes a user id' do
+      stub = stub_request(:get, url).with(query: hash_including({}), headers: { 'From' => '7' }).to_return(json_response({ id: 1 }))
+      unit_client.on_behalf_of(7).users.find(1)
 
-      it 'is refused by its class, without printing it' do
-        expect { unit_client.on_behalf_of(user) }
-          .to raise_error(ArgumentError, /and was given ZammadAPI::Resources::User: .* pass its id\.\z/) { |error|
-            expect(error.message).not_to include('#<')
-          }
-      end
-
-      it 'is what its id is taken from' do
-        expect(unit_client.on_behalf_of(user.id).inspect).to include('on_behalf_of="1"')
-      end
+      expect(stub).to have_been_requested
     end
 
-    # Zammad skips a From header with nothing in it, and a nil sent none, so
-    # each of these handed back a client that ran every request as the
-    # account it authenticates as - with no error to say the scope was gone.
+    it 'strips whitespace around the identifier' do
+      stub = stub_request(:get, url).with(query: hash_including({}), headers: { 'From' => 'agent@example.com' }).to_return(json_response({ id: 1 }))
+      unit_client.on_behalf_of(" agent@example.com\n").users.find(1)
+
+      expect(stub).to have_been_requested
+    end
+
     describe 'an identifier that names nobody' do
-      [nil, '', '   ', "\t\n", "\u00A0", "\u3000"].each do |blank|
+      [nil, '', '   ', "\t\n"].each do |blank|
         it "refuses #{blank.inspect}" do
           expect { unit_client.on_behalf_of(blank) }
-            .to raise_error(ArgumentError, /on_behalf_of needs the login, email address or id of a user, and was given #{Regexp.escape(blank.inspect)}/)
+            .to raise_error(ArgumentError, "on_behalf_of needs the login, email address or id of a user, got #{blank.inspect}")
         end
-      end
-
-      # Client.build takes anything with a transport's interface. One whose
-      # with_on_behalf_of stores what it is given would otherwise send an
-      # empty From header.
-      it 'refuses one through a transport that does not check it' do
-        storing = Class.new do
-          attr_reader :on_behalf_of
-
-          def initialize(on_behalf_of = nil) = @on_behalf_of = on_behalf_of
-          def with_on_behalf_of(identifier) = self.class.new(identifier)
-        end
-        client = described_class.build(unit_client.config, storing.new)
-
-        expect { client.on_behalf_of("\u00A0") }.to raise_error(ArgumentError, /on_behalf_of needs the login/)
-      end
-
-      it 'hands such a transport the scope as the text the header carries' do
-        storing = Class.new do
-          attr_reader :on_behalf_of
-
-          def initialize(on_behalf_of = nil) = @on_behalf_of = on_behalf_of
-          def with_on_behalf_of(identifier) = self.class.new(identifier)
-        end
-
-        expect(described_class.build(unit_client.config, storing.new).on_behalf_of(7).inspect).to include('on_behalf_of="7"')
-      end
-
-      it 'says what the request would have run as' do
-        expect { unit_client.on_behalf_of(nil) }.to raise_error(ArgumentError, /performed as the account this client authenticates as/)
       end
 
       it 'refuses it before the block is run' do
@@ -1001,13 +740,6 @@ RSpec.describe ZammadAPI::Client do
         expect { unit_client.on_behalf_of('') { ran = true } }.to raise_error(ArgumentError)
 
         expect(ran).to be(false)
-      end
-
-      it 'still takes a user id' do
-        stub = stub_request(:get, url).with(query: hash_including({}), headers: { 'From' => '7' }).to_return(json_response({ id: 1 }))
-        unit_client.on_behalf_of(7).users.find(1)
-
-        expect(stub).to have_been_requested
       end
     end
 
@@ -1059,8 +791,6 @@ RSpec.describe ZammadAPI::Client do
         .to raise_error(ZammadAPI::ConfigurationError, /positive number/)
     end
 
-    # Merged beside the token it was meant to replace, the new credential was
-    # never sent: the derived client went on acting as the old account.
     context 'when it names another way to authenticate' do
       it 'switches to an OAuth2 token' do
         expect(unit_client.with(oauth2_token: 'x').config.authentication_scheme).to eq(:oauth2_token)
@@ -1166,66 +896,12 @@ RSpec.describe ZammadAPI::Client do
       expect(unit_client(http_token: 'super-secret').inspect).not_to include('super-secret')
     end
 
-    # A scoped client printed as the one it was derived from, so nothing in a
-    # log told the two apart.
     it 'shows the user a scoped client acts for' do
       expect(unit_client.on_behalf_of('agent@example.com').inspect)
         .to eq('#<ZammadAPI::Client url="http://zammad.test/" auth=http_token on_behalf_of="agent@example.com">')
     end
-
-    # They used to be sent in place of the configured token, while this went
-    # on reporting auth=http_token.
-    it 'cannot be built from a url that carries credentials, so it never reports a scheme it does not use' do
-      expect { unit_client(url: 'https://admin:url-s3cret@zammad.example.com/') }
-        .to raise_error(ZammadAPI::ConfigurationError, /config url carries credentials of its own/)
-    end
   end
 
-  # ActiveSupport serializes an object as its instance variables. For a
-  # client that was the configuration and the transport, credentials
-  # included, and then every record of every resource: a proxy is
-  # Enumerable, which is serialized as its elements. It is not loaded here:
-  # what is asked is what it asks, and that the answer is this class's own.
-  describe 'serializing as JSON' do
-    it 'answers as_json itself, where ActiveSupport would answer for any object' do
-      expect(described_class.instance_method(:as_json).owner).to be(described_class)
-    end
-
-    it 'is the url and the auth scheme' do
-      expect(unit_client.as_json).to eq({ url: 'http://zammad.test/', auth: :http_token })
-    end
-
-    it 'names the user a scoped client acts for' do
-      expect(unit_client.on_behalf_of('agent@example.com').as_json).to include(on_behalf_of: 'agent@example.com')
-    end
-
-    it 'writes that as a JSON object' do
-      expect(unit_client.to_json).to eq('{"url":"http://zammad.test/","auth":"http_token"}')
-    end
-
-    it 'does not leak the token' do
-      expect(unit_client(http_token: 'super-secret').to_json).not_to include('super-secret')
-    end
-
-    it 'stays that nested inside another structure' do
-      expect(JSON.generate(event: 'sync', client: unit_client(http_token: 'super-secret')))
-        .to eq('{"event":"sync","client":{"url":"http://zammad.test/","auth":"http_token"}}')
-    end
-
-    it 'makes no request' do
-      unit_client.to_json
-
-      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
-    end
-
-    it 'does not ask the transport, which may be the test kit\'s' do
-      expect(ZammadAPI::Test.new.client.as_json).to eq({ url: 'https://zammad.test/', auth: :http_token })
-    end
-  end
-
-  # A proxy holds nothing but the client's transport and the resource class,
-  # and `client.tickets` is the idiom every call starts with - each one used to
-  # allocate a fresh one.
   describe 'resource proxies' do
     subject(:client) { unit_client }
 
@@ -1235,11 +911,6 @@ RSpec.describe ZammadAPI::Client do
       expect(client.tickets).to be(first)
     end
 
-    # Built up front rather than memoized on first use. A client is documented
-    # as immutable once built and safe to share between threads without
-    # locking, and a memo filled in by the first `client.tickets` in each worker
-    # is a write to shared state - harmless under CRuby's GVL, but not the
-    # contract that was written down.
     it 'is not mutated by reading a proxy off it' do
       before_read = client.instance_variable_get(:@resources)
       client.tickets
@@ -1259,8 +930,6 @@ RSpec.describe ZammadAPI::Client do
       expect(client.tickets).not_to be(client.users)
     end
 
-    # The cache belongs to one transport, so a derived client must not be
-    # handed proxies still wired to the transport it was derived from.
     it 'does not carry a proxy over to an on_behalf_of client' do
       expect(client.on_behalf_of('agent@example.com').tickets).not_to be(client.tickets)
     end
@@ -1269,8 +938,6 @@ RSpec.describe ZammadAPI::Client do
       expect(client.with(timeout: 5).tickets).not_to be(client.tickets)
     end
 
-    # The point of not sharing the cache: a proxy from the derived client has
-    # to send that client's From header, not the original's.
     it 'gives a derived client a proxy that carries its own scope' do
       stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/tickets/1")
         .with(query: hash_including({})).to_return(json_response({ id: 1 }))

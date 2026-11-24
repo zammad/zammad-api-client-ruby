@@ -27,11 +27,8 @@ module ZammadAPI
 
       has_many :articles, class_name: 'TicketArticle', path: ->(id) { "api/v1/ticket_articles/by_ticket/#{id}" }
 
-      # Every article of this ticket, refetched on each call.
-      #
-      # The same list as +ticket.related.articles+; this is the older name and
-      # stays because it reads better than reaching through +related+ for the
-      # one association a ticket is usually asked for.
+      # Every article of this ticket, refetched on each call: the same list as
+      # +ticket.related.articles+.
       #
       # @return [Array<TicketArticle>]
       # @raise [ResponseError] when Zammad rejected the request
@@ -39,67 +36,17 @@ module ZammadAPI
 
       # Adds an article to this ticket.
       #
-      # Named for what it does. It was +article+, a noun that sends a POST,
-      # next to +articles+, a noun that only reads - so the one letter
-      # between them was the difference between reading a ticket's history
-      # and writing to it.
-      #
       # @example
       #   ticket.add_article(subject: 'Update', body: 'Reset link sent.', type: 'note')
       #
       # @param attributes [Hash] article attributes, e.g. +body:+, +type:+
       # @return [TicketArticle] the created article
-      # @raise [Error] when the ticket has no id yet, or was destroyed
+      # @raise [Error] when the ticket has no id yet
       # @raise [ResponseError] when Zammad rejected the request
       def add_article(attributes = {})
-        # A destroyed ticket takes no articles, and says so here rather than
-        # one request later. `require_id!` passes on its own, because destroy
-        # leaves the id readable, so without this the POST went out naming a
-        # ticket that is gone and Zammad's 422 about ticket_id was the first
-        # news of it - the fourth state-changing path, after the three that
-        # already ask.
-        raise_if_destroyed!('add an article to')
-
-        # An article belongs to a ticket by id, so ask for one here rather
-        # than merging nil. Unchecked, this POSTed `ticket_id: null` and left
-        # the caller reading Zammad's 422 to work out that the ticket they
-        # were adding to had never been saved - the one path in the gem that
-        # needed a stored id and went to the server to find out it had none.
-        #
-        # Both spellings of the key are taken out before this ticket's id
-        # goes in. `merge(ticket_id: ...)` replaces a Symbol key and leaves a
-        # String one standing beside it, and the article symbolizes its keys
-        # in the order they come: given `ticket_id` under both spellings, the
-        # String one came last and won, so `add_article` on ticket 7 POSTed
-        # an article naming whichever ticket the caller's Hash did. An
-        # article refuses two spellings of one attribute now, and a String
-        # `ticket_id` left beside this ticket's would be refused as a pair
-        # the caller never wrote.
-        #
-        # Read as a Hash first, by the rule the article's own constructor
-        # has - see {Base#attribute_hash} - so that what is taken apart here
-        # is one: the strong parameters of a controller, converted, and
-        # anything that is no set of attributes refused before `reject` is
-        # called on it.
-        own    = attribute_hash(attributes).reject { |key, _| key.to_s == 'ticket_id' }
-        record = TicketArticle.new(transport, own.merge(ticket_id: require_id!))
+        record = TicketArticle.new(transport, Hash(attributes).merge(ticket_id: require_id!))
         record.save!
         record
-      end
-
-      private
-
-      # `ticket.article(body: '...')` is the call that added an article in
-      # 1.x. On a ticket with an article staged - one built with `article:`
-      # whose save was rejected, say - +article+ is an attribute it carries,
-      # and the call reaches the reader with an argument. Whoever wrote it
-      # meant {#add_article}, so the refusal names it.
-      #
-      # @see AttributeAccess#reader_arguments_message
-      def reader_arguments_message(name, given)
-        return super if name != :article
-
-        "#{super} To add an article to this ticket, which is what article(...) did in 1.x, call add_article(...)."
       end
     end
   end

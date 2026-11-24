@@ -6,10 +6,6 @@ module ZammadAPI
     include Enumerable[R]
 
     SEARCH_MAX_PER_PAGE: Integer
-    SEARCH_FILTER_KEYS: Array[Symbol]
-    BLANK_TERM_MESSAGE: String
-    SEARCHABLE_UNSORTABLE_HINT: String
-    UNSORTABLE_HINT: String
 
     attr_reader resource_class: untyped
 
@@ -35,39 +31,16 @@ module ZammadAPI
     def page: (Integer number, ?per_page: Integer?) -> Collection[R]
     def pluck: (*(Symbol | String) keys) -> Array[untyped]
     def count: (*untyped) ?{ (R) -> boolish } -> Integer
-    def size: () -> Integer
-    def length: () -> Integer
     def empty?: () -> bool
-    def any?: () -> bool
-           | ...
-    def none?: () -> bool
-            | ...
     def first: () -> R?
              | (Integer count) -> Array[R]
-    def take: (Integer count) -> Array[R]
-    def each_slice: (Integer size) { (Array[R]) -> void } -> Collection[R]
-                  | (Integer size) -> Enumerator[Array[R], untyped]
-    def each_cons: (Integer size) { (Array[R]) -> void } -> Collection[R]
-                 | (Integer size) -> Enumerator[Array[R], untyped]
-    def lazy: () -> Enumerator::Lazy[R, void]
-    def search: (String term, ?condition: Hash[untyped, untyped], ?ids: Array[Integer | String], ?role_ids: Array[Integer | String], ?group_ids: Array[Integer | String] | Hash[Integer | String, String | Symbol | Array[String | Symbol]], ?permissions: Array[String]) -> Collection[R]
+    def search: (String term, **untyped filters) -> Collection[R]
     def inspect: () -> String
 
     private
 
     def collection: (String, String, ?query: Hash[Symbol, untyped], ?max_per_page: Integer, ?sortable: bool, ?paginated: bool, ?search: bool) -> Collection[R]
-    def search_filters: (Hash[untyped, untyped] filters) -> Hash[Symbol, untyped]
-    def search_filter_keys: () -> Array[Symbol]
-    def unknown_search_filter_message: (Array[Symbol] unknown) -> String
-    def empty_search_filter?: (untyped value) -> bool
-    def empty_search_filter_message: (Hash[Symbol, untyped] empty) -> String
-    def searchable!: () -> void
-    def find_by_id: (untyped id, Hash[Symbol, untyped] others) -> R?
-    def record_number: (untyped id) -> Integer?
-    def as_served: (Hash[Symbol, untyped] params) -> Hash[Symbol, untyped]
-    def carries?: (Resources::Base record, Hash[Symbol, untyped] params) -> bool
-    def search_term_for: (Hash[Symbol, untyped]) -> String?
+    def find_by_id: (Hash[Symbol, untyped] params) -> R?
     def path: () -> String
-    def member_path: (Integer | String id) -> String
   end
 end

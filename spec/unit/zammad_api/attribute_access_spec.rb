@@ -37,30 +37,6 @@ RSpec.describe ZammadAPI::AttributeAccess do
     it 'leaves keys alone that cannot become symbols' do
       expect(record_class.new(1 => 'one').attributes).to eq(1 => 'one')
     end
-
-    # Symbolizing is what makes two keys one, and the value that came first
-    # was dropped without a word.
-    context 'with one attribute under two spellings' do
-      it 'refuses the pair rather than keeping whichever came last' do
-        expect { record_class.new('name' => 'Support', name: 'Sales') }
-          .to raise_error(ArgumentError, /attribute name was given twice, as "name" and as :name/)
-      end
-
-      it 'refuses a pair inside a nested Hash' do
-        expect { record_class.new(preferences: { 'locale' => 'de', locale: 'en' }) }
-          .to raise_error(ArgumentError, /attribute locale was given twice/)
-      end
-
-      it 'refuses a pair inside a Hash in an Array' do
-        expect { record_class.new(notes: [{ 'body' => 'a', body: 'b' }]) }
-          .to raise_error(ArgumentError, /attribute body was given twice/)
-      end
-
-      it 'takes the same name at two depths, which is two attributes' do
-        expect(record_class.new('name' => 'Support', preferences: { name: 'Sales' }).attributes)
-          .to eq(name: 'Support', preferences: { name: 'Sales' })
-      end
-    end
   end
 
   describe 'reading' do
@@ -80,68 +56,12 @@ RSpec.describe ZammadAPI::AttributeAccess do
       expect(record.id).to eq(1)
     end
 
-    # The arguments were never looked at, so `record.name('Other')` answered
-    # with the name and changed nothing, where a reader written out raises.
-    context 'when a reader is given arguments' do
-      it 'raises ArgumentError, as a reader written out would' do
-        expect { record.name('Other') }.to raise_error(ArgumentError, /\Awrong number of arguments \(given 1, expected 0\)/)
-      end
-
-      it 'counts them' do
-        expect { record.name(1, 2, 3) }.to raise_error(ArgumentError, /given 3, expected 0/)
-      end
-
-      it 'counts keywords as the one Hash they arrive as' do
-        expect { record.name(to: 'Other') }.to raise_error(ArgumentError, /given 1, expected 0/)
-      end
-
-      it 'says what the reader reads' do
-        expect { record.name('Other') }.to raise_error(ArgumentError, /name reads the attribute of that name and takes no arguments/)
-      end
-
-      it 'does not point a record that takes no writes at a writer' do
-        expect { record.name('Other') }.to raise_error(ArgumentError) { expect(it.message).not_to include('name =') }
-      end
-
-      it 'still reads with a block, which any method takes' do
-        expect(record.name { 'ignored' }).to eq('Support')
-      end
-
-      it 'still raises NoMethodError for an attribute the record does not carry' do
-        expect { record.custom_field('x') }.to raise_error(NoMethodError, /undefined attribute custom_field/)
-      end
+    it 'raises NoMethodError for an attribute the record does not carry' do
+      expect { record.custom_field }.to raise_error(NoMethodError, /undefined method 'custom_field'/)
     end
 
-    # A reader used to answer nil here, which made a typo a silent nil that
-    # flowed on into whatever was written with it - and put respond_to? and
-    # the call itself at odds, since respond_to?(:custom_field) was false
-    # throughout.
-    it 'raises for an attribute the record does not carry' do
-      expect { record.custom_field }.to raise_error(NoMethodError, /undefined attribute custom_field/)
-    end
-
-    it 'names the readers that tolerate an absent attribute' do
-      expect { record.custom_field }.to raise_error(NoMethodError, /fetch\(:custom_field, nil\)/)
-    end
-
-    it 'says the record may be one Zammad served less of' do
-      expect { record.custom_field }.to raise_error(NoMethodError, /reduced object/)
-    end
-
-    it 'lists what the record does carry, so the spelling can be compared' do
-      expect { record.custom_field }.to raise_error(NoMethodError, /carries id, name, preferences/)
-    end
-
-    # A key that could not become a Symbol is left as it arrived, so sorting
-    # the keys themselves would raise from inside the message.
-    it 'lists mixed keys without raising from the message itself' do
-      expect { record_class.new(1 => 'one', 'name' => 'X').custom_field }
-        .to raise_error(NoMethodError, /carries 1, name/)
-    end
-
-    it 'says so plainly for a record that carries nothing' do
-      expect { record_class.new({}).custom_field }
-        .to raise_error(NoMethodError, /carries no attributes at all/)
+    it 'raises NoMethodError for a reader given arguments' do
+      expect { record.name('Other') }.to raise_error(NoMethodError, /undefined method 'name'/)
     end
 
     it 'carries the name and the receiver a bare NoMethodError would' do
@@ -219,42 +139,16 @@ RSpec.describe ZammadAPI::AttributeAccess do
       expect(record.fetch(:nope, 'fallback')).to eq('fallback')
     end
 
-    # Hash#fetch refuses a third argument, and so does this: collected with a
-    # splat and read as `default.first`, `fetch(:a, :b, :c)` - a multi-key read
-    # this has never been - was answered with `:b`.
+    it 'supports a block' do
+      expect(record.fetch(:nope) { |key| "no #{key}" }).to eq('no nope')
+    end
+
     it 'refuses more than one fallback, the way Hash#fetch does' do
       expect { record.fetch(:nope, 'one', 'two') }
         .to raise_error(ArgumentError, 'wrong number of arguments (given 3, expected 1..2)')
     end
-
-    # Hash#fetch warns and then ignores the default. Silently picking one of
-    # two fallbacks a caller cannot have meant to pass together is the same
-    # swallowed mistyped call the arity check above refuses.
-    # rubocop:disable Lint/UselessDefaultValueArgument -- the call under test
-    it 'says so when a block supersedes the default, the way Hash#fetch does' do
-      expect { record.fetch(:nope, 'fallback') { 'block' } }
-        .to output(/block supersedes default value argument/).to_stderr
-    end
-
-    it 'still answers from the block when both were given' do
-      expect { expect(record.fetch(:nope, 'fallback') { 'block' }).to eq('block') }.to output.to_stderr
-    end
-
-    # Hash#fetch names the line that made the call. A bare Kernel#warn named
-    # nothing at all - neither the call site nor the library it came from,
-    # which in an application with several such calls is everything the reader
-    # needs. `uplevel` supplies both that location and the `warning: ` prefix.
-    it 'names the line that made the call, the way Hash#fetch does' do
-      expect { record.fetch(:nope, 'fallback') { 'block' } }
-        .to output(/attribute_access_spec\.rb:\d+: warning: block supersedes/).to_stderr
-    end
-    # rubocop:enable Lint/UselessDefaultValueArgument
   end
 
-  # `record[:x] = v` reached method_missing as `:[]=`, which the writer branch
-  # took for an attribute called `[]` - it staged the index as the value, lost
-  # the write, and sent `{"[]": "x"}` on the next save. Ruby's operators end in
-  # `=` too, so `record <= 5` did the same for an attribute called `<`.
   describe '#[]=' do
     it 'goes through the same refusal a named writer does on a read-only record' do
       expect { record[:note] = 'x' }.to raise_error(NoMethodError, /attributes are read-only/)
@@ -262,26 +156,6 @@ RSpec.describe ZammadAPI::AttributeAccess do
 
     it 'names the attribute that was tried, not the operator' do
       expect { record[:note] = 'x' }.to raise_error(NoMethodError, /tried to set note/)
-    end
-
-    # `[]=` is a defined method, so respond_to_missing? never sees it: a
-    # read-only record claimed the one writer it has while denying every named
-    # one, then raised when it was called - the invariant the writer branch of
-    # respond_to_missing? is conditional for.
-    it 'is not claimed by a record that would refuse it' do
-      expect(record).not_to respond_to(:[]=)
-    end
-
-    it 'agrees with the named writers on the same record' do
-      expect(record.respond_to?(:[]=)).to eq(record.respond_to?(:name=))
-    end
-
-    # `respond_to?` takes either spelling and Ruby does not normalise the
-    # argument, so a Symbol-only comparison let the String fall through to the
-    # definition and answer true on a record that refuses every write.
-    it 'answers the same for the String spelling' do
-      # rubocop:disable-next Performance/StringIdentifierArgument -- the String spelling is the point
-      expect(record.respond_to?('[]=')).to eq(record.respond_to?(:[]=))
     end
   end
 
@@ -442,64 +316,10 @@ RSpec.describe ZammadAPI::AttributeAccess do
     it 'hands #as_json a copy rather than the frozen attributes' do
       expect(record.as_json).not_to be_frozen
     end
-
-    # ActiveSupport hands them to every object it serializes, a record
-    # inside a Hash or a collection included, and they were dropped:
-    # `user.as_json(except: [:password])` answered with the password.
-    context 'with the options an ActiveSupport encoder hands on' do
-      it 'leaves out what except: names' do
-        expect(record.as_json(except: [:preferences])).to eq(id: 1, name: 'Support')
-      end
-
-      it 'keeps only what only: names' do
-        expect(record.as_json(only: [:id])).to eq(id: 1)
-      end
-
-      it 'takes one name as well as a list' do
-        expect(record.as_json(except: :preferences)).to eq(id: 1, name: 'Support')
-      end
-
-      # The attributes are keyed by Symbols, and a String matched none.
-      it 'takes a name given as a String' do
-        expect(record.as_json(except: ['preferences'])).to eq(id: 1, name: 'Support')
-        expect(record.as_json(only: %w[id name])).to eq(id: 1, name: 'Support')
-      end
-
-      it 'reads only: where both are given, as ActiveSupport does' do
-        expect(record.as_json(only: [:id], except: [:id])).to eq(id: 1)
-      end
-
-      it 'keeps nothing for an only: that names nothing' do
-        expect(record.as_json(only: [])).to eq({})
-      end
-
-      it 'returns every attribute for options that name neither, and for none' do
-        expect(record.as_json({})).to eq(record.to_h)
-        expect(record.as_json(nil)).to eq(record.to_h)
-      end
-
-      it 'still hands over a copy' do
-        expect(record.as_json(only: [:preferences])[:preferences]).not_to be_frozen
-      end
-
-      # The json gem raises for a keyword its generator does not know, so
-      # the two are applied and not handed on.
-      it 'leaves the same attributes out of #to_json' do
-        expect(JSON.parse(record.to_json(except: ['preferences']))).to eq('id' => 1, 'name' => 'Support')
-        expect(JSON.parse(record.to_json(only: [:id]))).to eq('id' => 1)
-      end
-
-      it 'still hands #to_json the options that are the generator\'s' do
-        expect(record.to_json(only: [:id], space: ' ')).to eq('{"id": 1}')
-      end
-    end
   end
 
   # ActiveSupport gives every object a public `deep_dup`, and calls it on
-  # whatever a Hash or an Array holds. A private helper of that name here
-  # answered in its place, so `{ticket: ticket}.deep_dup` raised
-  # NoMethodError. It is not loaded here: what is asked is that the name is
-  # left to it.
+  # whatever a Hash or an Array holds.
   describe 'the names ActiveSupport gives every object' do
     it 'defines no deep_dup of its own' do
       expect(described_class.private_method_defined?(:deep_dup)).to be(false)

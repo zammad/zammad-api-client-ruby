@@ -5,22 +5,13 @@ module ZammadAPI
     attr_reader headers: Hash[String, String]
     attr_reader body: untyped
     attr_reader raw_body: String
-    attr_reader json: bool
 
-    def self.new: (status: Integer, headers: Hash[String, String], body: untyped, raw_body: String, json: bool) -> instance
+    def self.new: (status: Integer, headers: Hash[String, String], body: untyped, raw_body: String) -> instance
     SUCCESS_STATUSES: Range[Integer]
 
-    def self.decode_body: (String?, String) -> [untyped, bool]
-    def self.json_type?: (String?) -> bool
+    def self.decode_body: (String?, String) -> untyped
 
     def success?: () -> bool
-    def json?: () -> bool
-    def json_content_type?: () -> bool
     def decoded: (Symbol shape, operation: String, ?resource_class: Class?) -> untyped
-    def decoded_list: (operation: String, ?resource_class: Class?) -> [ Array[Hash[Symbol, untyped]], Integer? ]
-
-    private
-
-    def array_of_objects!: (Array[untyped], operation: String, resource_class: Class?) -> Array[untyped]
   end
 end

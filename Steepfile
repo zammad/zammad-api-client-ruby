@@ -7,12 +7,12 @@ target :lib do
   # socket is here for SocketError and openssl for OpenSSL::SSL::SSLError,
   # both of which Transport maps to ConnectionError; forwardable is here for
   # the collection shorthands ResourceProxy delegates to Collection; uri is
-  # here for the parse Config makes to find credentials in the instance url;
-  # date is here for the Date a request body carries as text. None of the
-  # five is named in the signatures the gem publishes - see SSL_ERRORS in
-  # sig/zammad_api/transport.rbs and sig/vendor/internal.rbs - so this does
-  # not add anything a consumer has to load.
-  library 'json', 'logger', 'timeout', 'socket', 'openssl', 'forwardable', 'uri', 'date'
+  # here for the parse Config makes of the instance url and the escaping of
+  # record ids. None of the four is named in the signatures the gem
+  # publishes - see SSL_ERRORS in sig/zammad_api/transport.rbs and
+  # sig/vendor/internal.rbs - so this does not add anything a consumer has
+  # to load.
+  library 'json', 'logger', 'timeout', 'socket', 'openssl', 'forwardable', 'uri'
 
   configure_code_diagnostics do |hash|
     # Default keyword-argument hashes such as `attributes = {}` cannot be

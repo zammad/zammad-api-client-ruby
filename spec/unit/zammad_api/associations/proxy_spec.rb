@@ -133,12 +133,6 @@ RSpec.describe ZammadAPI::Associations::Proxy do
         .to raise_error(ZammadAPI::ParseError, /Can't get articles \(ZammadAPI::Resources::TicketArticle\)/)
     end
 
-    # The one list in the gem read in a single request, because the endpoint
-    # it is declared against serves the whole thing: index_by_ticket iterates
-    # `ticket.articles` and renders them all, with no pagination to opt into.
-    # A guard used to sit here for a target that paged anyway, reading a total
-    # from a response header - a header Zammad sends from no endpoint, so it
-    # never once looked at a figure.
     it 'reads the whole list in one request' do
       stub_request(:get, articles_url).with(query: hash_including({}))
         .to_return(json_response([{ id: 1 }, { id: 2 }]))
@@ -226,13 +220,13 @@ RSpec.describe ZammadAPI::Associations::Proxy do
       expect(held.related.customer.id).to eq(9)
     end
 
-    it 'survives a write to an attribute no association resolves through' do
+    it 'is dropped by a write to any attribute' do
       held = ticket
       held.related.customer
       held.title = 'Renamed'
       held.related.customer
 
-      expect(a_request(:get, "#{users_url}/7").with(query: hash_including({}))).to have_been_made.once
+      expect(a_request(:get, "#{users_url}/7").with(query: hash_including({}))).to have_been_made.twice
     end
 
     it 'is dropped by assign_attributes touching a foreign key' do
@@ -247,10 +241,6 @@ RSpec.describe ZammadAPI::Associations::Proxy do
     end
   end
 
-  # `related = ticket.related` is the natural thing to write before reading
-  # two associations. The record used to drop its proxy and build another, so
-  # everything under 'the memo' above held for a caller who asked the record
-  # again and for nobody who had kept what they were handed.
   describe 'a proxy the caller kept' do
     let(:related) { ticket.related }
 
@@ -307,59 +297,12 @@ RSpec.describe ZammadAPI::Associations::Proxy do
       expect(a_request(:get, "#{users_url}/7").with(query: hash_including({}))).to have_been_made.twice
     end
 
-    it 'keeps its memo across a write no association resolves through' do
+    it 'fetches the target again after a write to any attribute' do
       related.customer
       ticket.title = 'Renamed'
       related.customer
 
-      expect(a_request(:get, "#{users_url}/7").with(query: hash_including({}))).to have_been_made.once
-    end
-
-    context 'when the record was destroyed' do
-      before do
-        stub_request(:delete, ticket_url).to_return(json_response({}))
-        related.customer
-        ticket.destroy
-      end
-
-      it 'refuses a target it had already resolved' do
-        expect { related.customer }
-          .to raise_error(ZammadAPI::Error, 'ZammadAPI::Resources::Ticket 42 was destroyed, there is nothing to read customer from')
-      end
-
-      it 'refuses a list, rather than requesting it for a record that is gone' do
-        expect { related.articles }.to raise_error(ZammadAPI::Error, /was destroyed/)
-        expect(a_request(:get, %r{ticket_articles/by_ticket})).not_to have_been_made
-      end
-    end
-
-    # The write clears the memo, and the lookup that was already out then
-    # filled it again, with the record behind the value from before. A logger
-    # or a middleware of the caller's that reaches the record is enough, on
-    # one thread; so is a second thread.
-    context 'when the foreign key is written while a lookup is on the wire' do
-      before do
-        stub_request(:get, "#{users_url}/7").with(query: hash_including({})).to_return do
-          ticket.customer_id = 9
-          json_response({ id: 7 })
-        end
-      end
-
-      it 'answers that lookup with the record it asked for' do
-        expect(related.customer.id).to eq(7)
-      end
-
-      it 'does not keep that answer for the record the key now names' do
-        related.customer
-
-        expect(related.customer.id).to eq(9)
-      end
-
-      it 'memoizes the lookup made after it' do
-        3.times { related.customer }
-
-        expect(a_request(:get, "#{users_url}/9").with(query: hash_including({}))).to have_been_made.once
-      end
+      expect(a_request(:get, "#{users_url}/7").with(query: hash_including({}))).to have_been_made.twice
     end
 
     it 'leaves the proxy of a copy to the copy' do
@@ -369,56 +312,6 @@ RSpec.describe ZammadAPI::Associations::Proxy do
 
       expect(related.customer.id).to eq(7)
       expect(copy.related.customer.id).to eq(9)
-    end
-  end
-
-  describe '.belongs_to_foreign_keys' do
-    it 'lists the keys a resource resolves associations through' do
-      expect(ZammadAPI::Resources::Ticket.belongs_to_foreign_keys)
-        .to include(:customer_id, :owner_id, :group_id, :state_id, :priority_id, :organization_id)
-    end
-
-    it 'includes the ones inherited from Base' do
-      expect(ZammadAPI::Resources::Group.belongs_to_foreign_keys).to eq(%i[created_by_id updated_by_id])
-    end
-
-    # The list is built at the first write to an attribute and kept. An
-    # association declared after that was never in it, so a write to its
-    # foreign key left the record it had resolved in place.
-    context 'when an association is declared after the list was built' do
-      let(:resource) { Class.new(ZammadAPI::Resources::Base) { path 'api/v1/memberships' } }
-
-      before { stub_const('Acme::Role', Class.new(ZammadAPI::Resources::Base) { path 'api/v1/roles' }) }
-
-      def declare_role = resource.send(:belongs_to, :role, class_name: 'Acme::Role')
-
-      it 'takes in its foreign key' do
-        resource.belongs_to_foreign_keys
-        declare_role
-
-        expect(resource.belongs_to_foreign_keys).to eq(%i[created_by_id updated_by_id role_id])
-      end
-
-      it 'takes it in on a class that inherits the declaration' do
-        subclass = Class.new(resource)
-        subclass.belongs_to_foreign_keys
-        declare_role
-
-        expect(subclass.belongs_to_foreign_keys).to include(:role_id)
-      end
-
-      it 'drops what the association resolved when its foreign key is written' do
-        [5, 6].each do |id|
-          stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/roles/#{id}").with(query: hash_including({})).to_return(json_response({ id: id }))
-        end
-        record = resource.from_response(unit_transport, id: 1, role_id: 5)
-        record.note = 'written before the declaration'
-        declare_role
-        record.related.role
-        record.role_id = 6
-
-        expect(record.related.role.id).to eq(6)
-      end
     end
   end
 

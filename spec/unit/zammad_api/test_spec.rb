@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require 'yaml'
 require 'zammad_api/test'
 
 RSpec.describe ZammadAPI::Test do
@@ -28,9 +27,6 @@ RSpec.describe ZammadAPI::Test do
       expect(client.config).to be(zammad.config)
     end
 
-    # Going through Client.new assembled a Faraday stack - auth, JSON,
-    # retries, adapter - only for it to be swapped straight back out, once per
-    # stand-in.
     it 'builds no HTTP stack on the way to the stand-in transport' do
       allow(ZammadAPI::Transport).to receive(:new).and_call_original
 
@@ -73,37 +69,8 @@ RSpec.describe ZammadAPI::Test do
         expect(zammad.requests.last.on_behalf_of).to eq('agent@example.com')
       end
 
-      # The stand-in's transport answered `with_config` with itself, so what
-      # is read from the transport stayed the stand-in's own: the derived
-      # client reported the option and went on as if it had not been given.
-      it 'retries as often as the derived client is told to' do
-        zammad.stub(:get, 'api/v1/groups/1', status: 503)
-
-        expect { zammad.client.with(retries: 0).groups.find(1) }.to raise_error(ZammadAPI::ServerError)
-        expect(zammad.requests.size).to eq(1)
-      end
-
-      it 'leaves the retries of the client it was derived from as they were' do
-        zammad.stub(:get, 'api/v1/groups/1', status: 503)
-        zammad.client.with(retries: 0)
-
-        expect { zammad.client.groups.find(1) }.to raise_error(ZammadAPI::ServerError)
-        expect(zammad.requests.size).to eq(1 + zammad.config.retries)
-      end
-
-      it 'holds a Retry-After against the derived timeout' do
-        zammad.stub(:get, 'api/v1/groups/1', status: 429, headers: { 'Retry-After' => '30' })
-        zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
-
-        expect { zammad.client.with(timeout: 5).groups.find(1) }.to raise_error(ZammadAPI::RateLimitError)
-        expect(zammad.requests.size).to eq(1)
-      end
-
       it 'keeps the derived options under an on_behalf_of scope taken afterwards' do
-        zammad.stub(:get, 'api/v1/groups/1', status: 503)
-
-        expect { zammad.client.with(retries: 0).on_behalf_of('agent@example.com').groups.find(1) }.to raise_error(ZammadAPI::ServerError)
-        expect(zammad.requests.size).to eq(1)
+        expect(zammad.client.with(timeout: 5).on_behalf_of('agent@example.com').config.timeout).to eq(5)
       end
 
       # A record names its installation by the URL of its transport.
@@ -158,20 +125,6 @@ RSpec.describe ZammadAPI::Test do
         .to raise_error(ArgumentError, /a request path is relative to the instance URL/)
     end
 
-    it 'refuses a path that climbs out of the instance URL the way the real transport does' do
-      expect { client.get('../billing/export') }.to raise_error(ArgumentError, /holds a '\.\.' segment/)
-      expect(zammad.requests).to be_empty
-    end
-
-    it 'refuses to stub such a path, which no request could reach' do
-      expect { zammad.stub(:get, 'api/v1/../x') }.to raise_error(ArgumentError, /holds a '\.\.' segment/)
-    end
-
-    it 'refuses a path that cannot be read as a URL the way the real transport does' do
-      expect { client.get('api/v1/tägs') }.to raise_error(ArgumentError, /cannot be read as one: it holds a character outside ASCII/)
-      expect(zammad.requests).to be_empty
-    end
-
     it 'records nothing for a path it refuses' do
       expect { client.get('https://other.example/collect') }.to raise_error(ArgumentError)
       expect(zammad.requests).to be_empty
@@ -187,31 +140,6 @@ RSpec.describe ZammadAPI::Test do
       expect(zammad.requests).to be_empty
     end
 
-    it 'refuses a header name that is not one, the way the real transport does' do
-      zammad.stub(:get, 'api/v1/roles', body: [])
-
-      expect { client.get('api/v1/roles', headers: { "X-A\r\nFrom: admin@example.com" => 'v' }) }
-        .to raise_error(ArgumentError, /goes on with a character no header name carries/)
-      expect(zammad.requests).to be_empty
-    end
-
-    it 'refuses a body holding a value JSON has no type for, the way the real transport does' do
-      zammad.stub(:post, 'api/v1/users', body: { id: 1 })
-
-      expect { client.users.create(login: 'jane', role_ids: Set[1, 2]) }
-        .to raise_error(ZammadAPI::Error, /its key role_ids was given as Set, which is no JSON type/)
-      expect(zammad.requests).to be_empty
-    end
-
-    # And for a query a query string could not carry as it was written.
-    it 'refuses a list of Hashes Rails would read as one, the way the real transport does' do
-      zammad.stub(:get, 'api/v1/roles', body: [])
-
-      expect { client.get('api/v1/roles', query: { list: [{ a: 1 }, { b: 2 }] }) }
-        .to raise_error(ArgumentError, /Rails would read the two as one/)
-      expect(zammad.requests).to be_empty
-    end
-
     it 'raises the mapped error class for a non-2xx status' do
       zammad.stub(:get, 'api/v1/groups/1', status: 404, body: { error: 'not found' })
 
@@ -224,6 +152,20 @@ RSpec.describe ZammadAPI::Test do
       group = client.groups.new(name: '')
       expect(group.save).to be(false)
       expect(group.error.server_message).to eq('Name is required')
+    end
+
+    it 'raises a rate limit with the wait Zammad asked for' do
+      zammad.stub(:get, 'api/v1/groups/1', status: 429, headers: { 'Retry-After' => '30' })
+
+      expect { client.groups.find(1) }.to raise_error(ZammadAPI::RateLimitError) { expect(it.retry_after).to eq(30) }
+    end
+
+    it 'raises for a failure at once, without the retries the real transport makes' do
+      zammad.stub(:get, 'api/v1/groups/1', status: 503)
+      zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
+
+      expect { client.groups.find(1) }.to raise_error(ZammadAPI::ServerError)
+      expect(zammad.requests.size).to eq(1)
     end
 
     it 'serves a non-JSON body untouched, e.g. an attachment' do
@@ -251,19 +193,11 @@ RSpec.describe ZammadAPI::Test do
       expect(client.get('api/v1/groups').headers['x-total-count']).to eq('7')
     end
 
-    # The stand-in exists so that the code under test cannot tell it from the
-    # real transport, and it carried its own copy of the verb loop - so a fifth
-    # verb added to one would have left the other unable to answer it.
     it 'answers every verb the real transport answers' do
       expect(ZammadAPI::Test::Transport.new(zammad))
         .to respond_to(*ZammadAPI::Transport::Verbs.instance_methods)
     end
 
-    # Transport#decode always hands over a response whose headers name the
-    # type - it is what the decode branches on - while this set `json: true`
-    # directly and left the headers as written. Code that branches on
-    # `response.headers['content-type']` passed against Zammad and failed
-    # against the stand-in, or the reverse.
     it 'serves a JSON body with the content-type a real response carries' do
       zammad.stub(:get, 'api/v1/groups', body: [])
 
@@ -282,15 +216,8 @@ RSpec.describe ZammadAPI::Test do
       expect(client.get('api/v1/groups').headers['content-type']).to eq('application/json; charset=utf-8')
     end
 
-    # The header used to be decorative: `json:` came from the Ruby type of the
-    # stub's body, so a stub could say `text/html` and still hand back a
-    # decoded Hash, where Zammad gives the raw string and `decoded` raises.
     context 'when a stub declares a type that is not JSON' do
       before { zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 }, headers: { 'Content-Type' => 'text/html' }) }
-
-      it 'does not decode the body' do
-        expect(client.get('api/v1/groups/1')).not_to be_json
-      end
 
       it 'hands back the raw body Zammad would have sent' do
         expect(client.get('api/v1/groups/1').body).to eq('{"id":1}')
@@ -301,47 +228,16 @@ RSpec.describe ZammadAPI::Test do
       end
     end
 
-    # A nil Content-Type stringified to '', which then beat the JSON default
-    # this kit supplies and served a Hash body undecoded - so the test failed
-    # inside the code under test with nothing to say the stub was at fault.
-    it 'refuses two spellings of one header rather than dropping a value' do
-      expect { zammad.stub(:get, 'api/v1/groups', body: [], headers: { 'Content-Type' => 'text/html', 'content-type' => 'application/json' }) }
-        .to raise_error(ArgumentError, /header content-type was given twice/)
-    end
-
-    it 'refuses a header value the wire could not carry' do
-      expect { zammad.stub(:get, 'api/v1/groups', body: [], headers: { 'Content-Type' => nil }) }
-        .to raise_error(ArgumentError, /header Content-Type was stubbed as nil/)
-    end
-
-    it 'names what a response header has to be' do
-      expect { zammad.stub(:get, 'api/v1/groups', body: [], headers: { 'X-Total-Count' => [7] }) }
-        .to raise_error(ArgumentError, /a response header is always text: pass a String/)
-    end
-
-    # Only the name used to be normalised, so a count written as an Integer
-    # reached the code under test as one, where the wire always carries "7".
     it 'carries a header value as the String the wire would have sent' do
       zammad.stub(:get, 'api/v1/groups', body: [], headers: { 'X-Total-Count' => 7 })
 
       expect(client.get('api/v1/groups').headers['x-total-count']).to eq('7')
     end
 
-    # Paging read the stub's body as written, which was the same thing only
-    # while a list could arrive as an Array. Once the content-type decided
-    # decoding, a list stubbed as a JSON string decoded to one and was never
-    # paged, so it answered every page with the same records and every full
-    # read raised PaginationError - where Zammad answers page two empty.
-    it 'pages a list stubbed as a JSON string the way it pages an Array' do
+    it 'reads a list stubbed as a JSON string' do
       zammad.stub(:get, 'api/v1/groups', body: '[{"id":1,"name":"a"},{"id":2,"name":"b"}]', headers: { 'Content-Type' => 'application/json' })
 
       expect(client.groups.all.map(&:name)).to eq(%w[a b])
-    end
-
-    it 'answers a later page of a string-bodied list as an endpoint out of records would' do
-      zammad.stub(:get, 'api/v1/groups', body: '[{"id":1}]', headers: { 'Content-Type' => 'application/json' })
-
-      expect(client.get('api/v1/groups', query: { page: 2 }).body).to eq([])
     end
 
     it 'keeps the raw body of a page it did not replace' do
@@ -360,19 +256,6 @@ RSpec.describe ZammadAPI::Test do
       zammad.stub(:get, 'api/v1/groups/1/avatar', body: 'binary')
 
       expect(client.get('api/v1/groups/1/avatar').headers).not_to have_key('content-type')
-    end
-
-    # The stub keeps serving after a response is built, and Response is a
-    # value. Handing out the stub's own Hash made every response from one stub
-    # share it, so writing to `response.headers` in one example rewrote the
-    # stand-in for every later request in it.
-    it 'gives each response its own headers rather than the stub\'s' do
-      zammad.stub(:get, 'api/v1/groups', body: [], headers: { 'X-Total-Count' => '7' })
-
-      first  = client.get('api/v1/groups')
-      second = client.get('api/v1/groups')
-
-      expect(first.headers).not_to be(second.headers)
     end
 
     it 'hands out headers a caller cannot write through' do
@@ -403,93 +286,25 @@ RSpec.describe ZammadAPI::Test do
 
         expect(Array.new(3) { client.groups.find(1).name }).to eq(%w[Users Users Users])
       end
-
-      # A lone stub stays in place to go on answering, so it was still at
-      # the head when a second one was queued, and answered once more.
-      context 'when a stub is declared after an earlier one has answered' do
-        before do
-          zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'First' })
-          client.groups.find(1)
-        end
-
-        it 'answers the next request with the later one' do
-          zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'Second' })
-
-          expect(Array.new(2) { client.groups.find(1).name }).to eq(%w[Second Second])
-        end
-
-        it 'does so however often the earlier one answered' do
-          2.times { client.groups.find(1) }
-          zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'Second' })
-
-          expect(client.groups.find(1).name).to eq('Second')
-        end
-
-        it 'serves several declared after it in turn' do
-          %w[Second Third].each { zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: it }) }
-
-          expect(Array.new(3) { client.groups.find(1).name }).to eq(%w[Second Third Third])
-        end
-
-        it 'does so again for one declared after the last of a sequence has answered' do
-          zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'Second' })
-          client.groups.find(1)
-          zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'Third' })
-
-          expect(client.groups.find(1).name).to eq('Third')
-        end
-
-        it 'leaves a stub of another scope where it is' do
-          zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'Scoped' }, query: { full: true })
-
-          expect(client.groups.find(1).name).to eq('First')
-          expect(client.get('api/v1/groups/1', query: { full: true }).body).to eq({ id: 1, name: 'Scoped' })
-        end
-
-        it 'answers a failure the client retried with the stub declared after it' do
-          zammad.stub(:get, 'api/v1/groups/2', status: 503)
-          expect { client.groups.find(2) }.to raise_error(ZammadAPI::ServerError)
-          zammad.stub(:get, 'api/v1/groups/2', body: { id: 2, name: 'Back' })
-
-          expect(client.groups.find(2).name).to eq('Back')
-        end
-      end
     end
 
     describe 'query matching' do
       it 'matches a stub that names a subset of the parameters' do
-        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name,id' })
+        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name' })
 
         expect(client.groups.order(:name).first.id).to eq(1)
       end
 
       it 'does not answer a request without those parameters' do
-        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name,id' })
+        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name' })
 
         expect { client.groups.all.to_a }.to raise_error(described_class::UnstubbedRequestError)
       end
 
       it 'ignores the parameters the client adds itself' do
-        zammad.stub(:get, 'api/v1/groups', body: [], query: { sort_by: 'name,id' })
+        zammad.stub(:get, 'api/v1/groups', body: [], query: { sort_by: 'name' })
 
         expect { client.groups.order(:name).to_a }.not_to raise_error
-      end
-
-      it 'keeps answering when a catch-all for the same endpoint follows it' do
-        zammad.stub(:get, 'api/v1/groups/search', body: { total_count: 42 }, query: { only_total_count: true })
-        zammad.stub(:get, 'api/v1/groups/search', body: [{ id: 1 }])
-
-        expect(Array.new(3) { client.groups.search('x').count }).to eq([42, 42, 42])
-      end
-
-      it 'leaves the catch-all answering the requests it does not match' do
-        zammad.stub(:get, 'api/v1/groups/search', body: { total_count: 42 }, query: { only_total_count: true })
-        zammad.stub(:get, 'api/v1/groups/search', body: [], query: { page: 2 })
-        zammad.stub(:get, 'api/v1/groups/search', body: [{ id: 1 }])
-
-        expect(client.groups.search('x').count).to eq(42)
-        expect(client.groups.search('x').map(&:id)).to eq([1])
-        expect(client.groups.search('x').count).to eq(42)
       end
 
       it 'matches an array-valued parameter' do
@@ -499,11 +314,6 @@ RSpec.describe ZammadAPI::Test do
         expect(client.users.search('x', ids: [1, 2]).map(&:id)).to eq([1])
       end
 
-      it 'reports a nil query value against the stub that wrote it' do
-        expect { zammad.stub(:get, 'api/v1/users/search', body: [], query: { ids: nil }) }
-          .to raise_error(ArgumentError, /query parameter ids is nil/)
-      end
-
       it 'does not match an array whose values differ' do
         zammad.stub(:get, 'api/v1/users/search', body: [{ id: 1 }], query: { ids: [1, 2] })
 
@@ -511,20 +321,25 @@ RSpec.describe ZammadAPI::Test do
           .to raise_error(described_class::UnstubbedRequestError)
       end
 
-      it 'answers ahead of a catch-all declared before it' do
-        zammad.stub(:get, 'api/v1/groups/search', body: [{ id: 1 }])
+      it 'answers a search count from a stub for the request for the total' do
         zammad.stub(:get, 'api/v1/groups/search', body: { total_count: 42 }, query: { only_total_count: true })
 
         expect(client.groups.search('x').count).to eq(42)
+        expect(zammad.requests.size).to eq(1)
       end
 
-      it 'still sequences two stubs that share a scope' do
-        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name,id' })
-        zammad.stub(:get, 'api/v1/groups', body: [{ id: 2 }], query: { sort_by: 'name,id' })
+      it 'sequences two stubs that share a scope' do
+        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name' })
+        zammad.stub(:get, 'api/v1/groups', body: [{ id: 2 }], query: { sort_by: 'name' })
 
-        expect(client.groups.all.order(:name).page(1, per_page: 1).map(&:id)).to eq([1])
-        expect(client.groups.all.order(:name).page(1, per_page: 1).map(&:id)).to eq([2])
-        expect(client.groups.all.order(:name).page(1, per_page: 1).map(&:id)).to eq([2])
+        expect(Array.new(3) { client.groups.all.order(:name).page(1, per_page: 1).map(&:id) }).to eq([[1], [2], [2]])
+      end
+
+      it 'spends the first matching stub where a later one matches too' do
+        zammad.stub(:get, 'api/v1/groups', body: [{ id: 1 }], query: { sort_by: 'name' })
+        zammad.stub(:get, 'api/v1/groups', body: [{ id: 2 }])
+
+        expect(Array.new(3) { client.get('api/v1/groups', query: { sort_by: 'name' }).body }).to eq([[{ id: 1 }], [{ id: 2 }], [{ id: 2 }]])
       end
     end
   end
@@ -536,7 +351,7 @@ RSpec.describe ZammadAPI::Test do
 
     it 'names the request that was not stubbed' do
       expect { client.groups.find(1) }
-        .to raise_error(%r{GET api/v1/groups/1 was not stubbed})
+        .to raise_error(described_class::UnstubbedRequestError, 'GET api/v1/groups/1 with query {"expand" => "true"} was not stubbed on this ZammadAPI::Test (nothing is stubbed)')
     end
 
     it 'says so when nothing at all is stubbed' do
@@ -549,31 +364,14 @@ RSpec.describe ZammadAPI::Test do
       expect { client.groups.find(1) }.to raise_error(%r{stubbed: GET api/v1/groups/2})
     end
 
-    # Listing the endpoint among what is stubbed read as a contradiction.
-    context 'when the endpoint is stubbed for other queries' do
-      before do
-        zammad.stub(:get, 'api/v1/users/search', body: [{ id: 1 }], query: { page: 1 })
-        zammad.stub(:get, 'api/v1/users/search', body: [{ id: 2 }], query: { page: 2 })
-      end
+    it 'names the query of a request for a page no stub answers' do
+      zammad.stub(:get, 'api/v1/users/search', body: [{ id: 1 }], query: { page: 1 })
+      zammad.stub(:get, 'api/v1/users/search', body: [{ id: 2 }], query: { page: 2 })
 
-      it 'names the query the request carried and the scopes its stubs answer' do
-        expect { client.users.search('x').to_a }.to raise_error(
-          described_class::UnstubbedRequestError,
-          %r{GET api/v1/users/search with query \{.*"page" => "3".*\} was not stubbed .*: its stubs answer only query: \{"page" => "1"\}, query: \{"page" => "2"\}\.}
-        )
-      end
-
-      it 'says that a read asks for the page after its last one' do
-        expect { client.users.search('x').to_a }
-          .to raise_error(described_class::UnstubbedRequestError, /A read asks for the page after the last one it was served/)
-      end
-
-      it 'says nothing about pages where the scopes do not name one' do
-        zammad.reset.stub(:get, 'api/v1/users/search', body: [], query: { ids: [1] })
-
-        expect { client.users.search('x', ids: [2]).to_a }
-          .to raise_error(described_class::UnstubbedRequestError) { |error| expect(error.message).not_to include('page after') }
-      end
+      expect { client.users.search('x').to_a }.to raise_error(
+        described_class::UnstubbedRequestError,
+        %r{\AGET api/v1/users/search with query \{.*"page" => "3".*\} was not stubbed on this ZammadAPI::Test \(stubbed: GET api/v1/users/search\)\z}
+      )
     end
 
     it 'is outside ZammadAPI::Error, so code under test cannot rescue it as an API failure' do
@@ -613,9 +411,6 @@ RSpec.describe ZammadAPI::Test do
       expect(zammad.requests.last.body).to eq({ name: 'Renamed' })
     end
 
-    # Recorded by reference, a test that built one payload, sent it, then
-    # changed it for a second call rewrote the first recorded request and
-    # asserted against a body that never went anywhere.
     it 'records the body as it was sent, not as the test left it afterwards' do
       zammad.stub(:post, 'api/v1/groups', body: { id: 2 })
       payload = { name: 'Support', note: { internal: 'yes' } }
@@ -634,16 +429,7 @@ RSpec.describe ZammadAPI::Test do
       expect(zammad.requests.last.body).to be_frozen
     end
 
-    # The wire carries strong parameters as the Hash they convert to, so
-    # that is what the record of a request holds, and not the object.
-    it 'records strong parameters as the Hash they are sent as' do
-      zammad.stub(:post, 'api/v1/groups', body: { id: 2 })
-      client.post('api/v1/groups', body: { group: StrongParameters.new(name: 'Support') })
-
-      expect(zammad.requests.last.body).to eq({ group: { 'name' => 'Support' } })
-    end
-
-    it 'records a record built from them as the attributes it sends' do
+    it 'records a record built from strong parameters as the attributes it sends' do
       zammad.stub(:post, 'api/v1/groups', body: { id: 2 })
       client.groups.create(StrongParameters.new(name: 'Support'))
 
@@ -664,14 +450,11 @@ RSpec.describe ZammadAPI::Test do
         .to eq({ 'expand' => 'true', 'page' => '2', 'per_page' => '50' })
     end
 
-    it 'rejects a nil query value the way the transport does' do
-      expect { client.get('api/v1/groups', query: { sort_by: nil }) }
-        .to raise_error(ArgumentError, /query parameter sort_by is nil/)
-    end
+    it 'records a nested query stringified throughout' do
+      zammad.stub(:get, 'api/v1/roles', body: [])
+      client.get('api/v1/roles', query: { ids: [1, 2], filter: { active: true } })
 
-    it 'rejects a query value with nothing in it the way the transport does' do
-      expect { client.get('api/v1/groups', query: { filter: {} }) }
-        .to raise_error(ArgumentError, /query parameter filter is a Hash with no value in it/)
+      expect(zammad.requests.last.query).to eq('ids' => %w[1 2], 'filter' => { 'active' => 'true' })
     end
 
     it 'records requests oldest first' do
@@ -713,24 +496,6 @@ RSpec.describe ZammadAPI::Test do
       expect(zammad.requests.last.on_behalf_of).to be_nil
     end
 
-    # The stand-in carries the scope by the real transport's rule, so it
-    # refuses one the wire would carry as no scope at all.
-    it 'refuses a blank scope reached through the transport, the way the real transport does' do
-      expect { client.instance_variable_get(:@transport).with_on_behalf_of(' ') }
-        .to raise_error(ArgumentError, /on_behalf_of needs the login/)
-    end
-
-    it 'refuses one it is built with directly' do
-      expect { ZammadAPI::Test::Transport.new(zammad, on_behalf_of: ' ') }.to raise_error(ArgumentError, /on_behalf_of needs the login/)
-    end
-
-    it 'holds one it is built with as the text the header carries' do
-      expect(ZammadAPI::Test::Transport.new(zammad, on_behalf_of: 7).on_behalf_of).to eq('7')
-    end
-
-    # Through the real transport's own rules, so that a stand-in cannot accept
-    # a header the wire would refuse or record it in a shape the wire would
-    # not carry.
     it 'records the headers a raw request asked for' do
       zammad.stub(:get, 'api/v1/roles', body: [])
       client.get('api/v1/roles', headers: { 'Accept-Language' => 'de-de' })
@@ -749,11 +514,6 @@ RSpec.describe ZammadAPI::Test do
       client.groups.find(1)
 
       expect(zammad.requests.last.headers).to eq({})
-    end
-
-    it 'refuses a header the real transport would refuse' do
-      expect { client.get('api/v1/roles', headers: { 'Authorization' => 'Token other' }) }
-        .to raise_error(ArgumentError, /header authorization is set by this client/)
     end
 
     it 'records a request that was not stubbed, so the failure can be inspected' do
@@ -797,9 +557,6 @@ RSpec.describe ZammadAPI::Test do
       expect(zammad.inspect).to eq('#<ZammadAPI::Test stubbed=1 requests=1>')
     end
 
-    # The request count used to be read outside the monitor, so printing a
-    # stand-in from a failure message or a debugger raced a thread under test
-    # appending to it - which is the one thing the monitor is here to prevent.
     it 'reads the recorded requests under the monitor' do
       zammad.stub(:get, 'api/v1/groups', body: [])
       writers = Array.new(4) { Thread.new { 25.times { client.groups.all.to_a } } }
@@ -807,280 +564,6 @@ RSpec.describe ZammadAPI::Test do
 
       expect { (writers + readers).each(&:join) }.not_to raise_error
       expect(zammad.requests.size).to eq(100)
-    end
-  end
-
-  # A record holds its transport, and Psych writes an object as its instance
-  # variables. The real transport writes where it points and how it
-  # authenticates, and the stand-in's wrote the stand-in: every stub and
-  # every recorded request, under each record.
-  describe 'a record written as YAML' do
-    let(:zammad) { described_class.new(http_token: 'tok-s3cret') }
-
-    it 'names the transport the way the real one does' do
-      expect(YAML.unsafe_load(client.groups.new(name: 'Support').to_yaml.sub(/\A--- .*$/, '---')))
-        .to include('transport' => { 'url' => 'https://zammad.test/', 'auth' => 'http_token' })
-    end
-
-    it 'names an on_behalf_of scope' do
-      expect(client.on_behalf_of('agent@example.com').groups.new(name: 'Support').to_yaml).to include('on_behalf_of: agent@example.com')
-    end
-
-    it 'holds neither the token nor what was stubbed' do
-      zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'stubbed-name' })
-
-      expect(client.groups.new(name: 'Support').to_yaml).not_to match(/tok-s3cret|stubbed-name/)
-    end
-  end
-
-  # A collection walks until a page repeats, comes back short, or comes back
-  # empty. A stub that served the same records to every page tripped the
-  # first of those, so the obvious way to stand in for a list endpoint made
-  # every full read of it raise PaginationError - against a real Zammad the
-  # same code works, because page 2 comes back empty.
-  # The real transport sends a GET again that was answered 429 or 5xx. The
-  # stand-in raised for the first such answer, so a test of code that leans
-  # on the retry passed or failed the other way round from production.
-  describe 'a read the client retries' do
-    def find = client.groups.find(1)
-
-    context 'when it fails once and is then answered' do
-      before do
-        zammad.stub(:get, 'api/v1/groups/1', status: 503, body: { error: 'down' })
-        zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'Users' })
-      end
-
-      it 'answers with the record, as the wire does' do
-        expect(find.name).to eq('Users')
-      end
-
-      it 'records both attempts' do
-        find
-        expect(zammad.requests.map(&:path)).to eq(%w[api/v1/groups/1 api/v1/groups/1])
-      end
-
-      it 'records the second attempt as the request the first was' do
-        find
-        expect(zammad.requests.last).to eq(zammad.requests.first)
-      end
-    end
-
-    [429, 500, 502, 503, 504].each do |status|
-      it "asks again past a #{status}" do
-        zammad.stub(:get, 'api/v1/groups/1', status: status)
-        zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
-
-        expect(find.id).to eq(1)
-      end
-    end
-
-    context 'when it keeps failing' do
-      before { zammad.stub(:get, 'api/v1/groups/1', status: 503, body: { error: 'down' }) }
-
-      it 'raises the error for the status once the retries are spent' do
-        expect { find }.to raise_error(ZammadAPI::ServerError, /down/)
-      end
-
-      it 'records as many requests as the wire would carry' do
-        expect { find }.to raise_error(ZammadAPI::ServerError)
-        expect(zammad.requests.size).to eq(1 + zammad.config.retries)
-      end
-    end
-
-    it 'follows the number of retries it was built with' do
-      zammad = described_class.new(retries: 4)
-      zammad.stub(:get, 'api/v1/groups/1', status: 500)
-
-      expect { zammad.client.groups.find(1) }.to raise_error(ZammadAPI::ServerError)
-      expect(zammad.requests.size).to eq(5)
-    end
-
-    it 'raises for the first failure where it was built without retries' do
-      zammad = described_class.new(retries: 0)
-      zammad.stub(:get, 'api/v1/groups/1', status: 503)
-      zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
-
-      expect { zammad.client.groups.find(1) }.to raise_error(ZammadAPI::ServerError)
-      expect(zammad.requests.size).to eq(1)
-    end
-
-    it 'does not ask again past a status the client does not retry' do
-      zammad.stub(:get, 'api/v1/groups/1', status: 404)
-      zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
-
-      expect { find }.to raise_error(ZammadAPI::NotFoundError)
-      expect(zammad.requests.size).to eq(1)
-    end
-
-    # A write is never repeated on the wire, so it is not repeated here.
-    it 'does not repeat a POST' do
-      zammad.stub(:post, 'api/v1/groups', status: 503)
-      zammad.stub(:post, 'api/v1/groups', status: 201, body: { id: 1 })
-
-      expect { client.groups.create(name: 'Users') }.to raise_error(ZammadAPI::ServerError)
-      expect(zammad.requests.size).to eq(1)
-    end
-
-    it 'does not repeat a PUT' do
-      zammad.stub(:put, 'api/v1/groups/1', status: 504)
-
-      expect { client.put('api/v1/groups/1', body: { name: 'Users' }) }.to raise_error(ZammadAPI::ServerError)
-      expect(zammad.requests.size).to eq(1)
-    end
-
-    it 'does not repeat a DELETE' do
-      zammad.stub(:delete, 'api/v1/groups/1', status: 500)
-
-      expect { client.groups.destroy(1) }.to raise_error(ZammadAPI::ServerError)
-      expect(zammad.requests.size).to eq(1)
-    end
-
-    # The wire does not wait out a Retry-After longer than the timeout: it
-    # reports the response at once.
-    context 'when the answer asks for a longer wait than the timeout' do
-      before do
-        zammad.stub(:get, 'api/v1/groups/1', status: 429, headers: { 'Retry-After' => '3600' })
-        zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
-      end
-
-      it 'does not ask again' do
-        expect { find }.to raise_error(ZammadAPI::RateLimitError)
-        expect(zammad.requests.size).to eq(1)
-      end
-
-      it 'leaves the wait readable from the error' do
-        expect { find }.to raise_error(ZammadAPI::RateLimitError) { |error| expect(error.retry_after).to eq(3600) }
-      end
-    end
-
-    context 'when the answer asks for a wait within the timeout' do
-      before do
-        zammad.stub(:get, 'api/v1/groups/1', status: 429, headers: { 'Retry-After' => '30' })
-        zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
-      end
-
-      it 'asks again' do
-        expect(find.id).to eq(1)
-      end
-
-      it 'does not wait first' do
-        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-        find
-
-        expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 5
-      end
-    end
-
-    it 'asks again for a page of a list, and reads the list from the stub after' do
-      zammad.stub(:get, 'api/v1/groups', status: 502)
-      zammad.stub(:get, 'api/v1/groups', body: [{ id: 1, name: 'A' }])
-
-      expect(client.groups.map(&:name)).to eq(['A'])
-    end
-
-    it 'carries the scope of a client acting for another user on every attempt' do
-      zammad.stub(:get, 'api/v1/groups/1', status: 503)
-      zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 })
-      client.on_behalf_of('agent@example.com').groups.find(1)
-
-      expect(zammad.requests.map(&:on_behalf_of)).to eq(%w[agent@example.com agent@example.com])
-    end
-  end
-
-  # The wire refuses a 2xx whose body stops short of its Content-Length, and
-  # the stand-in handed it back: code that handles a save cut short could
-  # not be exercised here, and a fixture with a stale Content-Length passed
-  # here and failed against Zammad.
-  describe 'a 2xx stubbed with a Content-Length its body is short of' do
-    subject(:zammad) { described_class.new }
-
-    let(:client) { zammad.client }
-    let(:cut_short) { { status: 200, body: '{"id":1,"na', headers: { 'Content-Type' => 'application/json', 'Content-Length' => '30' } } }
-
-    it 'raises what the wire raises, in its words' do
-      zammad.stub(:get, 'api/v1/groups/1', **cut_short)
-
-      expect { client.groups.find(1) }
-        .to raise_error(ZammadAPI::IncompleteResponseError, %r{Can't find object: the response from https://zammad\.test/ ended 19 bytes short of the 30})
-    end
-
-    it 'hands over the response as far as it was stubbed' do
-      zammad.stub(:get, 'api/v1/groups/1', **cut_short)
-
-      expect { client.groups.find(1) }
-        .to raise_error(ZammadAPI::IncompleteResponseError) { expect(it.response.raw_body).to eq('{"id":1,"na') }
-    end
-
-    it 'leaves a record whose save it answers saved, as the wire does' do
-      zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'Users' })
-      zammad.stub(:put, 'api/v1/groups/1', **cut_short)
-      group = client.groups.find(1)
-      group.name = 'Support'
-
-      expect { group.save }.to raise_error(ZammadAPI::IncompleteResponseError)
-      expect(group.changed?).to be(false)
-    end
-
-    # A read is sent again for it on the wire, as it is for a connection
-    # that was reset, and each attempt takes the next stub of a sequence.
-    it 'sends a read again for it, as often as the client retries' do
-      zammad.stub(:get, 'api/v1/groups/1', **cut_short)
-
-      expect { client.groups.find(1) }.to raise_error(ZammadAPI::IncompleteResponseError)
-      expect(zammad.requests.map(&:path)).to eq(['api/v1/groups/1'] * (1 + zammad.config.retries))
-    end
-
-    it 'answers a read that is cut short once and then whole with the record' do
-      zammad.stub(:get, 'api/v1/groups/1', **cut_short)
-      zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'Users' })
-
-      expect(client.groups.find(1).name).to eq('Users')
-      expect(zammad.requests.size).to eq(2)
-    end
-
-    it 'sends a read once where the client was built without retries' do
-      zammad = described_class.new(retries: 0)
-      zammad.stub(:get, 'api/v1/groups/1', **cut_short)
-
-      expect { zammad.client.groups.find(1) }.to raise_error(ZammadAPI::IncompleteResponseError)
-      expect(zammad.requests.size).to eq(1)
-    end
-
-    it 'does not send a write again for it' do
-      zammad.stub(:post, 'api/v1/groups', **cut_short)
-      zammad.stub(:post, 'api/v1/groups', body: { id: 2, name: 'Support' })
-
-      expect { client.groups.create(name: 'Support') }.to raise_error(ZammadAPI::IncompleteResponseError)
-      expect(zammad.requests.size).to eq(1)
-    end
-
-    it 'takes a body as long as its Content-Length, or longer' do
-      zammad.stub(:get, 'api/v1/groups/1', body: { id: 1 }, headers: { 'Content-Length' => 8 })
-      zammad.stub(:get, 'api/v1/groups/2', body: { id: 2 }, headers: { 'Content-Length' => 2 })
-
-      expect([client.groups.find(1).id, client.groups.find(2).id]).to eq([1, 2])
-    end
-
-    it 'takes a 204, which has no body whatever the header says' do
-      zammad.stub(:delete, 'api/v1/groups/1', status: 204, headers: { 'Content-Length' => 5 })
-
-      expect(client.groups.destroy(1)).to be(true)
-    end
-
-    it 'raises the error of its status for a response that is no 2xx' do
-      zammad.stub(:get, 'api/v1/groups/1', status: 404, body: { error: 'gone' }, headers: { 'Content-Length' => 500 })
-
-      expect { client.groups.find(1) }.to raise_error(ZammadAPI::NotFoundError)
-    end
-
-    # The page after a list is one the stand-in makes up, and the length
-    # written for the records does not count it.
-    it 'counts the empty page it serves after a list anew' do
-      records = [{ id: 1 }, { id: 2 }]
-      zammad.stub(:get, 'api/v1/groups', body: records, headers: { 'Content-Length' => JSON.generate(records).bytesize })
-
-      expect(client.groups.map(&:id)).to eq([1, 2])
-      expect(client.get('api/v1/groups', query: { page: 2 }).headers['content-length']).to eq('2')
     end
   end
 
@@ -1133,179 +616,15 @@ RSpec.describe ZammadAPI::Test do
       expect(client.groups.all.page(2).map(&:id)).to eq([])
     end
 
+    it 'answers page 1 with every record it holds, whatever size was asked for' do
+      expect(client.groups.all.page(1, per_page: 1).map(&:id)).to eq([1, 2])
+    end
+
     it 'stops walking rather than reporting the stand-in as a broken paginator' do
       expect { client.groups.all.to_a }.not_to raise_error
     end
   end
 
-  # Only the page number was read. The records were served whole to page 1
-  # whatever size was asked for, and every later page was empty, so code
-  # that pages by hand or leans on a batch size saw other records here than
-  # Zammad serves it.
-  describe 'a list endpoint stubbed once, read a page of a given size at a time' do
-    subject(:zammad) { described_class.new }
-
-    let(:client)  { zammad.client }
-    let(:records) { (1..5).map { { id: it, name: "group #{it}" } } }
-
-    before { zammad.stub(:get, 'api/v1/groups', body: records) }
-
-    it 'answers page 1 with as many records as were asked for' do
-      expect(client.groups.all.page(1, per_page: 2).map(&:id)).to eq([1, 2])
-    end
-
-    it 'answers a later page with the records that follow' do
-      expect(client.groups.all.page(2, per_page: 2).map(&:id)).to eq([3, 4])
-    end
-
-    it 'answers the last page with what is left' do
-      expect(client.groups.all.page(3, per_page: 2).map(&:id)).to eq([5])
-    end
-
-    it 'answers a page past the records as an endpoint out of records would' do
-      expect([4, 9].map { client.groups.all.page(it, per_page: 2).to_a }).to eq([[], []])
-    end
-
-    it 'hands in_batches the batches Zammad would' do
-      batches = []
-      client.groups.in_batches(of: 2) { |batch| batches << batch.map(&:id) }
-
-      expect(batches).to eq([[1, 2], [3, 4], [5]])
-    end
-
-    it 'hands find_each every record once, however small the batch' do
-      expect(client.groups.find_each(batch_size: 2).map(&:id)).to eq([1, 2, 3, 4, 5])
-    end
-
-    it 'asks for an empty page after a last one that was full' do
-      client.groups.find_each(batch_size: 5).to_a
-
-      expect(zammad.requests.map { it.query['page'] }).to eq(%w[1 2])
-    end
-
-    it 'still reads the whole list where the page is larger than it' do
-      expect(client.groups.all.map(&:id)).to eq([1, 2, 3, 4, 5])
-    end
-
-    it 'serves a raw request that names no size every record' do
-      expect(client.get('api/v1/groups').body.size).to eq(5)
-    end
-
-    it 'serves a raw request the page it names' do
-      expect(client.get('api/v1/groups', query: { page: 2, per_page: 3 }).body).to eq([{ id: 4, name: 'group 4' }, { id: 5, name: 'group 5' }])
-    end
-
-    it 'keeps the bytes of a stub it did not cut' do
-      zammad.stub(:get, 'api/v1/users', body: '[ {"id": 1} ]', headers: { 'Content-Type' => 'application/json' })
-
-      expect(client.get('api/v1/users', query: { per_page: 1 }).raw_body).to eq('[ {"id": 1} ]')
-    end
-
-    it 'counts a page it cut anew, where the stub announced a length' do
-      zammad.stub(:get, 'api/v1/users', body: [{ id: 1 }, { id: 2 }], headers: { 'Content-Length' => 19 })
-
-      expect(client.get('api/v1/users', query: { per_page: 1 }).headers['content-length']).to eq('10')
-    end
-
-    # A stub short of its own Content-Length says the answer was cut short,
-    # and a page cut from it would have been counted anew and served.
-    it 'does not cut a page from a stub that is short of its own Content-Length' do
-      zammad.stub(:get, 'api/v1/users', body: [{ id: 1 }, { id: 2 }], headers: { 'Content-Length' => 500 })
-
-      expect { zammad.client.with(retries: 0).users.all.page(1, per_page: 1).to_a }.to raise_error(ZammadAPI::IncompleteResponseError)
-    end
-
-    it 'leaves a size that is no number above zero to the stub as it was written' do
-      expect(%w[0 -1 two].map { client.get('api/v1/groups', query: { per_page: it }).body.size }).to eq([5, 5, 5])
-    end
-
-    # Such a stub is what a request of that size is answered.
-    it 'does not cut a stub that names a per_page of its own' do
-      zammad.stub(:get, 'api/v1/users', body: [{ id: 1 }, { id: 2 }, { id: 3 }], query: { per_page: 2 })
-
-      expect(client.get('api/v1/users', query: { per_page: 2 }).body.size).to eq(3)
-      expect(client.get('api/v1/users', query: { per_page: 2, page: 2 }).body).to eq([])
-    end
-
-    it 'does not cut a stub that names its page' do
-      zammad.stub(:get, 'api/v1/users', body: [{ id: 1 }, { id: 2 }, { id: 3 }], query: { page: 1 })
-
-      expect(client.get('api/v1/users', query: { page: 1, per_page: 2 }).body.size).to eq(3)
-    end
-
-    it 'spends one stub of a sequence on a read of several pages' do
-      zammad.stub(:get, 'api/v1/groups', body: [{ id: 9, name: 'later' }])
-
-      expect(client.groups.find_each(batch_size: 2).map(&:id)).to eq([1, 2, 3, 4, 5])
-      expect(client.groups.find_each(batch_size: 2).map(&:id)).to eq([9])
-    end
-  end
-
-  # The object a Zammad from 6.5.1 on answers a walked search with. It is a
-  # list too, so the page after it holds no records - and reports the same
-  # total, which is what a walk reads to tell that page from the end.
-  describe 'a search stubbed once with its total beside the records' do
-    subject(:zammad) { described_class.new }
-
-    let(:client) { zammad.client }
-
-    it 'reads the whole search without a second stub' do
-      zammad.stub(:get, 'api/v1/users/search', body: { records: [{ id: 1 }, { id: 2 }], total_count: 2 })
-
-      expect(client.users.search('smith').map(&:id)).to eq([1, 2])
-    end
-
-    it 'answers a later page with no records and the same total' do
-      zammad.stub(:get, 'api/v1/users/search', body: { records: [{ id: 1 }, { id: 2 }], total_count: 2 })
-
-      expect(client.get('api/v1/users/search', query: { query: 'smith', page: 2 }).body).to eq(records: [], total_count: 2)
-    end
-
-    it 'answers page 1 as it was written' do
-      zammad.stub(:get, 'api/v1/users/search', body: { records: [{ id: 1 }, { id: 2 }], total_count: 2 })
-
-      expect(client.get('api/v1/users/search', query: { query: 'smith', page: 1 }).body).to eq(records: [{ id: 1 }, { id: 2 }], total_count: 2)
-    end
-
-    it 'answers a page of a given size with its records and the same total' do
-      zammad.stub(:get, 'api/v1/users/search', body: { records: [{ id: 1 }, { id: 2 }, { id: 3 }], total_count: 3 })
-
-      expect(client.get('api/v1/users/search', query: { query: 'smith', page: 2, per_page: 2 }).body).to eq(records: [{ id: 3 }], total_count: 3)
-    end
-
-    it 'hands a search read in batches every hit once' do
-      zammad.stub(:get, 'api/v1/users/search', body: { records: [{ id: 1 }, { id: 2 }, { id: 3 }], total_count: 3 })
-
-      expect(client.users.search('smith').find_each(batch_size: 2).map(&:id)).to eq([1, 2, 3])
-    end
-
-    # The stub holds two records and says there are five hundred hits, so the
-    # walk reads on, a page of two hundred at a time, until it has covered
-    # them: the page it was served, and two that hold nothing.
-    it 'is read on past, where the total says there are hits beyond the stub' do
-      zammad.stub(:get, 'api/v1/users/search', body: { records: [{ id: 1 }, { id: 2 }], total_count: 500 })
-
-      expect(client.users.search('smith').map(&:id)).to eq([1, 2])
-      expect(zammad.requests.map { it.query['page'] }).to eq(%w[1 2 3])
-    end
-
-    it 'records the parameter a walked search asks for the total with' do
-      zammad.stub(:get, 'api/v1/users/search', body: [])
-      client.users.search('smith').to_a
-
-      expect(zammad.requests.last.query).to include('with_total_count' => 'true')
-    end
-
-    it 'leaves an object that is not a counted list as it was written' do
-      zammad.stub(:get, 'api/v1/settings', body: { records: 'none' })
-
-      expect(client.get('api/v1/settings', query: { page: 2 }).body).to eq(records: 'none')
-    end
-  end
-
-  # Every full read asks for the page after its last one, and that request
-  # used to take the next stub in the queue and serve it as an empty page:
-  # three stubs answered three reads with the first, the third and the third.
   describe 'a list endpoint stubbed as a sequence' do
     subject(:zammad) { described_class.new }
 
@@ -1327,18 +646,9 @@ RSpec.describe ZammadAPI::Test do
     end
 
     it 'spends one stub on a read, however many pages the read asks for' do
-      names
+      expect(client.groups.find_each(batch_size: 1).map(&:name)).to eq(['A'])
       expect(zammad.requests.map { it.query['page'] }).to eq(%w[1 2])
       expect(names).to eq(['B'])
-    end
-
-    it 'answers the trailing page from the stub the read began with, not the next one' do
-      zammad.reset
-      zammad.stub(:get, 'api/v1/groups', body: [{ id: 1, name: 'A' }])
-      zammad.stub(:get, 'api/v1/groups', status: 500, body: { error: 'down' })
-
-      expect(names).to eq(['A'])
-      expect { names }.to raise_error(ZammadAPI::ServerError)
     end
 
     it 'does not spend a stub on a later page asked for first' do
@@ -1365,87 +675,13 @@ RSpec.describe ZammadAPI::Test do
       expect(Array.new(2) { client.groups.search('x').map(&:name) }).to eq([['A'], ['B']])
     end
 
-    # The read before it asked for a page after its last, and that request
-    # belongs to the stub the read began with.
-    it 'answers a read with a stub declared after the last one has answered a whole read' do
-      3.times { names }
-      zammad.stub(:get, 'api/v1/groups', body: [{ id: 1, name: 'D' }])
+    it 'answers the page after a list with an empty one, whatever stub is queued next' do
+      zammad.reset
+      zammad.stub(:get, 'api/v1/groups/search', body: [{ id: 1, name: 'A' }])
+      zammad.stub(:get, 'api/v1/groups/search', status: 500)
 
-      expect(Array.new(2) { names }).to eq([['D'], ['D']])
-    end
-  end
-
-  # `count` on a search asks for the total alone first, and walks the pages
-  # where it is answered with records instead. Each of the two took a stub:
-  # the first of a sequence was never counted, and the last was counted
-  # twice.
-  describe 'a search stubbed as a sequence, and counted' do
-    subject(:zammad) { described_class.new }
-
-    let(:client) { zammad.client }
-    let(:path) { 'api/v1/users/search' }
-
-    def counts(times) = Array.new(times) { client.users.search('x').count }
-
-    def stub_lists
-      [1, 2, 3].each { |records| zammad.stub(:get, path, body: Array.new(records) { { id: it + 1 } }) }
-    end
-
-    it 'counts each stub in turn, and the last one from then on' do
-      stub_lists
-
-      expect(counts(4)).to eq([1, 2, 3, 3])
-    end
-
-    it 'counts what reading the records counts' do
-      stub_lists
-
-      expect(Array.new(3) { client.users.search('x').to_a.size }).to eq([1, 2, 3])
-    end
-
-    it 'spells #size and #length the same way' do
-      stub_lists
-
-      expect([client.users.search('x').size, client.users.search('x').length]).to eq([1, 2])
-    end
-
-    it 'records the request for the total and the walk that follows it' do
-      stub_lists
-      counts(1)
-
-      expect(zammad.requests.map { it.query.slice('only_total_count', 'page').values.first }).to eq(%w[true 1 2])
-    end
-
-    it 'spends a stub on the request alone where the stub holds a total' do
-      zammad.stub(:get, path, body: { records: [{ id: 1 }], total_count: 1 })
-      zammad.stub(:get, path, body: { total_count: 2 })
-      zammad.stub(:get, path, body: [{ id: 1 }, { id: 2 }, { id: 3 }])
-
-      expect(counts(4)).to eq([1, 2, 3, 3])
-    end
-
-    it 'spends a stub on an attempt that failed, and counts the one after it' do
-      zammad.stub(:get, path, status: 503)
-      stub_lists
-
-      expect(counts(3)).to eq([1, 2, 3])
-    end
-
-    it 'counts a stub declared after the last one has been counted' do
-      zammad.stub(:get, path, body: [{ id: 1 }])
-      counts(2)
-      zammad.stub(:get, path, body: [{ id: 1 }, { id: 2 }])
-
-      expect(counts(2)).to eq([2, 2])
-    end
-
-    # A stub scoped to the request is the answer to it and to nothing else,
-    # whatever it holds, so each request for the total is a step.
-    it 'still sequences stubs written for the request for the total' do
-      zammad.stub(:get, path, body: [{ id: 1 }], query: { only_total_count: true })
-      zammad.stub(:get, path, body: [{ id: 1 }, { id: 2 }], query: { only_total_count: true })
-
-      expect(Array.new(3) { client.get(path, query: { only_total_count: true }).body.size }).to eq([1, 2, 2])
+      expect(client.groups.search('x').map(&:name)).to eq(['A'])
+      expect { client.groups.search('x').to_a }.to raise_error(ZammadAPI::ServerError)
     end
   end
 
@@ -1461,58 +697,13 @@ RSpec.describe ZammadAPI::Test do
       zammad.stub(:get, 'api/v1/groups', body: [{ id: 2 }], query: { page: 2 })
       zammad.stub(:get, 'api/v1/groups', body: [], query: { page: 3 })
 
-      expect(client.groups.all.map(&:id)).to eq([1, 2])
+      expect(client.groups.find_each(batch_size: 1).map(&:id)).to eq([1, 2])
     end
 
     it 'keeps a body that is not a list alone' do
       zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'a' })
 
       expect(client.groups.find(1).name).to eq('a')
-    end
-  end
-
-  # Two stubs naming different parameters both match a request carrying all of
-  # them. Grouped only by whether they were scoped at all, they were read as a
-  # sequence and the first was consumed: the count ate the records stub,
-  # handed back an Array where a count belonged, and then reported the
-  # endpoint as unstubbed.
-  describe 'two stubs that describe one request equally well' do
-    subject(:zammad) { described_class.new }
-
-    let(:client) { zammad.client }
-
-    before do
-      zammad.stub(:get, 'api/v1/tickets/search', body: [{ id: 1 }], query: { query: 'foo' })
-      zammad.stub(:get, 'api/v1/tickets/search', body: { total_count: 2 }, query: { only_total_count: true })
-    end
-
-    it 'refuses to guess which one was meant' do
-      expect { client.tickets.search('foo').count }.to raise_error(described_class::AmbiguousStubError)
-    end
-
-    it 'names both scopes, so the fix is visible from the message' do
-      expect { client.tickets.search('foo').count }
-        .to raise_error(described_class::AmbiguousStubError, /only_total_count.*|.*only_total_count/)
-    end
-
-    it 'says the test is wrong rather than that Zammad refused something' do
-      expect(described_class::AmbiguousStubError.ancestors).not_to include(ZammadAPI::Error)
-    end
-
-    it 'answers the request a more specific stub names' do
-      zammad.reset
-      zammad.stub(:get, 'api/v1/tickets/search', body: [{ id: 1 }], query: { query: 'foo' })
-      zammad.stub(:get, 'api/v1/tickets/search', body: { total_count: 2 }, query: { query: 'foo', only_total_count: true })
-
-      expect(client.tickets.search('foo').count).to eq(2)
-    end
-
-    it 'leaves the less specific stub answering the requests it alone matches' do
-      zammad.reset
-      zammad.stub(:get, 'api/v1/tickets/search', body: [{ id: 1 }], query: { query: 'foo' })
-      zammad.stub(:get, 'api/v1/tickets/search', body: { total_count: 2 }, query: { query: 'foo', only_total_count: true })
-
-      expect(client.tickets.search('foo').map(&:id)).to eq([1])
     end
   end
 end

@@ -15,12 +15,6 @@ module ZammadAPI
   class ConnectionError < TransportError
   end
 
-  class IncompleteResponseError < ConnectionError
-    attr_reader response: Response?
-
-    def initialize: (?String? message, ?response: Response?) -> void
-  end
-
   class TimeoutError < TransportError
   end
 
@@ -29,9 +23,7 @@ module ZammadAPI
   end
 
   class PaginationError < Error
-    UNPAGINATED_ADVICE: String
-
-    def self.build: (operation: String, page: Integer, ?resource_class: Class?, ?index: bool) -> PaginationError
+    def self.build: (operation: String, page: Integer, ?resource_class: Class?) -> PaginationError
   end
 
   class ResponseError < Error

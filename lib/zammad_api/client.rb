@@ -26,13 +26,6 @@ module ZammadAPI
   #   )
   class Client
     # Maps the reader methods of this client to their resource classes.
-    #
-    # Plural, because what a reader hands back stands for every record of
-    # its kind: a {ResourceProxy} is +Enumerable+ over all of them, so
-    # +client.tickets.each+ and +client.tickets.first(5)+ say what they do,
-    # where the singular the readers had in 1.x read as if it acted on one
-    # ticket. That name dates from when a proxy was only a dispatcher for
-    # +find+ and +create+.
     RESOURCES = {
       groups:            Resources::Group,
       organizations:     Resources::Organization,
@@ -81,25 +74,10 @@ module ZammadAPI
 
     # Builds a client from the environment.
     #
-    # Reads {ENV_OPTIONS}, so a script needs no configuration of its own.
-    # Anything passed in wins over the environment, and every other option
-    # keeps its default. That includes the way to authenticate: passing
-    # +user:+ and +password:+, or a token, replaces whichever credentials the
-    # environment holds rather than sitting beside them. A variable that is
-    # empty, or holds nothing but whitespace, counts as unset, and
-    # +ZAMMAD_HTTP_TOKEN+ wins over +ZAMMAD_TOKEN+ if both are set. An
-    # environment that sets more than one way to authenticate - a token and
-    # a user with a password - is refused like any other configuration that
-    # does, unless an argument names the one to use.
-    #
-    # Only an empty variable used to count as unset. One set to a space,
-    # which is what `export ZAMMAD_HTTP_TOKEN=" "` and a blank line of an
-    # env file leave behind, was taken for a value: beside a valid
-    # +ZAMMAD_TOKEN+ it took that token's place and was then read as no
-    # token at all, "missing user in config" for an environment that held a
-    # token, and a +ZAMMAD_USER+ of a space beside a token was a second way
-    # to authenticate. A password of nothing but spaces is given as
-    # +password:+.
+    # Reads {ENV_OPTIONS}; a variable that is empty or blank counts as unset,
+    # and +ZAMMAD_HTTP_TOKEN+ wins over +ZAMMAD_TOKEN+. Anything passed in wins
+    # over the environment, and credentials passed in replace the ones the
+    # environment holds.
     #
     # @example
     #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=secret ruby report.rb
@@ -114,9 +92,7 @@ module ZammadAPI
     def self.from_env(**overrides)
       from_environment = ENV_OPTIONS.filter_map do |name, option|
         value = ENV.fetch(name, nil)
-        # Of the bytes, as {Config.blank_token?} asks a token: a variable
-        # may hold a byte that is not text.
-        [option, value] if !value.to_s.b.strip.empty?
+        [option, value] if !value.to_s.strip.empty?
       end
       options = Config.merge_options(from_environment.to_h, overrides)
 
@@ -126,18 +102,10 @@ module ZammadAPI
     end
 
     # Builds a client from a {Config} that is already validated and a
-    # transport that is already built.
-    #
-    # The public constructor turns options into a Config and a Config into a
-    # Transport, and building a Transport means building a Faraday stack:
-    # authentication, JSON, the retry middleware, adapter resolution. Anything
-    # holding a transport of its own - {Test} - threw all of that away one
-    # line later, and paid for it again for every stand-in a suite builds.
-    # This is the way in for those, and the reason there is no public
-    # `with_transport` to swap one in after the fact.
+    # transport that is already built, for {Test}.
     #
     # @api private
-    # @param config [Config] an already validated configuration
+    # @param config [Config]
     # @param transport [Transport] anything with a {Transport} interface
     # @return [Client]
     def self.build(config, transport)
@@ -157,16 +125,8 @@ module ZammadAPI
       setup(config, Transport.new(config))
     end
 
-    # The proxy for a resource, by name or by class.
-    #
-    # A class is the way to the parts of the API this gem does not model.
-    # {Resources::Base} is built to be subclassed - a path, and whatever the
-    # endpoint needs said about it - and a proxy for such a class gives its
-    # records everything the modelled ones have: pagination, +find_by+,
-    # change tracking, +save+. 1.x reached any subclass through +const_get+
-    # on a name a caller supplied, and 2.0 closed that, which left raw
-    # requests as the only way to the rest of the API; this is the same
-    # reach, with the class handed over rather than looked up.
+    # The proxy for a resource, by name or by class. A class is the way to
+    # the parts of the API this gem does not model.
     #
     # @example A resource this gem does not model
     #   class Role < ZammadAPI::Resources::Base
@@ -174,7 +134,6 @@ module ZammadAPI
     #   end
     #
     #   client.resource(Role).each { |role| puts role.name }
-    #   client.resource(Role).find(2).update(note: 'Reviewed')
     #
     # @param name [Symbol, String, Class] a key of {RESOURCES}, or a subclass
     #   of {Resources::Base}
@@ -202,30 +161,18 @@ module ZammadAPI
     # @return [Resources::User]
     # @raise [AuthenticationError] when the credentials are not valid
     def me
-      response = @transport.get(
-        # Derived from the resource that declares the endpoint, not spelled
-        # out again: `member_path` exists for the same reason, and a path kept
-        # in two places is one that moves in one of them. Spelled out here,
-        # `client.users` would follow the users endpoint wherever it went and
-        # `client.me` would keep requesting the old one.
+      operation = 'find current user'
+      response  = @transport.get(
         "#{Resources::User.resource_path}/me",
-        operation:      'find current user',
+        operation:      operation,
         resource_class: Resources::User,
         query:          { expand: true }
       )
-      Resources::User.from_response(
-        @transport,
-        response.decoded(:object, operation: 'find current user', resource_class: Resources::User)
-      )
+      Resources::User.from_response(@transport, response.decoded(:object, operation: operation, resource_class: Resources::User))
     end
 
     # The version of the Zammad instance, not of this gem — that is
-    # {ZammadAPI::VERSION}.
-    #
-    # Zammad serves it to administrators only: its VersionControllerPolicy
-    # permits +admin+ and nothing else. An agent's or a customer's
-    # credentials are answered with a 403, so to check that a client can
-    # reach Zammad at all, ask {#me}, which every account may.
+    # {ZammadAPI::VERSION}. Zammad serves it to administrators only.
     #
     # @example
     #   client.version # => "6.4.0"
@@ -234,47 +181,30 @@ module ZammadAPI
     # @raise [AuthorizationError] when the account is not an administrator
     def version
       response = @transport.get('api/v1/version', operation: 'get the Zammad version')
-      version  = response.decoded(:object, operation: 'get the Zammad version')[:version]
-      version&.to_s
+      response.decoded(:object, operation: 'get the Zammad version')[:version]&.to_s
     end
 
     # @!group Raw requests
 
-    # Performs a +GET+ against any endpoint of the Zammad API.
-    #
-    # The resource classes cover a part of the API; these four methods reach
-    # the rest of it without giving up authentication, retries, credential
-    # redaction, JSON decoding or the error classes.
-    #
-    # +headers:+ is here because an escape hatch that cannot set one does not
-    # reach an endpoint that needs one. What it will not set is the two
-    # headers this client owns - see the +headers+ parameter below.
+    # Performs a +GET+ against any endpoint of the Zammad API, with the
+    # client's authentication, retries, JSON decoding and error classes.
     #
     # @example An endpoint this gem does not model
     #   client.get('api/v1/roles').body
     #   # => [{id: 1, name: "Admin", ...}, ...]
     #
-    # @example Reading a response header
-    #   client.get('api/v1/tickets').headers['content-type']
-    #
     # @example An endpoint that needs a header of its own
     #   client.get('api/v1/tickets/1', headers: {'Accept-Language' => 'de-de'})
     #
     # @param path [String] path relative to {Config#url}; a leading slash is
-    #   ignored, so paths can be pasted from the Zammad documentation. An
-    #   absolute URL is refused, so the client's credentials only ever go to
-    #   the instance it was configured for. It is written the way a URL is:
-    #   a space or a character outside ASCII has to be percent-encoded.
+    #   ignored, and an absolute URL is refused, so the client's credentials
+    #   only ever go to the instance it was configured for
     # @param query [Hash, nil] query string parameters
-    # @param headers [Hash, nil] request headers. Names are case-insensitive,
-    #   and +Authorization+ and +From+ are refused: the first is what the
-    #   client's credentials are for, the second is what {#on_behalf_of} sets.
+    # @param headers [Hash, nil] request headers
     # @return [Response]
     # @raise [ResponseError] for any non-2xx response
     # @raise [TransportError] when the request could not be completed
-    # @raise [ArgumentError] for a header this client sets itself, a header
-    #   name that is not one, a value that is not text, a path that is an
-    #   absolute URL, or one that cannot be read as a URL
+    # @raise [ArgumentError] for a path that is an absolute URL
     def get(path, query: nil, headers: nil) = raw(:get, path, query: query, headers: headers)
 
     # Performs a +POST+ against any endpoint of the Zammad API.
@@ -317,18 +247,10 @@ module ZammadAPI
     # Returns a new client with some configuration options changed.
     #
     # The options are re-validated, and any {#on_behalf_of} scope is carried
-    # over. The original client keeps its own connection and settings.
-    #
-    # Naming credentials replaces the ones this client has, whichever kind
-    # they were: +with(oauth2_token: 'x')+ on a client built with an access
-    # token authenticates with the OAuth2 token alone.
-    #
-    # The transport derives from the current one rather than being built from
-    # scratch, so a client wired to a stand-in stays wired to it.
+    # over. Naming credentials replaces the ones this client has.
     #
     # @example A longer timeout for one bulk job
     #   bulk = client.with(timeout: 300, retries: 5)
-    #   bulk.tickets.all.each { |ticket| archive(ticket) }
     #
     # @param options [Hash] any option accepted by {Config}
     # @return [Client]
@@ -338,10 +260,7 @@ module ZammadAPI
       dup.send(:setup, derived_config, @transport.with_config(derived_config))
     end
 
-    # Performs requests on behalf of another user.
-    #
-    # Returns a new client rather than mutating this one, so the original
-    # client is unaffected and both can be used concurrently.
+    # Performs requests on behalf of another user, through a new client.
     #
     # @example Scoped client
     #   support = client.on_behalf_of('agent@example.com')
@@ -352,57 +271,23 @@ module ZammadAPI
     #     scoped.tickets.find(1)
     #   end
     #
-    # An identifier that names nobody is refused. Zammad skips a +From+
-    # header with nothing in it, and a nil sent none at all, so
-    # +client.on_behalf_of(current_user&.login)+ with nobody signed in
-    # handed back a client that looked scoped and was not: every request
-    # ran with the rights of the account the client authenticates as, and
-    # a list read through it held everything that account can see. No
-    # request failed, so nothing said the scope was missing.
-    #
     # @param identifier [String, Integer] login, email address or user id
     # @yieldparam scoped [Client]
     # @return [Client] when no block is given, otherwise the block's value
-    # @raise [ArgumentError] for an identifier that is nil, empty or blank,
-    #   or neither text nor an Integer, such as the record of the user
+    # @raise [ArgumentError] for an identifier that is nil or blank, which
+    #   would quietly leave the requests unscoped
     def on_behalf_of(identifier)
-      # Nil is what a transport takes for no scope, so it is refused here.
-      # The rest is refused by the rule every transport is meant to apply,
-      # applied here as well: Client.build takes anything with a transport's
-      # interface, and one that stored what it was given would send an empty
-      # From header for `on_behalf_of('')`.
-      raise ArgumentError, Transport.blank_on_behalf_of_message(identifier) if identifier.nil?
-
-      scoped = dup.send(:setup, config, @transport.with_on_behalf_of(Transport.stringify_on_behalf_of(identifier)))
+      scoped = dup.send(:setup, config, @transport.with_on_behalf_of(Transport.on_behalf_of_header(identifier)))
       return scoped if !block_given?
 
       yield scoped
     end
 
-    # The scope is shown where there is one, so that a client acting for
-    # another user does not print as the one it was derived from.
     def inspect
       scope = @transport.on_behalf_of
 
-      "#<#{self.class.name} url=#{config.redacted_url.inspect} auth=#{config.authentication_scheme}#{" on_behalf_of=#{scope.inspect}" if scope}>"
+      "#<#{self.class.name} url=#{config.url.inspect} auth=#{config.authentication_scheme}#{" on_behalf_of=#{scope.inspect}" if scope}>"
     end
-
-    # The client for a JSON encoder: what {#inspect} says, and nothing else.
-    #
-    # ActiveSupport gives every object an +as_json+ that is its instance
-    # variables, and builds +to_json+ on it. For a client those are the
-    # configuration, the transport and the resource proxies, so in a Rails
-    # app +client.to_json+ - or a log line or an error report serializing
-    # something that holds the client - wrote the credentials through the
-    # first two, and then read every record of every resource through the
-    # third: a proxy is Enumerable, which is serialized as its elements.
-    #
-    # @return [Hash{Symbol => Object}]
-    def as_json(*) = Transport.description(config, @transport.on_behalf_of)
-
-    # @param state [JSON::State, nil] passed by +JSON.generate+
-    # @return [String] {#as_json} as a JSON object
-    def to_json(state = nil) = as_json.to_json(state)
 
     def method_missing(name, *args)
       return super if CONVERSION_METHODS.include?(name) || name.to_s.end_with?('=', '!', '?')
@@ -420,9 +305,6 @@ module ZammadAPI
       @transport.request(
         method,
         relative,
-        # Named by the path as it may be printed. The operation is in the
-        # message of every error the request raises, and a query string
-        # written into the path may carry a token.
         operation: "#{method.to_s.upcase} #{Transport.redact_path(relative)}",
         query:     query,
         body:      body,
@@ -432,36 +314,18 @@ module ZammadAPI
 
     def unknown_resource_message(name) = "Unknown resource #{name}, available resources are: #{RESOURCES.keys.join(', ')}"
 
-    # One of the proxies built with this client for a class it models, and a
-    # new one for any other resource class. A new one each time, rather than
-    # a memo: the client is frozen in everything but name once it is built -
-    # see {#setup} - and a proxy holds nothing but the transport and the
-    # class.
     def proxy_for(resource_class)
       raise ArgumentError, "resource takes the name of a resource or a subclass of #{Resources::Base.name}, and #{resource_class.inspect} is neither" if !(resource_class <= Resources::Base)
 
       @resources.fetch(resource_class) do
-        # Asked for now, so that a class without a path is reported by the
-        # call that named it rather than by its first request.
         resource_class.resource_path
         ResourceProxy.new(@transport, resource_class)
       end
     end
 
-    # Everything a client is, in the one place all four ways of making one go
-    # through: {.new}, {.build}, {#with} and {#on_behalf_of}. Held apart,
-    # `build` restated `initialize`'s list of instance variables by hand, and
-    # the fourth one added to `initialize` would have left every client built
-    # for a test unset where it mattered.
-    #
-    # The proxies are built here rather than memoized on first use, because a
-    # client is documented - and used, in examples/concurrent_sync.rb - as
-    # immutable once built and safe to share between threads without locking.
-    # A memo populated by the first `client.tickets` in each worker is a write
-    # to shared state, and while CRuby's GVL makes it harmless, a contract
-    # that only holds on one implementation is not the contract that was
-    # written down. Building all seven up front costs an allocation each and
-    # keeps the object finished the moment it is handed back.
+    # Everything a client is, in the one place {.new}, {.build}, {#with} and
+    # {#on_behalf_of} go through. The proxies are built up front so that a
+    # client is immutable, and safe to share between threads, once built.
     #
     # @return [self]
     def setup(config, transport)

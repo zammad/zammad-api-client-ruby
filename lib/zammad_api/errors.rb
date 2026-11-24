@@ -28,31 +28,8 @@ module ZammadAPI
   class TransportError < Error; end
 
   # Raised when the connection to the Zammad instance could not be
-  # established (DNS, refused connection, TLS failure, ...), or was closed
-  # before the body of a response had arrived: see {IncompleteResponseError}
-  # for the second.
+  # established: DNS, a refused connection, a TLS failure.
   class ConnectionError < TransportError; end
-
-  # Raised when Zammad answered 2xx and the connection was closed before the
-  # body it announced had arrived.
-  #
-  # A {ConnectionError}, and caught as one. It has a class of its own for the
-  # one thing that sets it apart from the others: the request was received and
-  # answered. A write that raises this was applied, so it is not to be sent
-  # again, and a record that was being saved or destroyed is left as saved or
-  # destroyed. A save is taken as applied only where the answer said it was
-  # JSON, as Zammad's does: see {Resources::Base#save!}.
-  class IncompleteResponseError < ConnectionError
-    # @return [Response, nil] the response as far as it arrived
-    attr_reader :response
-
-    # @param message [String, nil]
-    # @param response [Response, nil]
-    def initialize(message = nil, response: nil)
-      super(message)
-      @response = response
-    end
-  end
 
   # Raised when a request exceeded {Config#open_timeout} or {Config#timeout}.
   class TimeoutError < TransportError; end
@@ -60,10 +37,8 @@ module ZammadAPI
   # Raised when a response did not have the shape the caller expected.
   class ParseError < Error
     # @param operation [String]
-    # @param expected [Symbol, String] +:object+, +:array+, or a longer
-    #   description of the shape that was wanted
-    # @param actual [Class, String] the class that was decoded instead, or a
-    #   description of it
+    # @param expected [Symbol, String] +:object+ or +:array+
+    # @param actual [Class, String] what was decoded instead
     # @param resource_class [Class, nil]
     # @return [ParseError]
     def self.build(operation:, expected:, actual:, resource_class: nil)
@@ -71,29 +46,18 @@ module ZammadAPI
     end
   end
 
-  # Raised when the server answers a page request with the page before it,
-  # and that page, asked for again, still holds the same records. It is
-  # ignoring +page+ then, and a collection walk would never end.
+  # Raised when an endpoint answers a page request with the same records as
+  # the page before it. It is ignoring +page+ then, and a walk would never end.
   class PaginationError < Error
-    # What to do about an index that repeats its first page, which is what
-    # one that serves every record in a single response does. Said as a
-    # condition, because the same two pages come from an endpoint that
-    # serves only the first of many and ignores +page+, and that one is not
-    # to be read as whole.
-    UNPAGINATED_ADVICE = 'If this endpoint serves every record in one response, declare `paginated false` on the resource, ' \
-                         'and it is read in one request.'
-
     # @param operation [String]
     # @param page [Integer] the page that repeated its predecessor
     # @param resource_class [Class, nil]
-    # @param index [Boolean] whether an index endpoint was being walked,
-    #   which is the kind a resource may declare as not paginated. A search
-    #   always pages.
     # @return [PaginationError]
-    def self.build(operation:, page:, resource_class: nil, index: false)
-      message = "Can't #{subject_for(operation, resource_class)}: page #{page} repeated page #{page - 1}, so the endpoint is ignoring the page parameter"
-
-      new(index && page == 2 ? "#{message}. #{UNPAGINATED_ADVICE}" : message)
+    def self.build(operation:, page:, resource_class: nil)
+      new(
+        "Can't #{subject_for(operation, resource_class)}: page #{page} repeated page #{page - 1}, so the endpoint is " \
+        'ignoring the page parameter. If it serves every record in one response, declare `paginated false` on the resource.'
+      )
     end
   end
 
@@ -148,12 +112,8 @@ module ZammadAPI
       super(build_message)
     end
 
-    # The status this error carries, or - for one this gem raised without a
-    # request, such as {ResourceProxy#find_by!} finding nothing - the status
-    # its class is the name for. A NotFoundError used to answer nil there,
-    # so `rescue NotFoundError => e; retry if e.status == 404` quietly stopped
-    # retrying for the one NotFoundError that came from this gem rather than
-    # from Zammad, while every other one carried 404.
+    # The status of the response, or, for an error raised without one such as
+    # {ResourceProxy#find_by!} finding nothing, the status its class stands for.
     #
     # @return [Integer, nil] HTTP status code
     def status
@@ -175,9 +135,6 @@ module ZammadAPI
     def server_message
       return nil if !body.is_a?(Hash)
 
-      # Symbol keys only: both decode paths - Transport#decode_body and the
-      # test kit - parse with symbolize_names, so a string-keyed body cannot
-      # reach here and the fallbacks that read one were never run.
       value = body[:error_human] || body[:error]
       value.to_s.empty? ? nil : value.to_s
     end
@@ -213,20 +170,11 @@ module ZammadAPI
 
   # 429 - too many requests.
   class RateLimitError < ClientError
-    # @return [Integer, nil] value of the +Retry-After+ response header
+    # @return [Integer, nil] value of the +Retry-After+ response header, in seconds
     def retry_after
-      # Downcased, because every {Response} is built with its header keys
-      # downcased - {Transport#decode} and {Test#stub} both do it - so there
-      # is no capitalised spelling left to fall back to.
       value = headers['retry-after']
       return nil if value.nil?
 
-      # In base ten, said outright. Left to itself Integer reads a prefix as
-      # a radix, so `010` was 8 and `08`, which is no octal number, was nil -
-      # where the retry middleware waited ten seconds and eight - and `0x10`
-      # was 16, which is no figure this header carries. A base is only taken
-      # with text, hence the `to_s`: a Response built by hand may hold the
-      # figure as an Integer.
       Integer(value.to_s, 10, exception: false)
     end
   end

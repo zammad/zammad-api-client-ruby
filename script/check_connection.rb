@@ -271,13 +271,6 @@ check('order sorts a search') do
   "#{CLIENT.groups.search("smoke-#{SUFFIX}").order(:name, id: :desc).to_a.size} hit(s)"
 end
 
-check('search refuses a keyword the endpoint would drop') do
-  CLIENT.groups.search('smoke', name: "smoke-#{SUFFIX}").to_a
-  raise 'expected ArgumentError'
-rescue ArgumentError => e
-  e.message.split(':').first
-end
-
 section 'Tickets'
 
 check!('create a ticket with its first article') do
