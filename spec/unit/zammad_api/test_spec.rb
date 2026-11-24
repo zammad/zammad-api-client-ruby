@@ -1021,11 +1021,37 @@ RSpec.describe ZammadAPI::Test do
       expect(group.changed?).to be(false)
     end
 
-    it 'records the request, and does not send a read again for it' do
+    # A read is sent again for it on the wire, as it is for a connection
+    # that was reset, and each attempt takes the next stub of a sequence.
+    it 'sends a read again for it, as often as the client retries' do
       zammad.stub(:get, 'api/v1/groups/1', **cut_short)
 
       expect { client.groups.find(1) }.to raise_error(ZammadAPI::IncompleteResponseError)
-      expect(zammad.requests.map(&:path)).to eq(['api/v1/groups/1'])
+      expect(zammad.requests.map(&:path)).to eq(['api/v1/groups/1'] * (1 + zammad.config.retries))
+    end
+
+    it 'answers a read that is cut short once and then whole with the record' do
+      zammad.stub(:get, 'api/v1/groups/1', **cut_short)
+      zammad.stub(:get, 'api/v1/groups/1', body: { id: 1, name: 'Users' })
+
+      expect(client.groups.find(1).name).to eq('Users')
+      expect(zammad.requests.size).to eq(2)
+    end
+
+    it 'sends a read once where the client was built without retries' do
+      zammad = described_class.new(retries: 0)
+      zammad.stub(:get, 'api/v1/groups/1', **cut_short)
+
+      expect { zammad.client.groups.find(1) }.to raise_error(ZammadAPI::IncompleteResponseError)
+      expect(zammad.requests.size).to eq(1)
+    end
+
+    it 'does not send a write again for it' do
+      zammad.stub(:post, 'api/v1/groups', **cut_short)
+      zammad.stub(:post, 'api/v1/groups', body: { id: 2, name: 'Support' })
+
+      expect { client.groups.create(name: 'Support') }.to raise_error(ZammadAPI::IncompleteResponseError)
+      expect(zammad.requests.size).to eq(1)
     end
 
     it 'takes a body as long as its Content-Length, or longer' do

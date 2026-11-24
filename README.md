@@ -1257,7 +1257,9 @@ repeated.
 ### Timeouts and retries
 
 A `GET` is retried on connection failures, timeouts and the transient statuses 429, 500,
-502, 503 and 504, with exponential backoff.
+502, 503 and 504, with exponential backoff. A 2xx whose body stopped short of its
+`Content-Length` is a connection failure like any other: the `GET` is sent again, and
+`IncompleteResponseError` is raised once the retries are spent.
 
 A `Retry-After` header on one of those responses is honoured: the client waits as long as
 the server asked before the next attempt, up to `timeout` seconds. A longer one is not
@@ -1370,9 +1372,10 @@ the wire would refuse is refused here too. `headers` names only what the call as
 the ones the client sets from its configuration are not in it, and an `on_behalf_of` scope
 has a field of its own.
 
-A read that is answered 429 or 5xx is sent again, as it is on the wire: a `GET`, up to
-`retries` times, and never a write. Each attempt is in `requests` and takes the next stub
-of a sequence, so a read that fails once and then succeeds is two stubs:
+A read that is answered 429 or 5xx, or with a 2xx cut short of its `Content-Length`, is
+sent again, as it is on the wire: a `GET`, up to `retries` times, and never a write. Each
+attempt is in `requests` and takes the next stub of a sequence, so a read that fails once
+and then succeeds is two stubs:
 
 ```ruby
 zammad.stub(:get, 'api/v1/tickets/1', status: 503)

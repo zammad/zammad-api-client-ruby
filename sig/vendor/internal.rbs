@@ -12,3 +12,17 @@ module ZammadAPI
     extend Forwardable
   end
 end
+
+# The two classes the transport puts into its Faraday stack. Private
+# constants, and built on Faraday types, which a published signature cannot
+# name: see sig/zammad_api/transport.rbs.
+module ZammadAPI
+  class Transport
+    class CutShort < Faraday::Error
+    end
+
+    class HeldToLength < Faraday::Middleware
+      def on_complete: (untyped env) -> void
+    end
+  end
+end

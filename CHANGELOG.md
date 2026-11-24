@@ -963,8 +963,8 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   without a word, so `attachment.download` returned the first bytes of a file as the file,
   and a raw request for anything that is not JSON did the same. Checked for a 2xx response
   that names one `Content-Length` and neither a `Content-Encoding` nor a
-  `Transfer-Encoding`; a chunked body cut short raised already. The request is not sent
-  again.
+  `Transfer-Encoding`; a chunked body cut short raised already. A `GET` is sent again for
+  it: see below.
 - A query value that is a number and neither an `Integer` nor a `Float` raises
   `ArgumentError`, as any other value a query string has no spelling for does. Every
   `Numeric` was taken as it prints: `client.users.search('smith', ids: [BigDecimal('5')])`,
@@ -1232,6 +1232,17 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   for a record that exists. Text that cannot be converted raises `ArgumentError`, which
   names the parameter and does not quote it. A binary String is sent as its bytes, as
   before.
+- A `GET` whose 2xx body stops short of its `Content-Length` is sent again, as often as
+  `retries` allows, before `IncompleteResponseError` is raised. The length was asked of the
+  response the retry middleware had already returned, so this was the one failure of a
+  connection a read was not repeated for: with `retries: 2`, an `attachment.download` the
+  connection dropped under raised after one request, while the same drop a moment earlier,
+  arriving as `ECONNRESET`, was asked again and answered. The check sits below the retry
+  now, in a middleware of the gem's own, and above the `middleware:` callable, so it reads
+  the body and the headers as that left them. A write is still sent once, since Zammad
+  answered it, and the error and the response it carries are what they were.
+  `ZammadAPI::Test` sends such a read again as well, each attempt taking the next stub of a
+  sequence.
 
 ### Changed
 

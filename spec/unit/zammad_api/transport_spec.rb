@@ -1326,6 +1326,77 @@ RSpec.describe ZammadAPI::Transport do
         end
       end
 
+      # Asked of the response the retry middleware had already returned, so
+      # this was the one failure of a connection that a read was not sent
+      # again for: the drop a moment earlier, as ECONNRESET, was.
+      context 'with retries to spend' do
+        let(:transport) { unit_transport(retries: 2, retry_interval: 0.01) }
+        let(:short)     { { status: 200, body: '0123', headers: { 'Content-Length' => '10' } } }
+        let(:whole)     { { status: 200, body: '0123456789', headers: { 'Content-Length' => '10' } } }
+
+        it 'sends a GET again, and returns the body that arrived whole' do
+          stub_request(:get, url).to_return(short, whole)
+
+          expect(transport.get('api/v1/groups', operation: 'test').raw_body).to eq('0123456789')
+          expect(a_request(:get, url)).to have_been_made.twice
+        end
+
+        it 'sends it as often as a GET that met ECONNRESET' do
+          stub_request(:get, url).to_return(short, short, whole)
+
+          expect(transport.get('api/v1/groups', operation: 'test').raw_body).to eq('0123456789')
+          expect(a_request(:get, url)).to have_been_made.times(3)
+        end
+
+        it 'raises once the retries are spent, with the response that came last' do
+          stub_request(:get, url).to_return(short, short, short.merge(body: '012345'))
+
+          expect { transport.get('api/v1/groups', operation: 'test') }
+            .to raise_error(ZammadAPI::IncompleteResponseError, /ended 4 bytes short of the 10/) { expect(it.response.raw_body).to eq('012345') }
+          expect(a_request(:get, url)).to have_been_made.times(3)
+        end
+
+        # Zammad answered, so the write was applied, and sending it again
+        # would apply it again.
+        %i[post put delete].each do |verb|
+          it "does not send a #{verb.to_s.upcase} again" do
+            stub_request(verb, url).to_return(short, whole)
+
+            expect { transport.public_send(verb, 'api/v1/groups', operation: 'test') }.to raise_error(ZammadAPI::IncompleteResponseError)
+            expect(a_request(verb, url)).to have_been_made.once
+          end
+        end
+
+        it 'does not send a GET again for a body that is whole' do
+          stub_request(:get, url).to_return(whole)
+          transport.get('api/v1/groups', operation: 'test')
+
+          expect(a_request(:get, url)).to have_been_made.once
+        end
+
+        it 'asks the length of the body as the middleware callable left it' do
+          stub_request(:get, url).to_return(status: 200, body: '0123456789')
+          padded = lambda { |builder|
+            builder.use(Class.new(Faraday::Middleware) do
+              define_method(:on_complete) { |env| env.response_headers['Content-Length'] = 1000 }
+            end)
+          }
+
+          expect { unit_transport(retries: 1, retry_interval: 0.01, middleware: padded).get('api/v1/groups', operation: 'test') }
+            .to raise_error(ZammadAPI::IncompleteResponseError, /990 bytes short/)
+          expect(a_request(:get, url)).to have_been_made.twice
+        end
+
+        it 'logs the response it raises for, once' do
+          log = StringIO.new
+          stub_request(:get, url).to_return(short)
+
+          expect { unit_transport(retries: 2, retry_interval: 0.01, logger: Logger.new(log)).get('api/v1/groups', operation: 'test') }
+            .to raise_error(ZammadAPI::IncompleteResponseError)
+          expect(log.string.scan('Zammad API response: GET api/v1/groups -> 200').size).to eq(1)
+        end
+      end
+
       it 'does not judge a 204, which has no body whatever is announced beside it' do
         stub_request(:delete, url).to_return(status: 204, body: '', headers: { 'Content-Length' => '5' })
 
