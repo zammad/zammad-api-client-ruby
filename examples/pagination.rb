@@ -58,9 +58,9 @@ puts "order                  #{client.groups.order(:name).first(3).map(&:name).i
 puts "search.count           #{client.tickets.search('state.name:open').count}, one request"
 puts "empty?                 #{client.tickets.search('state.name:merged').empty?}, asks for a single record"
 
-# `search` and `page` return a new collection, so scoping one never disturbs
-# the original.
-puts "immutable              #{tickets.page(2).equal?(tickets)}"
+# `search`, `order` and `page` return a new collection, so scoping one never
+# disturbs the original.
+puts "page(2) is new         #{!tickets.page(2).equal?(tickets)}, tickets still reads every page"
 
 puts <<~NOTE
 
