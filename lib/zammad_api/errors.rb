@@ -28,10 +28,11 @@ module ZammadAPI
   class TransportError < Error; end
 
   # Raised when the connection to the Zammad instance could not be
-  # established: DNS, a refused connection, a TLS failure.
+  # established: DNS, a refused connection, a TLS failure, or no connection
+  # within {Config#open_timeout}.
   class ConnectionError < TransportError; end
 
-  # Raised when a request exceeded {Config#open_timeout} or {Config#timeout}.
+  # Raised when a response took longer than {Config#timeout}.
   class TimeoutError < TransportError; end
 
   # Raised when a response did not have the shape the caller expected.
@@ -77,7 +78,7 @@ module ZammadAPI
 
     # Returns the most specific error class for +response+ and instantiates it.
     #
-    # @param response [Response, nil]
+    # @param response [Response]
     # @param operation [String]
     # @param resource_class [Class, nil]
     # @return [ResponseError]
@@ -91,8 +92,6 @@ module ZammadAPI
 
     # @api private
     def self.error_class_for(response)
-      return self if response.nil?
-
       STATUS_ERRORS.fetch(response.status) do
         response.status >= 500 ? ServerError : ClientError
       end

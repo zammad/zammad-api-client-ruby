@@ -354,17 +354,6 @@ RSpec.describe ZammadAPI::Client do
       it 'leaves the client as it was built' do
         expect { client.resource(Role) }.not_to(change { client.instance_variable_get(:@resources).size })
       end
-
-      it 'refuses a class that is not a resource' do
-        expect { client.resource(String) }
-          .to raise_error(ArgumentError, /resource takes the name of a resource or a subclass of ZammadAPI::Resources::Base, and String is neither/)
-      end
-
-      it 'refuses a resource class that declares no path' do
-        stub_const('Pathless', Class.new(ZammadAPI::Resources::Base))
-
-        expect { client.resource(Pathless) }.to raise_error(ZammadAPI::Error, /Pathless does not declare an API path/)
-      end
     end
 
     it 'raises for a singular name from 1.x' do

@@ -137,10 +137,8 @@ module ZammadAPI
     #   of {Resources::Base}
     # @return [ResourceProxy]
     # @raise [UnknownResourceError] when no resource has that name
-    # @raise [ArgumentError] for a class that is not a resource
-    # @raise [Error] for a resource class that declares no path
     def resource(name)
-      return proxy_for(name) if name.is_a?(Class)
+      return @resources.fetch(name) { ResourceProxy.new(@transport, name) } if name.is_a?(Class)
 
       resource_class = RESOURCES.fetch(name.to_sym) { raise UnknownResourceError, unknown_resource_message(name) }
 
@@ -298,28 +296,11 @@ module ZammadAPI
     private
 
     def raw(method, path, query: nil, body: nil, headers: nil)
-      relative = Transport.relative_path(path)
-
-      @transport.request(
-        method,
-        relative,
-        operation: "#{method.to_s.upcase} #{Transport.redact_path(relative)}",
-        query:     query,
-        body:      body,
-        headers:   headers
-      )
+      operation = "#{method.to_s.upcase} #{Transport.redact_path(path)}"
+      @transport.request(method, path, operation: operation, query: query, body: body, headers: headers)
     end
 
     def unknown_resource_message(name) = "Unknown resource #{name}, available resources are: #{RESOURCES.keys.join(', ')}"
-
-    def proxy_for(resource_class)
-      raise ArgumentError, "resource takes the name of a resource or a subclass of #{Resources::Base.name}, and #{resource_class.inspect} is neither" if !(resource_class <= Resources::Base)
-
-      @resources.fetch(resource_class) do
-        resource_class.resource_path
-        ResourceProxy.new(@transport, resource_class)
-      end
-    end
 
     # Everything a client is, in the one place {.new}, {.build}, {#with} and
     # {#on_behalf_of} go through. The proxies are built up front so that a

@@ -101,65 +101,6 @@ RSpec.describe ZammadAPI::Associations::Proxy do
     end
   end
 
-  describe 'has_many' do
-    let(:articles_url) { "#{ClientHelper::BASE_URL}api/v1/ticket_articles/by_ticket/42" }
-
-    it 'fetches the list from the association endpoint' do
-      stub_request(:get, articles_url).with(query: { 'expand' => 'true' })
-        .to_return(json_response([{ id: 1, body: 'first' }]))
-
-      expect(ticket.related.articles.map(&:body)).to eq(['first'])
-    end
-
-    it 'returns records of the target class' do
-      stub_request(:get, articles_url).with(query: hash_including({})).to_return(json_response([{ id: 1 }]))
-
-      expect(ticket.related.articles.first).to be_a(ZammadAPI::Resources::TicketArticle)
-    end
-
-    it 'is not memoized, so an article added afterwards shows up' do
-      stub_request(:get, articles_url).with(query: hash_including({}))
-        .to_return(json_response([{ id: 1 }]), json_response([{ id: 1 }, { id: 2 }]))
-
-      held = ticket
-      expect(held.related.articles.size).to eq(1)
-      expect(held.related.articles.size).to eq(2)
-    end
-
-    it 'names the association in a parse failure' do
-      stub_request(:get, articles_url).with(query: hash_including({})).to_return(json_response({ id: 1 }))
-
-      expect { ticket.related.articles }
-        .to raise_error(ZammadAPI::ParseError, /Can't get articles \(ZammadAPI::Resources::TicketArticle\)/)
-    end
-
-    it 'reads the whole list in one request' do
-      stub_request(:get, articles_url).with(query: hash_including({}))
-        .to_return(json_response([{ id: 1 }, { id: 2 }]))
-
-      expect(ticket.related.articles.size).to eq(2)
-    end
-
-    it 'says to save an unsaved record rather than requesting a path without an id' do
-      unsaved = ZammadAPI::Resources::Ticket.new(unit_transport, title: 'Help')
-
-      expect { unsaved.related.articles }
-        .to raise_error(ZammadAPI::Error, /has no id, so it has no articles to read; save it first/)
-    end
-
-    it 'escapes a traversal in the id instead of reaching another endpoint' do
-      escaped = "#{ClientHelper::BASE_URL}api/v1/ticket_articles/by_ticket/1%2F..%2F..%2Fusers"
-      stub = stub_request(:get, escaped).with(query: hash_including({})).to_return(json_response([]))
-      escaping = ZammadAPI::Resources::Ticket.from_response(unit_transport, id: '1/../../users')
-
-      escaping.related.articles
-
-      expect(stub).to have_been_requested
-      expect(a_request(:get, "#{ClientHelper::BASE_URL}api/v1/users").with(query: hash_including({})))
-        .not_to have_been_made
-    end
-  end
-
   describe 'inheritance' do
     it 'gives every resource the stamps Zammad puts on every object' do
       expect(ZammadAPI::Resources::Group.associations.keys).to eq(%i[created_by updated_by])
@@ -320,7 +261,7 @@ RSpec.describe ZammadAPI::Associations::Proxy do
       expect(ticket.related.inspect)
         .to eq(
           '#<ZammadAPI::Associations::Proxy ZammadAPI::Resources::Ticket id=42 ' \
-          'created_by, updated_by, customer, owner, organization, group, state, priority, articles>'
+          'created_by, updated_by, customer, owner, organization, group, state, priority>'
         )
     end
   end

@@ -114,7 +114,7 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   raises `ArgumentError`, so the credentials stay with the configured instance.
 - Request and connection timeouts (`timeout`, `open_timeout`), on by default at 60 and
   10 seconds. 1.x waited as long as the server took, so a call that used to hang now
-  raises `TimeoutError`.
+  raises `TimeoutError`, or `ConnectionError` when the connection is not opened in time.
 - Automatic retry with exponential backoff for a `GET` on connection failures, timeouts
   and the statuses 429, 500, 502, 503 and 504. A `Retry-After` within `timeout` is
   honoured, and a longer one ends the retries. A write is never retried: a repeated ticket
@@ -192,10 +192,9 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - `Response#decoded(:object | :array)` checks the shape of a response body in one place,
   so an unexpected payload raises `ParseError`.
 - `record.related` reaches the records a record points at: `ticket.related.customer`,
-  `ticket.related.group`, `ticket.related.articles`, `user.related.organization`, and
-  `created_by` / `updated_by` on everything. The readers sit under `related` because
-  Zammad expands an association into a name under the plain attribute, and
-  `ticket.customer` keeps returning that name. `Resource.associations` lists what a
+  `ticket.related.group`, `user.related.organization`, and `created_by` / `updated_by` on
+  everything. The readers sit under `related` because Zammad expands an association into
+  a name under the plain attribute, and `ticket.customer` keeps returning that name. `Resource.associations` lists what a
   resource declares.
 - Records compare as the Zammad records they came from: two records of the same kind with
   the same id are equal, and `#hash` agrees, so `uniq`, `Set`, `include?` and records as
@@ -206,8 +205,8 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - `client.resource(SomeClass)` takes a subclass of `ZammadAPI::Resources::Base` and answers
   with a proxy for it, so an endpoint this gem does not model gets records, pagination,
   `find_by`, change tracking and `save` from a class that declares its `path`. `searchable`,
-  `max_per_page`, `sortable`, `paginated`, `belongs_to` and `has_many` say what else is
-  true of the endpoint.
+  `max_per_page`, `sortable`, `paginated` and `belongs_to` say what else is true of the
+  endpoint.
 - Typed records. `ResourceProxy` and `Collection` are generic over the resource they hold,
   so `client.tickets` is a `ResourceProxy[Resources::Ticket]` and `find`, `first`,
   `find_by`, the block of `each` and a search all answer with a `Ticket`. Each resource

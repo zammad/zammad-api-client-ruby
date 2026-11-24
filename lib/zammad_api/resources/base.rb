@@ -164,19 +164,7 @@ module ZammadAPI
         # @param foreign_key [Symbol] attribute holding the target's id
         # @return [void]
         def belongs_to(name, class_name:, foreign_key: :"#{name}_id")
-          declared_associations[name] = { type: :belongs_to, class_name: class_name, foreign_key: foreign_key }
-        end
-
-        # Declares that this resource points at a list of other records, served
-        # whole by an endpoint of its own. Read through +record.related.<name>+.
-        #
-        # @param name [Symbol] name of the reader on {Base#related}
-        # @param class_name [String] the target resource
-        # @param path [Proc] called with the record id, already escaped for
-        #   a path segment, and returns the API path
-        # @return [void]
-        def has_many(name, class_name:, path:)
-          declared_associations[name] = { type: :has_many, class_name: class_name, path: path }
+          declared_associations[name] = { class_name: class_name, foreign_key: foreign_key }
         end
       end
 

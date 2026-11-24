@@ -59,10 +59,6 @@ RSpec.describe ZammadAPI::ResponseError do
         expect(result).to be_an_instance_of(error_class)
       end
     end
-
-    it 'falls back to the base class without a response' do
-      expect(described_class.build(nil, operation: 'find object')).to be_an_instance_of(described_class)
-    end
   end
 
   describe '#message' do
@@ -103,7 +99,7 @@ RSpec.describe ZammadAPI::ResponseError do
     end
 
     it 'reports a missing response' do
-      expect(described_class.build(nil, operation: 'find object').message)
+      expect(described_class.new(operation: 'find object').message)
         .to eq("Can't find object: no response")
     end
 
@@ -147,7 +143,7 @@ RSpec.describe ZammadAPI::ResponseError do
     end
 
     it 'returns nil accessors without a response' do
-      bare = described_class.build(nil, operation: 'find object')
+      bare = described_class.new(operation: 'find object')
       expect([bare.status, bare.body, bare.headers, bare.server_message]).to eq([nil, nil, {}, nil])
     end
 

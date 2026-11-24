@@ -2,7 +2,6 @@
 
 require 'faraday'
 require 'faraday/retry'
-require 'timeout'
 require 'uri'
 
 require_relative 'errors'
@@ -42,10 +41,6 @@ module ZammadAPI
 
     # Statuses a read is retried on.
     RETRIABLE_STATUSES = [429, 500, 502, 503, 504].freeze
-
-    # Errors that mean the request timed out, found inside the
-    # Faraday::ConnectionFailed an adapter wraps an open timeout into.
-    TIMEOUT_ERRORS = [Errno::ETIMEDOUT, Timeout::Error].freeze
 
     # Errors a read is retried on. The adapter wraps socket and TLS errors
     # into Faraday's own classes.
@@ -168,8 +163,9 @@ module ZammadAPI
     # @param resource_class [Class, nil] used in error messages
     # @return [Response]
     # @raise [ResponseError] for non-2xx responses
-    # @raise [TimeoutError] when the request timed out
-    # @raise [ConnectionError] when the instance was unreachable
+    # @raise [TimeoutError] when the response took longer than {Config#timeout}
+    # @raise [ConnectionError] when the instance was unreachable, including
+    #   a connection not opened within {Config#open_timeout}
     def request(method, path, operation:, query: nil, body: nil, headers: nil, resource_class: nil)
       path = Transport.relative_path(path)
       log_request(method, path, query, body, headers)
@@ -185,18 +181,10 @@ module ZammadAPI
     rescue Faraday::SSLError => e
       raise ConnectionError, "Can't #{operation}: TLS handshake with #{config.url} failed (#{e.message})"
     rescue Faraday::ConnectionFailed => e
-      raise TimeoutError, "Can't #{operation}: connecting to #{config.url} timed out (#{e.message})" if timed_out?(e)
-
       raise ConnectionError, "Can't #{operation}: #{config.url} is unreachable (#{e.message})"
     end
 
     private
-
-    # Whether a connection failure is a timeout underneath: the default
-    # adapter wraps an exceeded +open_timeout+ into Faraday::ConnectionFailed.
-    def timed_out?(error)
-      [error.wrapped_exception, error.cause].any? { |inner| TIMEOUT_ERRORS.any? { inner.is_a?(it) } }
-    end
 
     # The connection's :json middleware encodes a Hash or Array body.
     def perform(method, path, query, body, headers)

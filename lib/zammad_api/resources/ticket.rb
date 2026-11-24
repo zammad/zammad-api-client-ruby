@@ -25,14 +25,17 @@ module ZammadAPI
       belongs_to :state,        class_name: 'TicketState'
       belongs_to :priority,     class_name: 'TicketPriority'
 
-      has_many :articles, class_name: 'TicketArticle', path: ->(id) { "api/v1/ticket_articles/by_ticket/#{id}" }
-
-      # Every article of this ticket, refetched on each call: the same list as
-      # +ticket.related.articles+.
+      # Every article of this ticket, read in one request on each call.
       #
       # @return [Array<TicketArticle>]
+      # @raise [Error] when the ticket has no id yet
       # @raise [ResponseError] when Zammad rejected the request
-      def articles = related.articles
+      def articles
+        path     = "#{TicketArticle.resource_path}/by_ticket/#{Transport.escape_path_segment(require_id!)}"
+        response = transport.get(path, operation: 'get articles', resource_class: TicketArticle, query: { expand: true })
+
+        response.decoded(:array, operation: 'get articles', resource_class: TicketArticle).map { TicketArticle.from_response(transport, it) }
+      end
 
       # Adds an article to this ticket.
       #

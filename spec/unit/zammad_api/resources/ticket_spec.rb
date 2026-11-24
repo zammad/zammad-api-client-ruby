@@ -29,7 +29,30 @@ RSpec.describe ZammadAPI::Resources::Ticket do
     it 'raises ParseError when the response is not a list' do
       stub_request(:get, articles_url).with(query: hash_including({})).to_return(json_response({ id: 1 }))
 
-      expect { ticket.articles }.to raise_error(ZammadAPI::ParseError, /expected a JSON array, got Hash/)
+      expect { ticket.articles }
+        .to raise_error(ZammadAPI::ParseError, /Can't get articles \(ZammadAPI::Resources::TicketArticle\): expected a JSON array, got Hash/)
+    end
+
+    it 'reads the list again on each call, so an article added in between shows up' do
+      stub_request(:get, articles_url).with(query: hash_including({}))
+        .to_return(json_response([{ id: 1 }]), json_response([{ id: 1 }, { id: 2 }]))
+
+      expect([ticket.articles.size, ticket.articles.size]).to eq([1, 2])
+    end
+
+    it 'says to save an unsaved ticket rather than requesting a path without an id' do
+      unsaved = described_class.new(unit_transport, title: 'Help')
+
+      expect { unsaved.articles }.to raise_error(ZammadAPI::Error, /Ticket has no id, save it first/)
+    end
+
+    it 'escapes a traversal in the id instead of reaching another endpoint' do
+      escaped = "#{ClientHelper::BASE_URL}api/v1/ticket_articles/by_ticket/1%2F..%2F..%2Fusers"
+      stub = stub_request(:get, escaped).with(query: hash_including({})).to_return(json_response([]))
+
+      described_class.from_response(unit_transport, id: '1/../../users').articles
+
+      expect(stub).to have_been_requested
     end
   end
 

@@ -299,7 +299,6 @@ Say what else is true of the endpoint, where it differs from the defaults:
 | `sortable false`   | `true`  | The index endpoint is always served in the same order, so `order` refuses it. |
 | `paginated false`  | `true`  | The index endpoint serves every record in one response and reads no `page`. It is read in one request, and `page` refuses it. |
 | `belongs_to :role, class_name: 'Role'` | — | A foreign key, read as a record through `record.related.role`. |
-| `has_many :members, class_name: 'User', path: ->(id) { "…/#{id}" }` | — | A list served whole by an endpoint of its own. |
 
 `class_name` is a resource of this gem by its own name, `'User'`, or a class of yours by its
 full name, `'Acme::Role'`. A subclass of a modelled resource works too, and inherits what
@@ -565,27 +564,23 @@ ticket.customer_id # => 7
 ```ruby
 ticket.related.customer.firstname     # => "Nicole"
 ticket.related.group.note
-ticket.related.articles               # => [TicketArticle, ...]
 ticket.related.created_by.email
 
 client.users.find(7).related.organization
 ```
 
-A `has_many` reader such as `articles` is read in a single request and comes back as an
-Array rather than a paginating collection, because the association endpoints Zammad routes
-serve the whole list.
-
-A ticket's articles are also reachable without `related`, and `add_article` writes one:
+A ticket's articles come from an endpoint of their own. `articles` reads the whole list in
+one request, as an Array, and `add_article` writes one:
 
 ```ruby
-ticket.articles                                              # the same list
+ticket.articles                                              # => [TicketArticle, ...]
 ticket.add_article(body: 'Reset link sent.', type: 'note')  # => the created TicketArticle
 ```
 
 The readers live under `related` rather than on the record so that `ticket.customer` keeps
 returning the name it always did — an attribute read that silently became an HTTP request
-would be a poor trade. `belongs_to` targets are memoized until the next attribute write,
-`reload` or save; `has_many` lists are fetched on each call, so an article added in between
+would be a poor trade. `related` targets are memoized until the next attribute write,
+`reload` or save; `articles` is fetched on each call, so an article added in between
 shows up. `Ticket.associations` lists what a resource declares.
 
 ### Comparing and serializing
@@ -875,8 +870,8 @@ ZammadAPI::Error
 ├── ZammadAPI::ParseError            unexpected response shape
 ├── ZammadAPI::PaginationError       endpoint ignored the page parameter
 ├── ZammadAPI::TransportError
-│   ├── ZammadAPI::ConnectionError   unreachable host or TLS failure
-│   └── ZammadAPI::TimeoutError      exceeded timeout or open_timeout
+│   ├── ZammadAPI::ConnectionError   unreachable host, TLS failure or open_timeout
+│   └── ZammadAPI::TimeoutError      exceeded timeout
 └── ZammadAPI::ResponseError         carries the HTTP response
     ├── ZammadAPI::ClientError       4xx
     │   ├── ZammadAPI::AuthenticationError  401
@@ -1253,7 +1248,8 @@ roughly a tenth of the round trips. `page(n)` without `per_page:` is a page of t
 it with `page(n, per_page: 100)` if a persisted page number has to keep meaning what it did.
 
 A request now times out after 60 seconds (10 to connect) where 1.x waited as long as the
-server took, so a call that used to hang raises `ZammadAPI::TimeoutError`. A `GET` is
+server took, so a call that used to hang raises `ZammadAPI::TimeoutError` (or
+`ZammadAPI::ConnectionError` when the connection is not opened in time). A `GET` is
 retried twice with exponential backoff on connection failures, timeouts and the transient
 statuses, which means a genuinely broken endpoint takes a little longer to report itself;
 a `POST`, `PUT` or `DELETE` is never retried. Both are options — see

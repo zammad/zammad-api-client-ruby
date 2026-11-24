@@ -1,8 +1,5 @@
 # frozen_string_literal: true
 
-require_relative 'errors'
-require_relative 'transport'
-
 module ZammadAPI
   # Readers for the records a record points at.
   module Associations
@@ -21,8 +18,6 @@ module ZammadAPI
     #   ticket.customer               # => "customer@example.com", already loaded
     #   ticket.related.customer       # => the User record, one request
     #   ticket.related.customer.email # => "customer@example.com"
-    #
-    #   ticket.related.articles       # => [TicketArticle, ...]
     class Proxy
       # @api private
       # @param record [Resources::Base]
@@ -48,7 +43,7 @@ module ZammadAPI
         spec = associations[name]
         return super if spec.nil? || !args.empty?
 
-        spec[:type] == :belongs_to ? belongs_to_target(name, spec) : has_many_target(name, spec)
+        target(name, spec)
       end
 
       def respond_to_missing?(name, include_private = false) = associations.key?(name) || super
@@ -59,27 +54,11 @@ module ZammadAPI
 
       # The record a foreign key points at, read once and kept: nil when the
       # key is nil.
-      def belongs_to_target(name, spec)
+      def target(name, spec)
         return @cache[name] if @cache.key?(name)
 
         id = @record[spec[:foreign_key]]
         @cache[name] = id.nil? ? nil : resolve(spec[:class_name]).fetch_one(@record.transport, id)
-      end
-
-      # The list an association endpoint serves, read anew on every call.
-      def has_many_target(name, spec)
-        raise Error, "#{@record.class.name} has no id, so it has no #{name} to read; save it first" if @record.id.nil?
-
-        target_class = resolve(spec[:class_name])
-        operation    = "get #{name}"
-        response     = @record.transport.get(
-          spec[:path].call(Transport.escape_path_segment(@record.id)),
-          operation:      operation,
-          resource_class: target_class,
-          query:          { expand: true }
-        )
-
-        response.decoded(:array, operation: operation, resource_class: target_class).map { target_class.from_response(@record.transport, it) }
       end
 
       # A resource of this gem by its own name, or any class by its full name.
