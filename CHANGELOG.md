@@ -1152,8 +1152,9 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `ZammadAPI::Attributes` now, as is every Hash inside them: a Hash that prints with the
   value under each key naming a credential blanked, through `inspect`, `to_s` and `pp`. It
   reads, compares and serializes as the Hash it was, to JSON and to YAML alike, and `to_h`
-  is a plain Hash. A String cannot be told how to print, so a write into the password
-  itself, `user.attributes[:password] << 'x'`, still quotes it.
+  is a plain Hash. A strict JSON encoder is the one thing that goes by the class: see
+  below. A String cannot be told how to print, so a write into the password itself,
+  `user.attributes[:password] << 'x'`, still quotes it.
 - `destroy` no longer reports a record destroyed where something that is not Zammad answered
   the request. Every 2xx settled it, so a single sign-on gateway that answered the DELETE
   with its login page and status 200 made `group.destroy` return `true` and left the record
@@ -1208,6 +1209,15 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   instance. A proxy the configuration names still comes first. One set there that cannot
   be parsed is reported as a `ConfigurationError` with its credentials redacted, as a
   configured one is.
+- `to_h` of a record's `attributes`, of its `changes` and of any Hash among them is plain
+  Hashes at every depth, and a writable copy. Each of those is a `ZammadAPI::Attributes`,
+  and a JSON encoder that takes nothing but the core types refuses a subclass of Hash by
+  its class: `JSON.generate(user.attributes, strict: true)` and `JSON::Coder.new.dump`
+  raise `ZammadAPI::Attributes not allowed in JSON`, for what 1.x handed out as Hashes.
+  `attributes.to_h` was plain no further than its first nested Hash, so it was refused the
+  same way, and only `record.to_h` could be handed to such an encoder. The README and the
+  migration table say that `to_h` is what a strict encoder is given. `to_json`, `as_json`
+  and `JSON.generate` without `strict:` are unchanged.
 
 ### Changed
 

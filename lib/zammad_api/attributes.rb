@@ -16,8 +16,14 @@ module ZammadAPI
   #
   # Only the printing. Every value reads as it is, and +to_h+, +to_json+ and
   # YAML write them out, because handing them over is what a record is for.
-  # A Hash made from this one, by +slice+, +select+ or +to_h+, is a plain
-  # Hash again.
+  # {#to_h} is a plain Hash at every depth. One made by +slice+ or +select+
+  # is plain itself and holds the Hashes inside it as they are, which are of
+  # this class.
+  #
+  # One thing does ask for the class: a JSON encoder that takes nothing but
+  # the core types, `JSON.generate(value, strict: true)` and a `JSON::Coder`
+  # without a block, refuses a subclass of Hash by its name. {#to_h} is what
+  # to hand it.
   #
   # What it holds is not covered where that is not a Hash. A String cannot
   # be told how to print, so `user.attributes[:password] << 'x'` still
@@ -34,6 +40,26 @@ module ZammadAPI
     # +Hash#to_s+ is +Hash#inspect+ under a second name, and stays the one
     # Hash defines unless it is named again here.
     alias to_s inspect
+
+    # A plain Hash of plain Hashes, the caller's own to modify.
+    #
+    # +Hash#to_h+ answers with a plain Hash that holds what this one holds,
+    # and every Hash inside the attributes of a record is of this class too.
+    # So `user.attributes.to_h` was plain as far as its first nested Hash,
+    # and a strict JSON encoder refused it there as it refuses the
+    # attributes themselves: "ZammadAPI::Attributes not allowed in JSON",
+    # for what 1.x handed out as Hashes. What {Resources::Base#to_h} answers
+    # for the whole record, this answers for any part of it:
+    # `user.preferences.to_h`.
+    #
+    # With a block it is +Hash#to_h+, which builds a plain Hash from the
+    # pairs the block answers.
+    #
+    # The steep:ignore is for the two shapes of the method in one body: the
+    # checker holds each branch to both of them.
+    #
+    # @return [Hash] a writable deep copy
+    def to_h(&block) = block ? super : DeepCopy.writable_copy(self) # steep:ignore MethodBodyTypeMismatch
 
     # What +pp+ prints, which is not what {#inspect} answers for a Hash.
     #

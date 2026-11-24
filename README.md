@@ -592,6 +592,20 @@ Hash that prints with the value under a key such as `password` or `token` blanke
 `inspect` of the record prints them, and that is a Hash in every other way. Reading from it
 hands over every value, and `to_h` is a plain Hash.
 
+Every Hash inside them is one as well, and an encoder that takes nothing but the core types
+goes by the class: `JSON.generate(group.attributes, strict: true)` and a `JSON::Coder`
+without a block raise `ZammadAPI::Attributes not allowed in JSON`. Hand such an encoder
+`to_h`, which is plain Hashes at every depth, of the record or of any Hash it holds:
+
+```ruby
+JSON.generate(user.to_h, strict: true)             # the record
+JSON.generate(user.changes.to_h, strict: true)     # what is staged
+JSON.generate(user.preferences.to_h, strict: true) # one attribute
+```
+
+`to_json`, `as_json`, `JSON.generate` without `strict:` and YAML take the attributes as
+they are.
+
 ### Pattern matching
 
 Records implement `deconstruct_keys`, so they work with `case/in`:
@@ -1631,6 +1645,7 @@ If this is not the time to move, [1.x stays available](#staying-on-1x).
 | ----------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------- |
 | `record.save` raised on a rejection | `save` → `false` with `record.error`; `save!` raises  | Branching on a rejected attribute needed a begin/rescue              |
 | `record.attributes[:x] = 1`         | `record.x = 1`, or `record.to_h` for a copy          | Writing through the reader staged no change, so `save` never sent it  |
+| `JSON.generate(record.attributes, strict: true)` | `JSON.generate(record.to_h, strict: true)` | `attributes` and every Hash in it is a `ZammadAPI::Attributes`, which a strict encoder refuses by its class; `to_h` is plain Hashes throughout |
 | `record.attributes = {...}`         | `record.assign_attributes(...)` / `record.update(...)` | The writer is gone, and the name now stages an attribute of its own |
 | `record.id = 5`                     | `client.x.find(5)`                                   | The id addresses the record, so a staged one deleted or updated a different record than it reported |
 | `record.new_instance`               | `record.new_record?` / `record.persisted?`           | Internal flag is no longer public; the old name raises `NoMethodError`, naming the attributes the record does carry |

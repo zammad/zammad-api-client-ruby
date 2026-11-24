@@ -278,6 +278,23 @@ RSpec.describe ZammadAPI::Resources::Base do
       it 'hands out plain Hashes from #to_h, which print what they hold' do
         expect(user.to_h).to be_an_instance_of(Hash).and(satisfy { it[:preferences].instance_of?(Hash) })
       end
+
+      # An encoder that takes nothing but the core types goes by the class,
+      # and `attributes.to_h` was plain no further than its first Hash.
+      it 'hands out plain Hashes from attributes.to_h, for a strict JSON encoder' do
+        expect(JSON.generate(user.attributes.to_h, strict: true)).to eq(JSON.generate(user.to_h))
+      end
+
+      it 'hands out plain Hashes from changes.to_h' do
+        user.preferences = { bind_pw: 'other', locale: 'en' }
+
+        expect(JSON.generate(user.changes.to_h, strict: true))
+          .to eq('{"preferences":[{"bind_pw":"s3cret","locale":"de"},{"bind_pw":"other","locale":"en"}]}')
+      end
+
+      it 'hands out a plain Hash from to_h of a Hash it holds' do
+        expect(JSON.generate(user.preferences.to_h, strict: true)).to eq('{"bind_pw":"s3cret","locale":"de"}')
+      end
     end
 
     # A save whose answer cannot be read puts the record on what it sent,

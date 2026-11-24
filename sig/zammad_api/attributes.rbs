@@ -3,6 +3,8 @@ module ZammadAPI
   class Attributes[unchecked out K, unchecked out V] < Hash[K, V]
     def inspect: () -> String
     def to_s: () -> String
+    def to_h: () -> Hash[K, V]
+            | [A, B] () { (K, V) -> [A, B] } -> Hash[A, B]
     def pretty_print: (untyped printer) -> void
     def encode_with: (untyped coder) -> void
   end
