@@ -85,12 +85,21 @@ module ZammadAPI
     # Anything passed in wins over the environment, and every other option
     # keeps its default. That includes the way to authenticate: passing
     # +user:+ and +password:+, or a token, replaces whichever credentials the
-    # environment holds rather than sitting beside them. An empty variable
-    # counts as unset, and +ZAMMAD_HTTP_TOKEN+ wins over +ZAMMAD_TOKEN+ if
-    # both are set. An environment that sets more than one way to
-    # authenticate - a token and a user with a password - is refused like
-    # any other configuration that does, unless an argument names the one to
-    # use.
+    # environment holds rather than sitting beside them. A variable that is
+    # empty, or holds nothing but whitespace, counts as unset, and
+    # +ZAMMAD_HTTP_TOKEN+ wins over +ZAMMAD_TOKEN+ if both are set. An
+    # environment that sets more than one way to authenticate - a token and
+    # a user with a password - is refused like any other configuration that
+    # does, unless an argument names the one to use.
+    #
+    # Only an empty variable used to count as unset. One set to a space,
+    # which is what `export ZAMMAD_HTTP_TOKEN=" "` and a blank line of an
+    # env file leave behind, was taken for a value: beside a valid
+    # +ZAMMAD_TOKEN+ it took that token's place and was then read as no
+    # token at all, "missing user in config" for an environment that held a
+    # token, and a +ZAMMAD_USER+ of a space beside a token was a second way
+    # to authenticate. A password of nothing but spaces is given as
+    # +password:+.
     #
     # @example
     #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=secret ruby report.rb
@@ -105,7 +114,9 @@ module ZammadAPI
     def self.from_env(**overrides)
       from_environment = ENV_OPTIONS.filter_map do |name, option|
         value = ENV.fetch(name, nil)
-        [option, value] if !value.to_s.empty?
+        # Of the bytes, as {Config.blank_token?} asks a token: a variable
+        # may hold a byte that is not text.
+        [option, value] if !value.to_s.b.strip.empty?
       end
       options = Config.merge_options(from_environment.to_h, overrides)
 

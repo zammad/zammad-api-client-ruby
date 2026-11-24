@@ -80,6 +80,58 @@ RSpec.describe ZammadAPI::Client do
       expect(described_class.from_env(http_token: 'passed in').config.http_token).to eq('passed in')
     end
 
+    # Only an empty variable counted as unset. One holding a space was taken
+    # for a value, took the place of the variable beside it, and was then
+    # read as no credential, or as a second one.
+    context 'with a variable that holds nothing but whitespace' do
+      let(:environment) { { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_TOKEN' => 'from-env' } }
+
+      def from(variables)
+        stub_const('ENV', environment.merge(variables))
+        described_class.from_env
+      end
+
+      [' ', "\t", "\n", " \r\n "].each do |blank|
+        it "reads ZAMMAD_TOKEN past a ZAMMAD_HTTP_TOKEN of #{blank.inspect}" do
+          expect(from('ZAMMAD_HTTP_TOKEN' => blank).config.http_token).to eq('from-env')
+        end
+      end
+
+      it 'reads ZAMMAD_TOKEN past an empty ZAMMAD_HTTP_TOKEN, as it did' do
+        expect(from('ZAMMAD_HTTP_TOKEN' => '').config.http_token).to eq('from-env')
+      end
+
+      %w[ZAMMAD_USER ZAMMAD_PASSWORD ZAMMAD_OAUTH2_TOKEN].each do |name|
+        it "does not take a #{name} of a space for a second way to authenticate" do
+          expect(from(name => ' ').config.authentication_scheme).to eq(:http_token)
+        end
+      end
+
+      it 'says that the url is missing for a ZAMMAD_URL of a space' do
+        expect { from('ZAMMAD_URL' => ' ') }.to raise_error(ZammadAPI::ConfigurationError, /\Amissing url: set ZAMMAD_URL/)
+      end
+
+      it 'says what is missing where no variable holds a credential' do
+        stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_TOKEN' => ' ', 'ZAMMAD_USER' => "\t" })
+
+        expect { described_class.from_env }.to raise_error(ZammadAPI::ConfigurationError, /missing user in config/)
+      end
+
+      it 'keeps the whitespace around a value that holds more than that' do
+        expect(from('ZAMMAD_HTTP_TOKEN' => " padded\n").config.http_token).to eq(" padded\n")
+      end
+
+      it 'takes a variable with a byte that is not text for the value it is' do
+        expect(from('ZAMMAD_USER' => "j\xFFne", 'ZAMMAD_PASSWORD' => 'p', 'ZAMMAD_TOKEN' => ' ').config.authentication_scheme).to eq(:basic)
+      end
+
+      it 'still takes a password of spaces that is passed in' do
+        stub_const('ENV', { 'ZAMMAD_URL' => 'http://zammad.test/', 'ZAMMAD_USER' => 'u', 'ZAMMAD_PASSWORD' => '  ' })
+
+        expect(described_class.from_env(password: '  ').config.password).to eq('  ')
+      end
+    end
+
     # A credential is read in a fixed order, so a plain merge left the
     # environment's token in charge of a client that was handed another way to
     # authenticate - and nothing said so.
