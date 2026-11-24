@@ -1843,9 +1843,18 @@ module ZammadAPI
     # process is a CGI, and a value that holds no credentials is not
     # changed by being looked for.
     #
+    # The name is asked as its bytes. The environment can hold a name that
+    # is not text in the encoding Ruby reads it in, and a pattern asked of
+    # one raises: with a variable called `caf\xE9_proxy` set, the
+    # ConfigurationError this is called for left as a bare `ArgumentError:
+    # invalid byte sequence in UTF-8`, past the rescue building a client is
+    # documented to need, and only where the configuration could not be
+    # used. Such a variable still names a proxy, so its value is scrubbed
+    # like any other.
+    #
     # @return [Array<String>]
     def environment_proxies
-      ENV.filter_map { |name, value| value if name.match?(ENVIRONMENT_PROXY) && !value.empty? }
+      ENV.filter_map { |name, value| value if name.b.match?(ENVIRONMENT_PROXY) && !value.empty? }
     end
 
     # The proxy URL `Faraday.default_connection_options` names, to be

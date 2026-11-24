@@ -1268,6 +1268,13 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   was refused as a second way to authenticate, and a `ZAMMAD_URL` of one was reported as a
   url with no scheme and is reported as missing now. A password that is nothing but spaces
   can still be passed as `password:`.
+- A configuration that cannot be used is reported as a `ConfigurationError` whatever the
+  environment holds. Where it held a variable whose name is not valid UTF-8, which a
+  process can inherit, the search for proxy variables that redacts the error raised over
+  that name, and `Client.new(proxy: 'http://user:pa ss@host')` left as a bare
+  `ArgumentError: invalid byte sequence in UTF-8`, past a
+  `rescue ZammadAPI::ConfigurationError`. The name is read as its bytes, so a variable of
+  that kind ending in `_proxy` has its value scrubbed like any other.
 
 ### Changed
 
