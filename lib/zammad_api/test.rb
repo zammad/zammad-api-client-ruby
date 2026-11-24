@@ -529,14 +529,60 @@ module ZammadAPI
     # holds no records and reports the same total. Served again as written it
     # was the repeated page above, for the one stub that says how many hits
     # there are.
+    #
+    # And the page is of the size the request asks for. Only the page number
+    # was read, so the records were served whole to page 1 whatever
+    # +per_page+ said, and every later page was empty: five records stubbed,
+    # `page(1, per_page: 2)` held all five, `page(2, per_page: 2)` none, and
+    # `in_batches(of: 2)` yielded one batch of five, where Zammad serves two,
+    # two and one. Code that pages by hand, or leans on a batch size, saw
+    # other records here than on the wire. A stub that names a +per_page+ of
+    # its own is what a request of that size is answered, and is not cut.
     def paged_body(stub, params, body)
-      return body if !later_page?(stub[:query], params)
+      scope  = stub[:query]
+      later  = later_page?(scope, params)
+      window = scope&.key?('page') || scope&.key?('per_page') ? nil : page_window(params)
+      return body if window.nil? && !later
 
       case body
-      in Array then []
-      in { records: Array, total_count: _ } then body.merge(records: [])
+      in Array then page_of(body, window)
+      in { records: Array => records, total_count: _ }
+        page = page_of(records, window)
+        page.equal?(records) ? body : body.merge(records: page)
       else body
       end
+    end
+
+    # The records at the offset and of the size a request asks for, or none
+    # for a later page of a request that names no size.
+    #
+    # The records themselves where the page holds all of them, so that the
+    # response keeps the bytes the stub was written with.
+    def page_of(records, window)
+      return [] if window.nil?
+
+      offset, size = window
+      return records if offset.zero? && records.size <= size
+
+      records[offset, size] || []
+    end
+
+    # A whole number a query parameter writes, the way Zammad reads +page+
+    # and +per_page+.
+    PAGE_NUMBER = /\A[1-9]\d*\z/
+    private_constant :PAGE_NUMBER
+
+    # Where the page a request asks for begins, and how many records it
+    # holds.
+    #
+    # @return [Array(Integer, Integer), nil] nil where the request names no
+    #   +per_page+, or where either figure is not a number above zero
+    def page_window(params)
+      page = params.fetch('page', '1')
+      size = params['per_page']
+      return nil if !PAGE_NUMBER.match?(page.to_s) || !PAGE_NUMBER.match?(size.to_s)
+
+      [(page.to_i - 1) * size.to_i, size.to_i]
     end
 
     # Decoded by {Response.decode_body}, the rule {Transport#decode} reads, so
@@ -555,21 +601,29 @@ module ZammadAPI
     # same records and every full read of that collection raised
     # PaginationError. Against Zammad the same code works, because page two
     # comes back empty.
+    #
+    # A stub written short of its own Content-Length is not paged. It is how
+    # a test says that the answer was cut short, and a page cut from it
+    # would be counted anew and served as whole.
     def response_for(stub, params)
       raw        = raw_body_for(stub[:body])
       body, json = Response.decode_body(stub[:headers]['content-type'], raw)
-      paged      = paged_body(stub, params, body)
+      written    = build_response(stub, body, raw, json: json)
+      return written if ::ZammadAPI::Transport.cut_short?(written)
+
+      paged = paged_body(stub, params, body)
       # Re-serialized only where paging replaced the body, so `raw_body` stays
       # the bytes the stub was written with for every other response.
-      return build_response(stub, body, raw, json: json) if paged.equal?(body)
+      return written if paged.equal?(body)
 
-      emptied = JSON.generate(paged)
-      build_response(stub, paged, emptied, json: json, headers: recounted(stub[:headers], emptied))
+      replaced = JSON.generate(paged)
+      build_response(stub, paged, replaced, json: json, headers: recounted(stub[:headers], replaced))
     end
 
     # The headers of a stub for a body that paging replaced. A
-    # Content-Length written for the records does not count the empty page
-    # served after them, and would have it refused as cut short.
+    # Content-Length written for the records does not count the page cut
+    # from them, or the empty one served after them, and would have it
+    # refused as cut short.
     def recounted(headers, raw_body)
       return headers if !headers.key?('content-length')
 

@@ -65,7 +65,11 @@ module ZammadAPI
     def most_specific: (Array[Hash[Symbol, untyped]] queued, Array[Integer] matching, Symbol method, String path) -> Array[Integer]
     def ambiguous_message: (Symbol method, String path, Array[Hash[String, untyped]?] scopes) -> String
     def matches?: (Hash[untyped, untyped]? expected, Hash[String, untyped] params) -> bool
+    PAGE_NUMBER: Regexp
+
     def paged_body: (Hash[Symbol, untyped] stub, Hash[String, untyped] params, untyped body) -> untyped
+    def page_of: (Array[untyped] records, [Integer, Integer]? window) -> Array[untyped]
+    def page_window: (Hash[String, untyped] params) -> [Integer, Integer]?
     def response_for: (Hash[Symbol, untyped] stub, Hash[String, untyped] params) -> Response
     def recounted: (Hash[String, String] headers, String raw_body) -> Hash[String, String]
     def build_response: (Hash[Symbol, untyped] stub, untyped body, String raw_body, json: bool, ?headers: Hash[String, String]) -> Response
