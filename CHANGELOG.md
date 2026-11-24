@@ -1200,6 +1200,14 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `user_agent: '  '`, which is what an environment variable set to a space gives, went out
   as a `User-Agent` header with nothing in it, and the requests named no client in the
   instance log.
+- A proxy set in `Faraday.default_connection_options` is used where `proxy:` names none, as
+  the README says of those options and as 1.x did. The connection was built with
+  `proxy: nil` for a client without one, and an option named as `nil` stands in for the
+  default as one with a value does, so that proxy was taken off this client's connection
+  alone: its requests went out directly, or nowhere where only the proxy reaches the
+  instance. A proxy the configuration names still comes first. One set there that cannot
+  be parsed is reported as a `ConfigurationError` with its credentials redacted, as a
+  configured one is.
 
 ### Changed
 

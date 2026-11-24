@@ -1535,7 +1535,6 @@ module ZammadAPI
     def build_connection
       connection = Faraday.new(
         url:     config.url,
-        proxy:   config.proxy,
         ssl:     { verify: config.ssl_verify },
         # The encoder is this gem's own: see {QueryEncoder} for the one
         # structure Faraday's writes so that Rails reads another.
@@ -1543,7 +1542,8 @@ module ZammadAPI
         headers: { 'User-Agent' => Transport.stripped(config.user_agent), 'Accept' => 'application/json' },
         # Named, and as nil, so that it stands in for the parameters of
         # `Faraday.default_connection_options`: see #drop_shared_headers.
-        params:  nil
+        params:  nil,
+        **configured_proxy
       ) do |faraday|
         drop_shared_headers(faraday)
         apply_authentication(faraday)
@@ -1573,6 +1573,20 @@ module ZammadAPI
       # "bad URI (is not URI?)" on its own says nothing about where to look.
       raise ConfigurationError, "config could not be used to build a connection: #{e.class}: #{redact_config_values(e.message)}", cause: reportable_cause(e)
     end
+
+    # The `proxy:` option, where one is configured, and no option where none
+    # is.
+    #
+    # What is named here stands in for what `Faraday.default_connection_options`
+    # holds under the same name, and a name given as nil does that as well as
+    # one given a value. `proxy: config.proxy` was passed whatever it was, so
+    # the proxy a process had set there for all of its Faraday connections
+    # was taken off this one: its requests went out directly, or nowhere
+    # where only the proxy reaches the instance, while the README said that a
+    # proxy set there applies and 1.x, which named no proxy, had used it.
+    #
+    # @return [Hash{Symbol => String}]
+    def configured_proxy = config.proxy ? { proxy: config.proxy } : {}
 
     # Runs the caller's `middleware:` callable, and then settles the adapter.
     #
@@ -1654,10 +1668,11 @@ module ZammadAPI
     # because {Config} can only refuse the credentials in a url it can read:
     # one that is not a URL at all gets this far, and is quoted here.
     #
-    # And the proxies the environment names, which no option holds: see
-    # {#environment_proxies}.
+    # And the proxies the environment names, which no option holds, and the
+    # one a process set for all of its Faraday connections: see
+    # {#environment_proxies} and {#shared_proxies}.
     def redact_config_values(message)
-      [config.proxy, config.url, *environment_proxies].compact.inject(message.to_s) do |text, value|
+      [config.proxy, config.url, *shared_proxies, *environment_proxies].compact.inject(message.to_s) do |text, value|
         spellings = quoted_spellings(value)
         # Of the value as it can be read. A configured one is its own first
         # spelling, and redacting text with a broken byte in it raises.
@@ -1707,6 +1722,24 @@ module ZammadAPI
     # @return [Array<String>]
     def environment_proxies
       ENV.filter_map { |name, value| value if name.match?(ENVIRONMENT_PROXY) && !value.empty? }
+    end
+
+    # The proxy URL `Faraday.default_connection_options` names, to be
+    # scrubbed from an error as the configured one is.
+    #
+    # With no `proxy:` given, that one is this connection's: see
+    # {#configured_proxy}. So one URI cannot parse is quoted by the same
+    # error a configured one is, password included, and is a value of
+    # neither the configuration nor the environment. It is given there as
+    # the URL or as a Hash that holds it under `uri`, and one that is neither
+    # has been parsed already.
+    #
+    # @return [Array<String>]
+    def shared_proxies
+      proxy = Faraday.default_connection_options.proxy
+      proxy = proxy[:uri] || proxy['uri'] if proxy.is_a?(Hash)
+
+      proxy.is_a?(String) && !proxy.empty? ? [proxy] : []
     end
 
     # The value as an error may have quoted it: as it is, as +inspect+

@@ -70,4 +70,5 @@ module Faraday
 
   def self.new: (**untyped) ?{ (Connection) -> void } -> Connection
   def self.default_adapter: () -> Symbol
+  def self.default_connection_options: () -> untyped
 end
