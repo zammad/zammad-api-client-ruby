@@ -1182,11 +1182,36 @@ module ZammadAPI
     def self.json_value(value, key)
       case value
       when Float             then value.finite? ? value : raise(RefusedValue, not_a_json_value_message(value, key))
+      when String            then json_text(value)
       when *JSON_VALUE_TYPES then value
       when Hash              then json_hash(value, key)
       when Array             then value.map { json_value(it, key) }
       else json_object(value, key)
       end
+    end
+
+    # Text as the generator takes it: a String tagged as binary whose bytes
+    # are UTF-8 text, as the UTF-8 text it is.
+    #
+    # Text that was read with `File.binread`, off a socket, or handed over
+    # by a mail library arrives tagged that way, and the generator goes by
+    # the tag: json 3 refuses a binary String with a byte outside ASCII,
+    # where json 2 wrote one that was valid UTF-8 with a warning. So
+    # `tickets.create(title: 'Größe'.b)` was sent or raised the advice to
+    # Base64-encode an attachment, by which version of the generator a
+    # bundle had resolved to, and a query took the same String either way.
+    #
+    # Only bytes that are text. Any other are binary data, and are left for
+    # the generator to refuse, which is what that advice is for.
+    #
+    # @api private
+    # @param text [String]
+    # @return [String] +text+, or a copy of it tagged as UTF-8
+    def self.json_text(text)
+      return text if text.encoding != Encoding::BINARY || text.ascii_only?
+
+      tagged = text.dup.force_encoding(Encoding::UTF_8)
+      tagged.valid_encoding? ? tagged : text
     end
 
     # A Hash with every key as the text the generator writes it as, which

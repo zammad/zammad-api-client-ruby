@@ -1035,6 +1035,56 @@ RSpec.describe ZammadAPI::Transport do
       end
     end
 
+    # The generator goes by the tag of a String. json 3 refuses a binary one
+    # with a byte outside ASCII and json 2 wrote one that was valid UTF-8,
+    # so text read with File.binread or off a socket was sent or refused by
+    # which of the two a bundle had resolved to.
+    context 'with text in the body that is tagged as binary' do
+      before { stub_request(:post, url).to_return(json_response({})) }
+
+      it 'sends it as the UTF-8 text its bytes are' do
+        unit_transport.post('api/v1/groups', operation: 'test', body: { name: 'Größe'.b })
+
+        expect(a_request(:post, url).with(body: '{"name":"Größe"}')).to have_been_made
+      end
+
+      it 'sends it inside a Hash and an Array as well' do
+        unit_transport.post('api/v1/groups', operation: 'test', body: { article: { subject: 'Grüße'.b, to: ['jürgen@example.com'.b] } })
+
+        expect(a_request(:post, url).with(body: '{"article":{"subject":"Grüße","to":["jürgen@example.com"]}}')).to have_been_made
+      end
+
+      it 'encodes it without a warning from the generator' do
+        expect { described_class.encode_body({ name: 'Größe'.b }, operation: 'test') }.not_to output.to_stderr
+      end
+
+      it 'leaves the String it was given tagged as it was' do
+        name = 'Größe'.b
+        described_class.encode_body({ name: name }, operation: 'test')
+
+        expect(name.encoding).to eq(Encoding::BINARY)
+      end
+
+      it 'hands on a String that needs no new tag as the object it is' do
+        ascii = 'plain'.b
+        utf8  = 'Größe'
+
+        expect(described_class.json_value([ascii, utf8], nil)).to match([be(ascii), be(utf8)])
+      end
+
+      it 'still refuses bytes that are no text, with the advice for binary data' do
+        expect { described_class.encode_body({ data: "\x89PNG\r\n\x1A\n\xFF".b }, operation: 'test') }
+          .to raise_error(ZammadAPI::Error, /Base64-encode binary data/)
+      end
+
+      it 'saves a record whose attribute is such text' do
+        stub_request(:post, url).with(query: hash_including({})).to_return(json_response({ id: 7, name: 'Größe' }))
+        unit_client.groups.create(name: 'Größe'.b)
+
+        expect(a_request(:post, url).with(query: hash_including({}), body: '{"name":"Größe"}')).to have_been_made
+      end
+    end
+
     # Faraday's JSON middleware raised JSON::GeneratorError from inside the
     # stack and nothing mapped it, so it went past the rescue of
     # ZammadAPI::Error every caller is told to write.

@@ -1252,6 +1252,14 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   total is cut the same way and reports the total on every page. A stub that names a
   `page` or a `per_page` in its `query:` is served as written, as is one written short of
   its own `Content-Length`, and a request that names no `per_page` is answered as before.
+- Text in a request body that is tagged as binary is sent as the UTF-8 text its bytes are.
+  Text read with `File.binread`, off a socket or out of a mail library arrives tagged that
+  way, and the JSON generator goes by the tag: json 3 refuses a binary String with a byte
+  outside ASCII, where json 2 wrote one that was valid UTF-8 with a deprecation warning. So
+  `client.tickets.create(title: 'Größe'.b)` was sent, or raised `ZammadAPI::Error` with
+  the advice to Base64-encode an attachment, by which version of the generator a bundle
+  had resolved to. Bytes that are not valid UTF-8 are binary data and are refused with
+  that advice, as before.
 
 ### Changed
 
