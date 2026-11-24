@@ -102,9 +102,52 @@ module ZammadAPI
     # error by the backoff.
     SSL_ERRORS = [OpenSSL::SSL::SSLError].freeze
 
+    # A 2xx response whose body stopped short of its Content-Length, as it
+    # is raised inside the connection: see {HeldToLength}. It never leaves
+    # {#request}, which reports it as an {IncompleteResponseError}.
+    #
+    # @api private
+    class CutShort < Faraday::Error; end
+    private_constant :CutShort
+
+    # Holds a 2xx response to its Content-Length where the retry middleware
+    # sees the outcome: below it in the stack.
+    #
+    # {#request} asked this of the response it was handed, which is after
+    # the retry middleware has returned. So a read whose body the connection
+    # dropped under was asked once and raised, while the same drop a moment
+    # earlier, surfacing as ECONNRESET, was asked again: which of the two a
+    # flaky link produced decided whether `retries` meant anything, and a
+    # download of an attachment is the read most likely to be cut.
+    #
+    # Raised for every method, and sent again for the ones the retry
+    # middleware repeats, which a write is not among.
+    #
+    # Above the caller's `middleware:`, so the body and the headers are
+    # asked as that left them, which is how {#request} saw them. A body
+    # that is no text is left for {#raw_body!} to refuse.
+    #
+    # @api private
+    class HeldToLength < Faraday::Middleware
+      # @param env [Faraday::Env]
+      # @return [void]
+      # @raise [CutShort]
+      def on_complete(env)
+        body = env.body
+        return if !Response::SUCCESS_STATUSES.cover?(env.status) || !(body.nil? || body.is_a?(String))
+        return if Transport.short_by(env.status, env.response_headers, body.to_s).nil?
+
+        raise CutShort.new('the body ended short of its Content-Length', env.response)
+      end
+    end
+    private_constant :HeldToLength
+
     # Failures worth retrying. Faraday::RetriableResponse is how the retry
     # middleware signals a retriable status internally and must stay in this
     # list, otherwise it escapes as an unhandled Faraday error.
+    #
+    # {CutShort} is the one this class raises itself, for a response the
+    # connection closed under.
     #
     # Composed from the two lists above rather than repeating them. Listed
     # by hand, CONNECTION_ERRORS was left out: a transient ECONNRESET through
@@ -118,6 +161,7 @@ module ZammadAPI
       Faraday::RetriableResponse,
       Faraday::ConnectionFailed,
       Faraday::TimeoutError,
+      CutShort,
       *TIMEOUT_ERRORS,
       *CONNECTION_ERRORS
     ].freeze
@@ -1272,8 +1316,17 @@ module ZammadAPI
       }
     end
 
+    # Whether a response is a 2xx whose body stopped short of its
+    # Content-Length: the one {HeldToLength} raises for.
+    #
+    # @api private
+    # @param response [Response]
+    # @return [Boolean]
+    def self.cut_short?(response) = response.success? && !missing_bytes(response).nil?
+
     # Whether a request answered with +response+ is one the retry middleware
-    # sends again, while it has attempts left.
+    # sends again, while it has attempts left: one with a retriable status,
+    # or a 2xx that was cut short.
     #
     # Public for {Test}, for the reason {.stringify_query} is: a stand-in
     # that raised for the first 503 a +GET+ was answered with, where the
@@ -1294,7 +1347,8 @@ module ZammadAPI
     # @return [Boolean]
     def self.retried?(config, method, response)
       options = retry_options(config)
-      return false if !options[:methods].include?(method) || !options[:retry_statuses].include?(response.status)
+      return false if !options[:methods].include?(method)
+      return false if !options[:retry_statuses].include?(response.status) && !cut_short?(response)
 
       !Faraday::Retry::Middleware.new(nil, options).calculate_sleep_amount(1, { response_headers: Faraday::Utils::Headers.new(response.headers) }).nil?
     end
@@ -1362,13 +1416,27 @@ module ZammadAPI
     # @param response [Response]
     # @return [Integer, nil] nil for a response that is whole, or that
     #   cannot be told
-    def self.missing_bytes(response)
-      headers   = response.headers
-      announced = headers['content-length']
-      return nil if announced.nil? || !CONTENT_LENGTH.match?(announced)
-      return nil if response.status == 204 || headers.key?('content-encoding') || headers.key?('transfer-encoding')
+    def self.missing_bytes(response) = short_by(response.status, response.headers, response.raw_body)
 
-      missing = announced.to_i - response.raw_body.bytesize
+    # {.missing_bytes}, asked of the parts of a response, for
+    # {HeldToLength}, which holds a Faraday one.
+    #
+    # The headers are a {Response}'s or Faraday's own, which both answer to
+    # a lower-case name. Faraday keeps a value as whatever wrote it, an
+    # Integer for the length faraday-gzip sets, so the figure is read as
+    # text.
+    #
+    # @api private
+    # @param status [Integer]
+    # @param headers [Hash, Faraday::Utils::Headers]
+    # @param body [String]
+    # @return [Integer, nil]
+    def self.short_by(status, headers, body)
+      announced = headers['content-length'].to_s
+      return nil if !CONTENT_LENGTH.match?(announced)
+      return nil if status == 204 || headers.key?('content-encoding') || headers.key?('transfer-encoding')
+
+      missing = announced.to_i - body.bytesize
       missing.positive? ? missing : nil
     end
 
@@ -1493,6 +1561,8 @@ module ZammadAPI
       response = decode(perform(method, path, query, payload, headers))
       log_response(method, path, response, started)
 
+      # A response cut short has been through the retries a read is due by
+      # now: see {HeldToLength}, and {#perform} for how it gets here.
       return Transport.whole(response, operation: operation, config: config) if response.success?
 
       raise ResponseError.build(response, operation: operation, resource_class: resource_class)
@@ -1551,6 +1621,13 @@ module ZammadAPI
         request.body = payload if payload
         request.headers['From'] = on_behalf_of if on_behalf_of
       end
+    rescue CutShort => e
+      # The response the connection raised for, once the retries a read is
+      # due are spent, and at once for a write. Handed on as the response it
+      # is, so that it is logged and decoded like any other, and
+      # {#request} raises for it with the status and the bytes that did
+      # arrive.
+      e.response
     end
 
     def build_connection
@@ -1570,6 +1647,7 @@ module ZammadAPI
         apply_authentication(faraday)
         faraday.request :json
         faraday.request :retry, Transport.retry_options(config)
+        faraday.use HeldToLength
         # Last in the stack, so a caller's middleware sees the request as this
         # gem finished building it and the response before anything else does.
         apply_middleware_and_adapter(faraday)

@@ -139,8 +139,9 @@ module ZammadAPI
     # keeps answering.
     #
     # A +GET+ answered with a status the client retries - 429, 500, 502, 503
-    # or 504 - is asked again, as it is on the wire, and each attempt takes
-    # the next stub of the sequence: see {#answer}.
+    # or 504 - or with a 2xx cut short of its Content-Length is asked again,
+    # as it is on the wire, and each attempt takes the next stub of the
+    # sequence: see {#answer}.
     #
     # @param method [Symbol] +:get+, +:post+, +:put+ or +:delete+
     # @param path [String] path relative to the instance URL, leading slash
@@ -225,7 +226,8 @@ module ZammadAPI
     # test.
     #
     # A request the real transport would send again is sent again here: a
-    # +GET+ answered 429 or 5xx, as many times as {Config#retries} allows.
+    # +GET+ answered 429 or 5xx, or with a 2xx whose body is shorter than
+    # its Content-Length, as many times as {Config#retries} allows.
     # The first such answer used to be raised. Stubbed 503 and then 200,
     # `client.groups.find(1)` returns the group on the wire and raised
     # ServerError here, and a single stubbed 503 was recorded as one request

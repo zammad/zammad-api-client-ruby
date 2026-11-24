@@ -91,6 +91,8 @@ module ZammadAPI
     def self.retried?: (Config config, Symbol method, Response response) -> bool
     def self.whole: (Response response, operation: String, config: Config) -> Response
     def self.missing_bytes: (Response response) -> Integer?
+    def self.short_by: (Integer status, untyped headers, String body) -> Integer?
+    def self.cut_short?: (Response response) -> bool
     def self.description: (Config config, String? on_behalf_of) -> Hash[Symbol, untyped]
 
     def initialize: (Config) -> void

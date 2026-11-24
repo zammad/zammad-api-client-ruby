@@ -3,6 +3,14 @@
 
 module Faraday
   class Error < StandardError
+    def initialize: (?untyped exc, ?untyped response) -> void
+    def response: () -> untyped
+  end
+
+  # What a middleware of this gem's own is built on. See
+  # ZammadAPI::Transport::HeldToLength.
+  class Middleware
+    def initialize: (?untyped app, ?untyped options) -> void
   end
 
   class ConnectionFailed < Error
