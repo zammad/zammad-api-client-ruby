@@ -156,16 +156,7 @@ module ZammadAPI
     #
     # @return [Resources::User]
     # @raise [AuthenticationError] when the credentials are not valid
-    def me
-      operation = 'find current user'
-      response  = @transport.get(
-        "#{Resources::User.resource_path}/me",
-        operation:      operation,
-        resource_class: Resources::User,
-        query:          { expand: true }
-      )
-      Resources::User.from_response(@transport, response.decoded(:object, operation: operation, resource_class: Resources::User))
-    end
+    def me = users.find('me')
 
     # The version of the Zammad instance, not of this gem — that is
     # {ZammadAPI::VERSION}. Zammad serves it to administrators only.
