@@ -215,11 +215,6 @@ RSpec.describe ZammadAPI::Config do
       expect(build(middleware: hook).middleware).to be(hook)
     end
 
-    it 'rejects middleware that cannot be called' do
-      expect { build(middleware: 'not callable') }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config middleware needs to respond to call')
-    end
-
     it 'accepts any callable, not only a proc' do
       callable = Class.new { def call(builder) = builder }.new
       expect(build(middleware: callable).middleware).to be(callable)
@@ -236,42 +231,10 @@ RSpec.describe ZammadAPI::Config do
       logger = Class.new { def debug(...) = nil }.new
       expect(build(logger: logger).logger).to be(logger)
     end
-
-    it 'rejects a logger that cannot log at debug' do
-      expect { build(logger: true) }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config logger needs to respond to debug')
-    end
   end
 
-  describe 'numeric validation' do
-    it 'rejects a zero timeout' do
-      expect { build(timeout: 0) }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config timeout needs to be a positive number')
-    end
-
-    it 'rejects a negative open_timeout' do
-      expect { build(open_timeout: -1) }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config open_timeout needs to be a positive number')
-    end
-
-    it 'rejects a non-numeric retry_interval' do
-      expect { build(retry_interval: 'soon') }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config retry_interval needs to be a positive number')
-    end
-
-    it 'rejects negative retries' do
-      expect { build(retries: -1) }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config retries needs to be a non-negative integer')
-    end
-
-    it 'rejects retries that are not an integer' do
-      expect { build(retries: 1.5) }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config retries needs to be a non-negative integer')
-    end
-
-    it 'allows disabling retries' do
-      expect(build(retries: 0).retries).to eq(0)
-    end
+  it 'allows disabling retries' do
+    expect(build(retries: 0).retries).to eq(0)
   end
 
   describe '#inspect' do
@@ -376,7 +339,7 @@ RSpec.describe ZammadAPI::Config do
     end
 
     it 're-validates' do
-      expect { build.with(retries: -1) }.to raise_error(ZammadAPI::ConfigurationError, /non-negative integer/)
+      expect { build.with(url: 'zammad.example.com') }.to raise_error(ZammadAPI::ConfigurationError, /needs to start with http/)
     end
 
     it 'replaces the authentication scheme rather than adding a second one' do
@@ -424,11 +387,6 @@ RSpec.describe ZammadAPI::Config do
   end
 
   describe 'other options' do
-    it 'rejects an ssl_verify that is not a boolean' do
-      expect { build(ssl_verify: 'false') }
-        .to raise_error(ZammadAPI::ConfigurationError, 'config ssl_verify needs to be true or false, got "false"')
-    end
-
     it 'accepts ssl_verify: false' do
       expect(build(ssl_verify: false).ssl_verify).to be(false)
     end

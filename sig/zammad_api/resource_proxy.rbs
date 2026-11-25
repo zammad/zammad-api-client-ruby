@@ -5,8 +5,6 @@ module ZammadAPI
   class ResourceProxy[R < Resources::Base]
     include Enumerable[R]
 
-    SEARCH_MAX_PER_PAGE: Integer
-
     attr_reader resource_class: untyped
 
     @transport: Transport
@@ -39,7 +37,7 @@ module ZammadAPI
 
     private
 
-    def collection: (String, String, ?query: Hash[Symbol, untyped], ?max_per_page: Integer, ?sortable: bool, ?paginated: bool, ?search: bool) -> Collection[R]
+    def collection: (String, String, ?query: Hash[Symbol, untyped], ?search: bool) -> Collection[R]
     def find_by_id: (Hash[Symbol, untyped] params) -> R?
     def path: () -> String
   end

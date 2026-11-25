@@ -26,28 +26,19 @@ module ZammadAPI
       @related: Associations::Proxy?
       @baseline: Hash[Symbol, untyped]
       self.@declared_associations: Hash[Symbol, Hash[Symbol, untyped]]?
-      self.@path: String?
-      self.@searchable: bool?
-      self.@max_per_page: Integer?
-      self.@sortable: bool?
-      self.@paginated: bool?
 
       def self.path: (String) -> void
       def self.searchable: (bool) -> void
       def self.max_per_page: (Integer) -> void
       def self.sortable: (bool) -> void
-      def self.paginated: (bool) -> void
       def self.resource_path: () -> String
       def self.searchable?: () -> bool
       def self.page_limit: () -> Integer
       def self.sortable?: () -> bool
-      def self.paginated?: () -> bool
       def self.member_path: ((Integer | String) id) -> String
       def self.fetch_one: (Transport transport, (Integer | String) id) -> Base
       def self.from_response: (Transport, Hash[untyped, untyped] attributes) -> Base
       def self.associations: () -> Hash[Symbol, Hash[Symbol, untyped]]
-      def self.declaration: [T] (Symbol name) { () -> T } -> T
-                          | (Symbol name) -> untyped
       def self.declared_associations: () -> Hash[Symbol, Hash[Symbol, untyped]]
       def self.belongs_to: (Symbol name, class_name: String, ?foreign_key: Symbol) -> void
 

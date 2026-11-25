@@ -19,7 +19,7 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   ignored.
 - `logger:` takes a `Logger` rather than a boolean flag. `logger: true` used to turn on
   debug output to `$stderr`; pass `Logger.new($stderr)` for the same thing. Anything that
-  responds to `debug` is accepted, and anything else raises `ConfigurationError`.
+  responds to `debug` works.
 - `Collection#each` (`client.x.all`, `client.x.search`) now walks every page. Previously it
   fetched a single page, so iterating stopped silently at 100 records for `all` and at
   10 for `search`.
@@ -158,8 +158,6 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   end of the list.
 - `ZammadAPI::PaginationError`, raised when an endpoint answers a page with the records of
   the page before it, instead of paging forever.
-- `paginated false` declares an index endpoint that serves every record in one response,
-  such as `api/v1/object_manager_attributes`. It is then read in one request.
 - `Base#reload`, `#persisted?`, `#destroyed?`, `#[]`, `#[]=`, `#fetch`, `#key?`, `#to_h` and
   a readable `#inspect` that blanks attributes naming a credential.
 - `record.update(attributes)`, `record.update!(attributes)` and
@@ -205,8 +203,7 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - `client.resource(SomeClass)` takes a subclass of `ZammadAPI::Resources::Base` and answers
   with a proxy for it, so an endpoint this gem does not model gets records, pagination,
   `find_by`, change tracking and `save` from a class that declares its `path`. `searchable`,
-  `max_per_page`, `sortable`, `paginated` and `belongs_to` say what else is true of the
-  endpoint.
+  `max_per_page`, `sortable` and `belongs_to` say what else is true of the endpoint.
 - Typed records. `ResourceProxy` and `Collection` are generic over the resource they hold,
   so `client.tickets` is a `ResourceProxy[Resources::Ticket]` and `find`, `first`,
   `find_by`, the block of `each` and a search all answer with a `Ticket`. Each resource
@@ -251,7 +248,7 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - `client.<resource>.destroy(id)` deletes directly instead of fetching the record first.
 - Resource dispatch is explicit rather than `method_missing` plus `const_get`.
 - A resource declares what its endpoint does — `searchable true`, `max_per_page 100`,
-  `sortable false`, `paginated false` — the way it declares `path`.
+  `sortable false` — the way it declares `path`.
 - `client.<resource>` returns the same proxy each time rather than allocating one per call.
   The proxies are built with the client, so a client stays immutable once built and safe to
   share between threads.

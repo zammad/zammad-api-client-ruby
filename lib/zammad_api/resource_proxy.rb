@@ -34,9 +34,6 @@ module ZammadAPI
     include Enumerable
     extend Forwardable
 
-    # Largest page size Zammad's search endpoints serve.
-    SEARCH_MAX_PER_PAGE = 200
-
     # @return [Class] the resource class this proxy operates on
     attr_reader :resource_class
 
@@ -166,31 +163,20 @@ module ZammadAPI
       raise Error, "Zammad routes no search endpoint for #{resource_class.name}: look a record up with find_by, which walks the records instead" if !resource_class.searchable?
       raise ArgumentError, "search needs a non-empty query string. Search for '*' to ask for every record." if !term.is_a?(String) || term.strip.empty?
 
-      collection(
-        "#{path}/search",
-        'get .search of object',
-        query:        { query: term, **filters },
-        max_per_page: SEARCH_MAX_PER_PAGE,
-        sortable:     true,
-        paginated:    true,
-        search:       true
-      )
+      collection("#{path}/search", 'get .search of object', query: { query: term, **filters }, search: true)
     end
 
     def inspect = "#<#{self.class.name} #{resource_class.name}>"
 
     private
 
-    def collection(path, operation, query: {}, max_per_page: resource_class.page_limit, sortable: resource_class.sortable?, paginated: resource_class.paginated?, search: false)
+    def collection(path, operation, query: {}, search: false)
       Collection.new(
         transport:      @transport,
         resource_class: resource_class,
         path:           path,
         operation:      operation,
-        max_per_page:   max_per_page,
-        sortable:       sortable,
         search:         search,
-        paginated:      paginated,
         query:          { expand: true }.merge(query)
       )
     end

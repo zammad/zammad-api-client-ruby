@@ -114,7 +114,7 @@ end
 
 check('derived client re-validates options') do
   CLIENT.with(timeout: 45)
-  CLIENT.with(timeout: -1)
+  CLIENT.with(url: 'zammad.example.com')
   raise 'expected ConfigurationError'
 rescue ZammadAPI::ConfigurationError
   'invalid option rejected'

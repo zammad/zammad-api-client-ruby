@@ -57,7 +57,7 @@ module ZammadAPI
     def self.build(operation:, page:, resource_class: nil)
       new(
         "Can't #{subject_for(operation, resource_class)}: page #{page} repeated page #{page - 1}, so the endpoint is " \
-        'ignoring the page parameter. If it serves every record in one response, declare `paginated false` on the resource.'
+        'ignoring the page parameter. If it serves every record in one response, read it with client.get instead.'
       )
     end
   end
@@ -170,12 +170,7 @@ module ZammadAPI
   # 429 - too many requests.
   class RateLimitError < ClientError
     # @return [Integer, nil] value of the +Retry-After+ response header, in seconds
-    def retry_after
-      value = headers['retry-after']
-      return nil if value.nil?
-
-      Integer(value.to_s, 10, exception: false)
-    end
+    def retry_after = Integer(headers['retry-after'].to_s, 10, exception: false)
   end
 
   class ResponseError

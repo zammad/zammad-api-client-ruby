@@ -14,9 +14,6 @@ module ZammadAPI
   # sized for what it was asked for, and +lazy+, +detect+ and the rest of
   # +Enumerable+ stop the walk as soon as they have enough.
   #
-  # An index that serves every record in one response is read in one request
-  # instead, where its resource says so: see {Resources::Base.paginated}.
-  #
   # @example Iterate every ticket
   #   client.tickets.all.each { |ticket| puts ticket.title }
   #
@@ -34,27 +31,26 @@ module ZammadAPI
   class Collection
     include Enumerable
 
+    # Largest page size Zammad's search endpoints serve.
+    SEARCH_MAX_PER_PAGE = 200
+
     # @api private
     # @param per_page [Integer, nil] records fetched per request, or nil for
     #   as many as the endpoint serves
     # @param search [Boolean] whether this is a search endpoint, which can
-    #   serve a short page before the last one and can count its results
-    # @param sortable [Boolean] whether this endpoint reads +sort_by+ and +order_by+
-    # @param paginated [Boolean] whether this endpoint reads +page+ and +per_page+
-    def initialize(transport:, resource_class:, path:, operation:, max_per_page:, sortable:, query: {}, per_page: nil, page: nil, search: false, paginated: true)
-      raise ArgumentError, 'per_page needs to be a positive integer' if per_page && (!per_page.is_a?(Integer) || !per_page.positive?)
+    #   serve a short page before the last one, can count its results and
+    #   always sorts
+    def initialize(transport:, resource_class:, path:, operation:, query: {}, per_page: nil, page: nil, search: false)
+      max_per_page = search ? SEARCH_MAX_PER_PAGE : resource_class.page_limit
 
       @transport      = transport
       @resource_class = resource_class
       @path           = path
       @operation      = operation
       @query          = query
-      @max_per_page   = max_per_page
-      @sortable       = sortable
       @per_page       = [per_page || max_per_page, max_per_page].min
       @page           = page
       @search         = search
-      @paginated      = paginated
     end
 
     # Yields every record, fetching pages as needed.
@@ -89,7 +85,7 @@ module ZammadAPI
       return to_enum(:in_batches, of: of) if !block
       return with(per_page: of).in_batches(&block) if of
 
-      @paginated ? walk(&block) : fetch(nil).each_slice(@per_page, &block)
+      walk(&block)
       self
     end
 
@@ -102,14 +98,7 @@ module ZammadAPI
     # @param per_page [Integer, nil] records on the page, at most what the
     #   endpoint serves
     # @return [Collection]
-    # @raise [ArgumentError] for a page number that is not a positive Integer,
-    #   or an endpoint that does not page
-    def page(number, per_page: nil)
-      raise ArgumentError, 'page needs to be a positive integer' if !number.is_a?(Integer) || !number.positive?
-      raise ArgumentError, "#{@path} serves every record in one response, so it has no pages" if !@paginated
-
-      with(page: number, per_page: per_page || @per_page)
-    end
+    def page(number, per_page: nil) = with(page: number, per_page: per_page || @per_page)
 
     # Returns a new collection sorted by the server.
     #
@@ -124,14 +113,12 @@ module ZammadAPI
     # @param directions [Hash{Symbol => Symbol, String}] attributes to sort by,
     #   each with +:asc+ or +:desc+
     # @return [Collection]
-    # @raise [ArgumentError] for an endpoint that does not sort, or no attribute
+    # @raise [ArgumentError] for an endpoint that does not sort
     def order(*attributes, **directions)
-      raise ArgumentError, "#{@path} is always served in the same order and ignores sort_by" if !@sortable
+      raise ArgumentError, "#{@path} is always served in the same order and ignores sort_by" if !@search && !@resource_class.sortable?
 
       requested = attributes.to_h { [it.to_s, 'asc'] }.merge(directions.to_h { |name, direction| [name.to_s, direction.to_s] })
-      raise ArgumentError, 'order needs at least one attribute to sort by: order(:name), or order(name: :desc)' if requested.empty?
-
-      columns = sorted_by.merge(requested)
+      columns   = sorted_by.merge(requested)
       with(query: @query.merge(sort_by: columns.keys.join(','), order_by: columns.values.join(',')))
     end
 
@@ -143,9 +130,7 @@ module ZammadAPI
     #
     # @param keys [Array<Symbol, String>] attribute names
     # @return [Array]
-    # @raise [ArgumentError] when no attribute name was given
     def pluck(*keys)
-      raise ArgumentError, 'pluck needs at least one attribute name' if keys.empty?
       return map { it[keys.first] } if keys.one?
 
       map { |record| keys.map { record[it] } }
@@ -157,8 +142,7 @@ module ZammadAPI
     # @param count [Integer, nil]
     # @return [Resources::Base, Array<Resources::Base>, nil]
     def first(count = nil)
-      wanted = count || 1
-      source = @page || !@paginated || !wanted.is_a?(Integer) || !wanted.positive? ? self : with(per_page: wanted)
+      source = @page ? self : with(per_page: count || 1)
 
       count.nil? ? source.each.first : source.each.first(count)
     end
@@ -193,7 +177,7 @@ module ZammadAPI
     def empty? = first.nil?
 
     def inspect
-      "#<#{self.class.name} #{@resource_class.name} path=#{@path.inspect} per_page=#{@per_page}#{" page=#{@page}" if @page}#{' paginated=false' if !@paginated}>"
+      "#<#{self.class.name} #{@resource_class.name} path=#{@path.inspect} per_page=#{@per_page}#{" page=#{@page}" if @page}>"
     end
 
     private
@@ -224,10 +208,8 @@ module ZammadAPI
       end
     end
 
-    # One page, or with no number the whole of an index that does not page.
     def fetch(number)
-      query    = number ? @query.merge(page: number, per_page: @per_page) : @query
-      response = @transport.get(@path, operation: @operation, resource_class: @resource_class, query: query)
+      response = @transport.get(@path, operation: @operation, resource_class: @resource_class, query: @query.merge(page: number, per_page: @per_page))
 
       response.decoded(:array, operation: @operation, resource_class: @resource_class).map { @resource_class.from_response(@transport, it) }
     end
@@ -248,13 +230,10 @@ module ZammadAPI
         resource_class: @resource_class,
         path:           @path,
         operation:      @operation,
-        max_per_page:   @max_per_page,
-        sortable:       @sortable,
         query:          query,
         per_page:       per_page,
         page:           page,
-        search:         @search,
-        paginated:      @paginated
+        search:         @search
       )
     end
   end

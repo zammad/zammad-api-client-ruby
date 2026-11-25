@@ -231,11 +231,6 @@ RSpec.describe ZammadAPI::Collection do
     it 'returns an Enumerator without a block' do
       expect(collection.find_each).to be_a(Enumerator)
     end
-
-    it 'rejects a non-positive page size' do
-      expect { collection.find_each(batch_size: 0) { nil } }
-        .to raise_error(ArgumentError, 'per_page needs to be a positive integer')
-    end
   end
 
   describe '#in_batches' do
@@ -291,11 +286,6 @@ RSpec.describe ZammadAPI::Collection do
       expect(collection.in_batches(of: 2).next.map(&:id)).to eq([1, 2])
       expect(a_request(:get, url).with(query: hash_including('page' => '2'))).not_to have_been_made
     end
-
-    it 'rejects a non-positive page size' do
-      expect { collection.in_batches(of: 0) { nil } }
-        .to raise_error(ArgumentError, 'per_page needs to be a positive integer')
-    end
   end
 
   describe '#page' do
@@ -323,22 +313,6 @@ RSpec.describe ZammadAPI::Collection do
 
       expect(collection.page(2)).not_to be(collection)
       expect(collection.map(&:id)).to eq([1])
-    end
-
-    it 'rejects page zero' do
-      expect { collection.page(0) }.to raise_error(ArgumentError, /positive integer/)
-    end
-
-    it 'rejects a non-integer page' do
-      expect { collection.page('2') }.to raise_error(ArgumentError, /positive integer/)
-    end
-
-    it 'rejects a non-positive page size' do
-      expect { collection.page(1, per_page: 0) }.to raise_error(ArgumentError, 'per_page needs to be a positive integer')
-    end
-
-    it 'rejects a non-integer page size' do
-      expect { collection.page(1, per_page: '7') }.to raise_error(ArgumentError, 'per_page needs to be a positive integer')
     end
   end
 
@@ -449,10 +423,6 @@ RSpec.describe ZammadAPI::Collection do
       expect(a_request(:get, url).with(query: hash_including({}))).not_to have_been_made
     end
 
-    it 'raises without an attribute to sort by' do
-      expect { collection.order }.to raise_error(ArgumentError, /order needs at least one attribute to sort by/)
-    end
-
     # TicketsController#index and UsersController#index hardcode the order and
     # drop sort_by with everything else they do not read.
     context 'with an index endpoint that is always served in id order' do
@@ -523,10 +493,6 @@ RSpec.describe ZammadAPI::Collection do
       stub_page(2, [{ id: default_per_page + 1 }])
 
       expect(collection.pluck(:id)).to eq((1..(default_per_page + 1)).to_a)
-    end
-
-    it 'needs at least one attribute name' do
-      expect { collection.pluck }.to raise_error(ArgumentError, 'pluck needs at least one attribute name')
     end
   end
 
@@ -720,7 +686,6 @@ RSpec.describe ZammadAPI::Collection do
         def self.name = 'ObjectAttribute'
 
         path 'api/v1/object_manager_attributes'
-        paginated false
       end
     end
     let(:url) { "#{ClientHelper::BASE_URL}api/v1/object_manager_attributes" }
@@ -729,118 +694,31 @@ RSpec.describe ZammadAPI::Collection do
     # The same list whatever it is asked, which is what such an endpoint does.
     before { stub_request(:get, url).with(query: hash_including({})).to_return(json_response(records)) }
 
-    it 'reads every record' do
+    # The list is shorter than the page asked for, so it is the last one.
+    it 'reads every record in one request' do
       expect(collection.map(&:id)).to eq([1, 2, 3])
-    end
-
-    it 'spends one request on it' do
-      collection.to_a
       expect(a_request(:get, url).with(query: hash_including({}))).to have_been_made.once
     end
 
-    it 'names no page in that request' do
-      collection.to_a
-      expect(a_request(:get, url).with(query: { 'expand' => 'true' })).to have_been_made.once
+    it 'raises PaginationError where smaller pages are asked for' do
+      expect { collection.in_batches(of: 2).to_a }
+        .to raise_error(ZammadAPI::PaginationError, /page 2 repeated page 1.*read it with client.get instead/)
     end
 
-    context 'without the declaration, and a list as long as a page' do
-      let(:resource) do
-        Class.new(ZammadAPI::Resources::Base) do
-          def self.name = 'ObjectAttribute'
-
-          path 'api/v1/object_manager_attributes'
-        end
-      end
+    context 'with a list as long as a page' do
       let(:records) { full_page }
 
-      it 'raises PaginationError, and says what to declare' do
-        expect { collection.to_a }
-          .to raise_error(ZammadAPI::PaginationError, /page 2 repeated page 1.*declare `paginated false` on the resource/)
+      it 'raises PaginationError' do
+        expect { collection.to_a }.to raise_error(ZammadAPI::PaginationError, /page 2 repeated page 1/)
       end
-    end
-
-    it 'hands the list over as one batch' do
-      expect(collection.in_batches.map { |batch| batch.map(&:id) }).to eq([[1, 2, 3]])
-    end
-
-    it 'slices the list where a batch size is asked for' do
-      expect(collection.in_batches(of: 2).map { |batch| batch.map(&:id) }).to eq([[1, 2], [3]])
-    end
-
-    it 'still spends one request where a batch size is asked for' do
-      collection.find_each(batch_size: 1).to_a
-      expect(a_request(:get, url).with(query: { 'expand' => 'true' })).to have_been_made.once
-    end
-
-    it 'yields no batch for a list with nothing on it' do
-      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([]))
-
-      expect(collection.in_batches.to_a).to eq([])
-    end
-
-    it 'reads the first record off the one response' do
-      expect(collection.first.id).to eq(1)
-      expect(a_request(:get, url).with(query: { 'expand' => 'true' })).to have_been_made.once
-    end
-
-    it 'reads the first few' do
-      expect(collection.first(2).map(&:id)).to eq([1, 2])
-    end
-
-    it 'counts the records' do
-      expect(collection.count).to eq(3)
-    end
-
-    it 'says whether there are any' do
-      expect(collection).not_to be_empty
-    end
-
-    it 'finds a record by what it carries' do
-      expect(collection.detect { it.name == 'b' }.id).to eq(3)
-    end
-
-    # Every number would name the same records.
-    it 'refuses a page' do
-      expect { collection.page(2) }.to raise_error(ArgumentError, /serves every record in one response, so it has no pages/)
-    end
-
-    it 'still refuses a page that is not a number first' do
-      expect { collection.page(0) }.to raise_error(ArgumentError, /positive integer/)
-    end
-
-    # Whether an index sorts is a declaration of its own.
-    it 'sends a sort, and still no page' do
-      collection.order(:name).to_a
-
-      expect(a_request(:get, url).with(query: { 'expand' => 'true', 'sort_by' => 'name', 'order_by' => 'asc' })).to have_been_made.once
-    end
-
-    context 'when the resource says the endpoint does not sort either' do
-      let(:resource) do
-        Class.new(ZammadAPI::Resources::Base) do
-          def self.name = 'ObjectAttribute'
-
-          path 'api/v1/object_manager_attributes'
-          paginated false
-          sortable false
-        end
-      end
-
-      it 'refuses a sort, which such an endpoint drops' do
-        expect { collection.order(:name) }.to raise_error(ArgumentError, /ignores sort_by/)
-      end
-    end
-
-    it 'says so in inspect' do
-      expect(collection.inspect).to end_with('paginated=false>')
     end
   end
 
   describe ZammadAPI::PaginationError do
-    it 'names the page that repeated and what to declare for an endpoint that does not page' do
+    it 'names the page that repeated and how to read an endpoint that does not page' do
       message = described_class.build(operation: 'get .all of object', page: 3).message
 
-      expect(message).to include('page 3 repeated page 2').and include('declare `paginated false` on the resource')
+      expect(message).to include('page 3 repeated page 2').and include('read it with client.get instead')
     end
   end
 
@@ -851,7 +729,7 @@ RSpec.describe ZammadAPI::Collection do
     subject(:search) { client.users.search('smith') }
 
     let(:search_url) { "#{ClientHelper::BASE_URL}api/v1/users/search" }
-    let(:page_size)  { ZammadAPI::ResourceProxy::SEARCH_MAX_PER_PAGE }
+    let(:page_size)  { ZammadAPI::Collection::SEARCH_MAX_PER_PAGE }
 
     def stub_search_page(page, records)
       stub_request(:get, search_url)

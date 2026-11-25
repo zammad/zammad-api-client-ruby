@@ -764,8 +764,8 @@ RSpec.describe ZammadAPI::Client do
     end
 
     it 're-validates the resulting configuration' do
-      expect { unit_client.with(timeout: -1) }
-        .to raise_error(ZammadAPI::ConfigurationError, /positive number/)
+      expect { unit_client.with(url: 'zammad.example.com') }
+        .to raise_error(ZammadAPI::ConfigurationError, /needs to start with http/)
     end
 
     context 'when it names another way to authenticate' do

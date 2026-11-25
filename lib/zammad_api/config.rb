@@ -162,7 +162,7 @@ module ZammadAPI
       )
       # steep:ignore:end
 
-      validate!
+      validate_credentials!
     end
 
     # @return [Symbol] +:http_token+, +:oauth2_token+ or +:basic+
@@ -220,14 +220,6 @@ module ZammadAPI
       raise ConfigurationError, 'config url is not a valid URL'
     end
 
-    def validate!
-      validate_credentials!
-      validate_numbers!
-      raise ConfigurationError, "config ssl_verify needs to be true or false, got #{ssl_verify.inspect}" if ![true, false].include?(ssl_verify)
-      raise ConfigurationError, 'config middleware needs to respond to call' if middleware && !middleware.respond_to?(:call)
-      raise ConfigurationError, 'config logger needs to respond to debug' if !logger.respond_to?(:debug)
-    end
-
     def validate_credentials!
       given = CREDENTIAL_OPTIONS.select { |_, options| options.any? { !public_send(it).nil? } }.keys
       if given.size > 1
@@ -238,13 +230,6 @@ module ZammadAPI
 
       raise ConfigurationError, 'missing user in config'     if user.nil?
       raise ConfigurationError, 'missing password in config' if password.nil?
-    end
-
-    def validate_numbers!
-      { timeout: timeout, open_timeout: open_timeout, retry_interval: retry_interval }.each do |name, value|
-        raise ConfigurationError, "config #{name} needs to be a positive number" if !value.is_a?(Numeric) || !value.positive?
-      end
-      raise ConfigurationError, 'config retries needs to be a non-negative integer' if !retries.is_a?(Integer) || retries.negative?
     end
 
     def present(value) = value.nil? || value.to_s.empty? ? nil : value

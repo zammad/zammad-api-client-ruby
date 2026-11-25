@@ -35,72 +35,46 @@ module ZammadAPI
       attr_reader :transport
 
       class << self
+        # Each declaration defines the reader of the same setting on this
+        # class, which a subclass inherits and can declare again.
+
         # Declares the API path of this resource, relative to the instance URL.
         #
         # @param value [String]
         # @return [void]
-        def path(value)
-          @path = value
-        end
+        def path(value) = define_singleton_method(:resource_path) { value }
 
-        # Declares that Zammad routes a +/search+ endpoint for this resource.
+        # Declares whether Zammad routes a +/search+ endpoint for this resource.
         #
         # @param value [Boolean]
         # @return [void]
-        def searchable(value)
-          @searchable = value
-        end
+        def searchable(value) = define_singleton_method(:searchable?) { value }
 
         # Declares the largest page size this resource's index endpoint serves.
         #
         # @param value [Integer]
         # @return [void]
-        def max_per_page(value)
-          @max_per_page = value
-        end
+        def max_per_page(value) = define_singleton_method(:page_limit) { value }
 
         # Declares whether this resource's index endpoint reads +sort_by+ and
         # +order_by+. One that does not is refused by {Collection#order}.
         #
         # @param value [Boolean]
         # @return [void]
-        def sortable(value)
-          @sortable = value
-        end
-
-        # Declares whether this resource's index endpoint pages. One that
-        # serves every record in one response is read in one request.
-        #
-        # @example
-        #   class ObjectAttribute < ZammadAPI::Resources::Base
-        #     path 'api/v1/object_manager_attributes'
-        #     paginated false
-        #     sortable false
-        #   end
-        #
-        # @param value [Boolean]
-        # @return [void]
-        def paginated(value)
-          @paginated = value
-        end
+        def sortable(value) = define_singleton_method(:sortable?) { value }
 
         # @return [String] the API path of this resource
         # @raise [Error] when the resource declares none
-        def resource_path
-          declaration(:path) || raise(Error, "#{name} does not declare an API path")
-        end
+        def resource_path = raise(Error, "#{name} does not declare an API path")
 
         # @return [Boolean] whether Zammad routes a +/search+ endpoint here
-        def searchable? = declaration(:searchable) { false }
+        def searchable? = false
 
         # @return [Integer] the largest page size this endpoint serves
-        def page_limit = declaration(:max_per_page) { DEFAULT_MAX_PER_PAGE }
+        def page_limit = DEFAULT_MAX_PER_PAGE
 
         # @return [Boolean] whether the index endpoint reads +sort_by+ and +order_by+
-        def sortable? = declaration(:sortable) { true }
-
-        # @return [Boolean] whether the index endpoint reads +page+ and +per_page+
-        def paginated? = declaration(:paginated) { true }
+        def sortable? = true
 
         # The API path of one record of this kind, with the id escaped.
         #
@@ -143,15 +117,6 @@ module ZammadAPI
         end
 
         private
-
-        # A declaration of this class, or failing that of the class it inherits from.
-        def declaration(name, &default)
-          variable = :"@#{name}"
-          return instance_variable_get(variable) if instance_variable_defined?(variable)
-          return superclass.send(:declaration, name, &default) if superclass.respond_to?(:declaration, true)
-
-          default&.call
-        end
 
         def declared_associations = @declared_associations ||= {}
 

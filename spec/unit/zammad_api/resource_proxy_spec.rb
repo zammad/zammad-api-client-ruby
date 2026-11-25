@@ -158,7 +158,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
     # Zammad's search sorts by updated_at, newest first, not by relevance, so
     # the exact match can sit on any page of hits.
     context 'when more records match the term than one page holds' do
-      let(:page_size) { ZammadAPI::ResourceProxy::SEARCH_MAX_PER_PAGE }
+      let(:page_size) { ZammadAPI::Collection::SEARCH_MAX_PER_PAGE }
       let(:others)    { Array.new(page_size) { { id: it + 1, name: 'Users Archive' } } }
 
       def stub_page(number, records)
@@ -194,7 +194,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
 
     it 'asks for hits at the size the search endpoint serves' do
       stub = stub_request(:get, search_url)
-        .with(query: hash_including('page' => '1', 'per_page' => ZammadAPI::ResourceProxy::SEARCH_MAX_PER_PAGE.to_s))
+        .with(query: hash_including('page' => '1', 'per_page' => ZammadAPI::Collection::SEARCH_MAX_PER_PAGE.to_s))
         .to_return(json_response([{ id: 1, name: 'Users' }]))
 
       proxy.find_by(name: 'Users')
@@ -414,7 +414,9 @@ RSpec.describe ZammadAPI::ResourceProxy do
     end
   end
 
-  describe 'a resource whose index does not page' do
+  # Such an index serves a list shorter than the page asked for, which a walk
+  # reads as the last page.
+  describe 'a resource whose index serves every record in one response' do
     subject(:proxy) { client.resource(resource) }
 
     let(:resource) do
@@ -422,7 +424,6 @@ RSpec.describe ZammadAPI::ResourceProxy do
         def self.name = 'ObjectAttribute'
 
         path 'api/v1/object_manager_attributes'
-        paginated false
       end
     end
     let(:url) { "#{ClientHelper::BASE_URL}api/v1/object_manager_attributes" }
@@ -441,7 +442,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
 
     it 'spends one request on a miss' do
       proxy.find_by(name: 'missing')
-      expect(a_request(:get, url).with(query: { 'expand' => 'true' })).to have_been_made.once
+      expect(a_request(:get, url).with(query: hash_including({}))).to have_been_made.once
     end
 
     it 'lets a miss go on to create the record' do
@@ -453,17 +454,6 @@ RSpec.describe ZammadAPI::ResourceProxy do
 
     it 'reads every record straight off the proxy' do
       expect(proxy.map(&:name)).to eq(%w[a b])
-    end
-
-    # The declaration is about the index. A search endpoint always pages.
-    it 'still pages a search' do
-      resource.searchable true
-      search = stub_request(:get, "#{url}/search")
-        .with(query: hash_including('page' => '1', 'per_page' => described_class::SEARCH_MAX_PER_PAGE.to_s))
-        .to_return(json_response([]))
-
-      proxy.search('a').to_a
-      expect(search).to have_been_requested
     end
   end
 
@@ -681,7 +671,7 @@ RSpec.describe ZammadAPI::ResourceProxy do
 
     it 'requests the search endpoint' do
       stub = stub_request(:get, "#{url}/search")
-        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => ZammadAPI::ResourceProxy::SEARCH_MAX_PER_PAGE.to_s, 'query' => 'support' })
+        .with(query: { 'expand' => 'true', 'page' => '1', 'per_page' => ZammadAPI::Collection::SEARCH_MAX_PER_PAGE.to_s, 'query' => 'support' })
         .to_return(json_response([]))
 
       proxy.search('support').to_a

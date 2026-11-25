@@ -63,9 +63,7 @@ module ZammadAPI
 
     def render: (Symbol, untyped) -> String
     def normalize_url: (untyped) -> String
-    def validate!: () -> void
     def validate_credentials!: () -> void
-    def validate_numbers!: () -> void
     def present: (untyped) -> untyped
     def stripped: (untyped) -> String?
   end

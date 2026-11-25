@@ -297,7 +297,6 @@ Say what else is true of the endpoint, where it differs from the defaults:
 | `searchable true`  | `false` | Zammad routes `<path>/search`, so `search` works and `find_by` uses it. |
 | `max_per_page 100` | `1000`  | The largest page the index endpoint serves. A walk ends at the first page shorter than the size it asked for, so this has to be what the endpoint really serves. |
 | `sortable false`   | `true`  | The index endpoint is always served in the same order, so `order` refuses it. |
-| `paginated false`  | `true`  | The index endpoint serves every record in one response and reads no `page`. It is read in one request, and `page` refuses it. |
 | `belongs_to :role, class_name: 'Role'` | — | A foreign key, read as a record through `record.related.role`. |
 
 `class_name` is a resource of this gem by its own name, `'User'`, or a class of yours by its
@@ -305,22 +304,21 @@ full name, `'Acme::Role'`. A subclass of a modelled resource works too, and inhe
 its parent declares: `class MyTicket < ZammadAPI::Resources::Ticket`.
 
 An endpoint that serves every record in one response and ignores `page` —
-`api/v1/object_manager_attributes` is one — answers the request for a second page with the
-first again, which a walk reports as `ZammadAPI::PaginationError`. Declare such a resource
-`paginated false`, and it is read in one request:
+`api/v1/object_manager_attributes` is one — is still read in one request, because its first
+page is shorter than the 1000 records asked for:
 
 ```ruby
 class ObjectAttribute < ZammadAPI::Resources::Base
   path 'api/v1/object_manager_attributes'
-  paginated false
   sortable false
 end
 
 client.resource(ObjectAttribute).find_by(name: 'priority_id')   # one request
 ```
 
-This endpoint sorts nothing either, so it says `sortable false` as well. A search always
-pages, whatever the index beside it does.
+Asked for smaller pages, with `in_batches(of: 50)`, such an endpoint answers the second page
+with the first again, which a walk reports as `ZammadAPI::PaginationError`. Read it with
+`client.get` instead. A search always pages and sorts, whatever the index beside it does.
 
 Use raw requests for an endpoint that is not shaped like that — an action, a report, a
 setting.
@@ -1186,7 +1184,7 @@ If this is not the time to move, [1.x stays available](#staying-on-1x).
 | -------------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
 | `Client.new(config_hash)`              | `Client.new(**config_hash)`                      | Options are keyword arguments now, so a Hash has to be splatted      |
 | an unknown option was ignored          | raises `ArgumentError: unknown keyword`          | A typo'd option used to be dropped without a word                    |
-| `logger: true`                         | `logger: Logger.new($stderr)`                    | The flag became an object, so you choose the device and level. Anything that responds to `debug` is accepted; `true` raises `ConfigurationError` |
+| `logger: true`                         | `logger: Logger.new($stderr)`                    | The flag became an object, so you choose the device and level. Anything that responds to `debug` works; `true` raises `NoMethodError` on the first request |
 | `client.ticket`, `client.user`, …      | `client.tickets`, `client.users`, …              | A resource is `Enumerable` over every record now, so `client.ticket.each` read as if it acted on one ticket. The singular names raise `UnknownResourceError`, which lists the plural ones, and so does `client.resource(:ticket)` |
 | `client.on_behalf_of = 'login'`        | `client.on_behalf_of('login')` → new client      | The setter mutated the client and leaked across threads              |
 | `client.perform_on_behalf_of('x') { }` | `client.on_behalf_of('x') { \|scoped\| ... }`    | The old block form left the header set if the block raised           |

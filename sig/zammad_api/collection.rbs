@@ -5,30 +5,26 @@ module ZammadAPI
   class Collection[R < Resources::Base]
     include Enumerable[R]
 
+    SEARCH_MAX_PER_PAGE: Integer
+
     @transport: Transport
     @resource_class: untyped
     @path: String
     @operation: String
     @query: Hash[Symbol, untyped]
-    @max_per_page: Integer
-    @sortable: bool
     @per_page: Integer
     @page: Integer?
     @search: bool
-    @paginated: bool
 
     def initialize: (
       transport: Transport,
       resource_class: untyped,
       path: String,
       operation: String,
-      max_per_page: Integer,
-      sortable: bool,
       ?query: Hash[Symbol, untyped],
       ?per_page: Integer?,
       ?page: Integer?,
-      ?search: bool,
-      ?paginated: bool
+      ?search: bool
     ) -> void
 
     def each: () { (R) -> void } -> Collection[R]
@@ -51,7 +47,7 @@ module ZammadAPI
     private
 
     def walk: () { (Array[R]) -> void } -> void
-    def fetch: (Integer? number) -> Array[R]
+    def fetch: (Integer number) -> Array[R]
     def total_count: () -> Integer?
     def sorted_by: () -> Hash[String, String]
     def with: (?page: Integer?, ?per_page: Integer?, ?query: Hash[Symbol, untyped]) -> Collection[R]
