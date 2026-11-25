@@ -50,7 +50,7 @@ module TypedUsage
     sizes
   end
 
-  def self.customer_email(client) = client.tickets.find(1).related.customer&.email
+  def self.customer_email(client) = client.users.find(client.tickets.find(1).customer_id).email
 
   def self.article_bodies(client) = client.tickets.find(1).articles.map(&:body)
 

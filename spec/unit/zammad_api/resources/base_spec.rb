@@ -699,10 +699,6 @@ RSpec.describe ZammadAPI::Resources::Base do
         it 'is still the same Zammad record' do
           expect(copy).to eq(original)
         end
-
-        it 'gets association readers of its own, not the ones bound to the original' do
-          expect(copy.related).not_to be(original.related)
-        end
       end
     end
   end
@@ -837,10 +833,6 @@ RSpec.describe ZammadAPI::Resources::Base do
 
     it 'inherits whether the index endpoint sorts' do
       expect(subclass.sortable?).to be(false)
-    end
-
-    it 'inherits the associations' do
-      expect(subclass.associations.keys).to eq(ZammadAPI::Resources::Ticket.associations.keys)
     end
 
     it 'lets a subclass declare a path of its own' do

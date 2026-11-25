@@ -18,13 +18,6 @@ module ZammadAPI
 
       searchable true
 
-      belongs_to :customer,     class_name: 'User'
-      belongs_to :owner,        class_name: 'User'
-      belongs_to :organization, class_name: 'Organization'
-      belongs_to :group,        class_name: 'Group'
-      belongs_to :state,        class_name: 'TicketState'
-      belongs_to :priority,     class_name: 'TicketPriority'
-
       # Every article of this ticket, read in one request on each call.
       #
       # @return [Array<TicketArticle>]

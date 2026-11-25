@@ -297,11 +297,9 @@ Say what else is true of the endpoint, where it differs from the defaults:
 | `searchable true`  | `false` | Zammad routes `<path>/search`, so `search` works and `find_by` uses it. |
 | `max_per_page 100` | `1000`  | The largest page the index endpoint serves. A walk ends at the first page shorter than the size it asked for, so this has to be what the endpoint really serves. |
 | `sortable false`   | `true`  | The index endpoint is always served in the same order, so `order` refuses it. |
-| `belongs_to :role, class_name: 'Role'` | — | A foreign key, read as a record through `record.related.role`. |
 
-`class_name` is a resource of this gem by its own name, `'User'`, or a class of yours by its
-full name, `'Acme::Role'`. A subclass of a modelled resource works too, and inherits what
-its parent declares: `class MyTicket < ZammadAPI::Resources::Ticket`.
+A subclass of a modelled resource works too, and inherits what its parent declares:
+`class MyTicket < ZammadAPI::Resources::Ticket`.
 
 An endpoint that serves every record in one response and ignores `page` —
 `api/v1/object_manager_attributes` is one — is still read in one request, because its first
@@ -557,14 +555,19 @@ ticket.group       # => "Users"
 ticket.customer_id # => 7
 ```
 
-`related` reaches the whole record behind one of those, which costs a request:
+The whole record behind one of those is a `find` by its id, which costs a request:
 
 ```ruby
-ticket.related.customer.firstname     # => "Nicole"
-ticket.related.group.note
-ticket.related.created_by.email
+client.users.find(ticket.customer_id).firstname # => "Nicole"
+client.groups.find(ticket.group_id).note
+client.users.find(ticket.created_by_id).email
+```
 
-client.users.find(7).related.organization
+A foreign key that may be empty, such as a user's `organization_id`, is `nil` then, and
+`find` needs an id:
+
+```ruby
+user.organization_id && client.organizations.find(user.organization_id)
 ```
 
 A ticket's articles come from an endpoint of their own. `articles` reads the whole list in
@@ -575,11 +578,7 @@ ticket.articles                                              # => [TicketArticle
 ticket.add_article(body: 'Reset link sent.', type: 'note')  # => the created TicketArticle
 ```
 
-The readers live under `related` rather than on the record so that `ticket.customer` keeps
-returning the name it always did — an attribute read that silently became an HTTP request
-would be a poor trade. `related` targets are memoized until the next attribute write,
-`reload` or save; `articles` is fetched on each call, so an article added in between
-shows up. `Ticket.associations` lists what a resource declares.
+`articles` is fetched on each call, so an article added in between shows up.
 
 ### Comparing and serializing
 
@@ -1037,10 +1036,9 @@ supported Zammad serves for it:
 ```ruby
 ticket = client.tickets.find(1)
 
-ticket.title                   # String
-ticket.organization_id         # Integer?
-ticket.related.customer&.email # String?
-ticket.titel                   # a type error, where it used to be untyped
+ticket.title           # String
+ticket.organization_id # Integer?
+ticket.titel           # a type error, where it used to be untyped
 ```
 
 Three things are deliberately not declared, and each has a way through:
@@ -1215,7 +1213,6 @@ If this is not the time to move, [1.x stays available](#staying-on-1x).
 | `record.new_instance`               | `record.new_record?` / `record.persisted?`           | Internal flag is no longer public; the old name raises `NoMethodError` |
 | `resource.url` (instance)           | `Resource.resource_path` (class)                     | Clashed with an attribute named `url`                                |
 | `record.unknown_attribute` → `nil`  | raises `NoMethodError`; use `record[:x]`, `fetch(:x, nil)` or `key?(:x)` | A typo read as `nil` and flowed on into whatever was written with it. Zammad also serves a reduced object where the user may not see the whole record, and that is worth being told about |
-| `client.users.find(ticket.customer_id)` | `ticket.related.customer`                         | Following a foreign key needed the client threaded through           |
 | `ticket.article(body: '…')`         | `ticket.add_article(body: '…')`                      | A noun that sends a `POST`, one letter away from `ticket.articles`, which only reads. The method is gone: `article` is an attribute reader like any other, and the old call raises `NoMethodError` |
 
 ### Errors

@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require_relative '../associations'
 require_relative '../attribute_access'
 require_relative '../deep_copy'
 require_relative '../errors'
@@ -30,9 +29,6 @@ module ZammadAPI
       #
       # @return [ValidationError, nil]
       attr_reader :error
-
-      # @api private
-      attr_reader :transport
 
       class << self
         # Each declaration defines the reader of the same setting on this
@@ -107,36 +103,7 @@ module ZammadAPI
           record.send(:mark_persisted!)
           record
         end
-
-        # Every association this resource declares, including inherited ones.
-        #
-        # @return [Hash{Symbol => Hash}]
-        def associations
-          inherited = superclass.respond_to?(:associations) ? superclass.associations : {} # steep:ignore NoMethod
-          inherited.merge(declared_associations)
-        end
-
-        private
-
-        def declared_associations = @declared_associations ||= {}
-
-        # Declares that this resource points at a single other record, through
-        # a foreign key on itself. Read through +record.related.<name>+.
-        #
-        # @param name [Symbol] name of the reader on {Base#related}
-        # @param class_name [String] the target resource: one of this gem by its
-        #   own name, +'User'+, or another by its full name, +'Acme::Role'+
-        # @param foreign_key [Symbol] attribute holding the target's id
-        # @return [void]
-        def belongs_to(name, class_name:, foreign_key: :"#{name}_id")
-          declared_associations[name] = { class_name: class_name, foreign_key: foreign_key }
-        end
       end
-
-      # Zammad stamps every object with the user that created and last
-      # touched it.
-      belongs_to :created_by, class_name: 'User'
-      belongs_to :updated_by, class_name: 'User'
 
       # @param transport [Transport]
       # @param attributes [Hash, nil] or what converts to a Hash, such as
@@ -148,15 +115,6 @@ module ZammadAPI
         @new_record = true
         @destroyed  = false
         @error      = nil
-        @related    = nil
-      end
-
-      # @api private
-      # @param source [Base]
-      # @return [void]
-      def initialize_copy(source)
-        super
-        @related = nil
       end
 
       # @return [Boolean] whether this record has not been stored yet
@@ -180,16 +138,6 @@ module ZammadAPI
 
       # @return [Boolean] whether there are staged changes
       def changed? = !changes.empty?
-
-      # The records this one points at.
-      #
-      # @example
-      #   ticket.related.customer # => the User record, one request
-      #
-      # @return [Associations::Proxy]
-      def related
-        @related ||= Associations::Proxy.new(self)
-      end
 
       # Stages several changes at once.
       #
@@ -279,6 +227,8 @@ module ZammadAPI
 
       private
 
+      attr_reader :transport
+
       def mark_persisted!
         @new_record = false
       end
@@ -287,7 +237,6 @@ module ZammadAPI
         @attributes = frozen_attributes(response.decoded(:object, operation: operation, resource_class: self.class))
         @baseline   = @attributes
         @new_record = false
-        @related&.forget
       end
 
       def raise_if_new!(operation)
@@ -301,7 +250,6 @@ module ZammadAPI
 
         staged      = frozen_attributes(value)
         @attributes = @attributes.merge(key => staged).freeze
-        @related&.forget
         staged
       end
 

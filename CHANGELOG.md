@@ -189,11 +189,6 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   of the Zammad instance.
 - `Response#decoded(:object | :array)` checks the shape of a response body in one place,
   so an unexpected payload raises `ParseError`.
-- `record.related` reaches the records a record points at: `ticket.related.customer`,
-  `ticket.related.group`, `user.related.organization`, and `created_by` / `updated_by` on
-  everything. The readers sit under `related` because Zammad expands an association into
-  a name under the plain attribute, and `ticket.customer` keeps returning that name. `Resource.associations` lists what a
-  resource declares.
 - Records compare as the Zammad records they came from: two records of the same kind with
   the same id are equal, and `#hash` agrees, so `uniq`, `Set`, `include?` and records as
   Hash keys all work. A record with no id stays equal only to itself.
@@ -203,7 +198,7 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - `client.resource(SomeClass)` takes a subclass of `ZammadAPI::Resources::Base` and answers
   with a proxy for it, so an endpoint this gem does not model gets records, pagination,
   `find_by`, change tracking and `save` from a class that declares its `path`. `searchable`,
-  `max_per_page`, `sortable` and `belongs_to` say what else is true of the endpoint.
+  `max_per_page` and `sortable` say what else is true of the endpoint.
 - Typed records. `ResourceProxy` and `Collection` are generic over the resource they hold,
   so `client.tickets` is a `ResourceProxy[Resources::Ticket]` and `find`, `first`,
   `find_by`, the block of `each` and a search all answer with a `Ticket`. Each resource

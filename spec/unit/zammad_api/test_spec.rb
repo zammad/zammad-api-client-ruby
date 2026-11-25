@@ -155,7 +155,7 @@ RSpec.describe ZammadAPI::Test do
       zammad.stub(:get, 'api/v1/ticket_attachment/1/2/3', body: 'binary-ish')
 
       attachment = ZammadAPI::Resources::TicketArticleAttachment
-        .new(zammad.client.tickets.new.transport, id: 3, ticket_id: 1, article_id: 2)
+        .new(zammad.client.instance_variable_get(:@transport), id: 3, ticket_id: 1, article_id: 2)
 
       expect(attachment.download).to eq('binary-ish')
     end

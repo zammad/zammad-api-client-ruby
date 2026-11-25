@@ -6,7 +6,6 @@ module ZammadAPI
       DEFAULT_MAX_PER_PAGE: Integer
 
       attr_reader error: ValidationError?
-      attr_reader transport: Transport
 
       # What Zammad stamps every record with. These four are columns of every
       # table, and the two names beside them are what `expand` adds: the login
@@ -23,9 +22,7 @@ module ZammadAPI
       @new_record: bool
       @destroyed: bool
       @error: ValidationError?
-      @related: Associations::Proxy?
       @baseline: Hash[Symbol, untyped]
-      self.@declared_associations: Hash[Symbol, Hash[Symbol, untyped]]?
 
       def self.path: (String) -> void
       def self.searchable: (bool) -> void
@@ -38,9 +35,6 @@ module ZammadAPI
       def self.member_path: ((Integer | String) id) -> String
       def self.fetch_one: (Transport transport, (Integer | String) id) -> Base
       def self.from_response: (Transport, Hash[untyped, untyped] attributes) -> Base
-      def self.associations: () -> Hash[Symbol, Hash[Symbol, untyped]]
-      def self.declared_associations: () -> Hash[Symbol, Hash[Symbol, untyped]]
-      def self.belongs_to: (Symbol name, class_name: String, ?foreign_key: Symbol) -> void
 
       def initialize: (Transport, ?hash[untyped, untyped]? attributes) -> void
       def new_record?: () -> bool
@@ -48,7 +42,6 @@ module ZammadAPI
       def destroyed?: () -> bool
       def changes: () -> Hash[Symbol, Array[untyped]]
       def changed?: () -> bool
-      def related: () -> Associations::Proxy
       def assign_attributes: (hash[untyped, untyped] attributes) -> self
       def save: () -> bool
       def save!: () -> true
@@ -60,7 +53,8 @@ module ZammadAPI
 
       private
 
-      def initialize_copy: (self source) -> void
+      attr_reader transport: Transport
+
       def mark_persisted!: () -> void
       def load_response!: (Response response, String operation) -> void
       def raise_if_new!: (String operation) -> void

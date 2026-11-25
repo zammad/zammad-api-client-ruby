@@ -12,8 +12,6 @@ module ZammadAPI
       sortable false
 
       searchable true
-
-      belongs_to :organization, class_name: 'Organization'
     end
   end
 end
