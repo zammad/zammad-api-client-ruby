@@ -150,8 +150,6 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   record that carries all the values, or `nil`: by its id where `id:` is given, through a
   search where the resource has one and a String value is given, and by walking the index
   everywhere else.
-- `ResponseError` accepts a `detail:` describing a failure that has no HTTP response of its
-  own, so `find_by!` reads as `no record matched`.
 - The page size is clamped to what an endpoint serves (100 for `/api/v1/tickets`, 200 for
   a search, 1000 for the other index endpoints). Asking for more used to end iteration
   after the first page, because Zammad capped the response and the short page read as the
@@ -176,7 +174,8 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   wired to them, and `#requests` records what was sent, with the query as text and the
   headers by downcased name. Responses travel the same decoding, error mapping and record
   building as real ones, so a stubbed 404 raises `NotFoundError`. An unstubbed request
-  raises rather than answering with something empty.
+  raises `ZammadAPI::Test::UnstubbedRequestError` rather than answering with something
+  empty. It is not a `ZammadAPI::Error`, so the code under test cannot rescue it.
 - `respond_to?` answers correctly for attribute readers and resource methods.
 - Records implement `deconstruct_keys`, so they can be used with `case/in` pattern
   matching. `Config` and `Response` are `Data` objects and match as well.
@@ -239,17 +238,11 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 
 ### Changed
 
-- `Response#headers` is frozen, and each response carries its own.
 - `client.<resource>.destroy(id)` deletes directly instead of fetching the record first.
-- Resource dispatch is explicit rather than `method_missing` plus `const_get`.
-- A resource declares what its endpoint does — `searchable true`, `max_per_page 100`,
-  `sortable false` — the way it declares `path`.
 - `client.<resource>` returns the same proxy each time rather than allocating one per call.
   The proxies are built with the client, so a client stays immutable once built and safe to
   share between threads.
 - A String request body is sent as it is rather than encoded as a JSON string.
-- The recursive copy behind frozen attributes, `to_h` and the test kit's recorded bodies
-  lives in one place (`ZammadAPI::DeepCopy`) instead of being written once per caller.
 - Unit specs (`rake spec:unit`) run without a Zammad instance; the specs that need a live
   server live in `spec/integration`, and run only where `TEST_URL` names one.
 - CI runs RuboCop, Steep and the unit specs on every supported stable Ruby, and publishes
@@ -259,8 +252,6 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   failure, and runs `script/check_connection.rb` as a preflight.
 - The integration suite no longer depends on spec file order to run Zammad's auto wizard,
   and tolerates an instance that is already set up.
-- `Test::UnstubbedRequestError` is a `StandardError` rather than a `ZammadAPI::Error`, so
-  a forgotten stub is not caught by the `rescue ZammadAPI::Error` in the code under test.
 
 ## [1.4.0] - 2026-08-25
 - Follow up - c3af2a9 - Fixes #29 - [JSON::ParserError on gateway timeout when proxy responds with HTML](https://github.com/zammad/zammad-api-client-ruby/issues/29)

@@ -39,6 +39,3 @@ examples show what is left for your own code to do. A write is never repeated;
 | [`download_attachments.rb`](download_attachments.rb) | Saves a ticket's attachments to disk | `articles`, attachment metadata, binary-safe `download` |
 | [`error_handling.rb`](error_handling.rb) | Handles the failures that are yours to handle | The error hierarchy, `save` → `false` with `record.error`, rescuing by category, `client.with` for different retry settings |
 | [`concurrent_sync.rb`](concurrent_sync.rb) | Syncs tickets with a worker pool sharing one client | Immutable clients are thread-safe; also sketches the Rails initializer pattern |
-
-The examples are linted along with the rest of the repository (`rake rubocop`),
-so they cannot silently rot.

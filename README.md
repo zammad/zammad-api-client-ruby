@@ -593,9 +593,7 @@ client.tickets.find(1) == client.tickets.find(1)  # => true
 ```
 
 A record with no id is equal only to itself, because two unsaved records are two records
-waiting to be created however alike their attributes are. A record's first save assigns
-its id and so changes its hash, and a record used as a Hash key before that save has to be
-rehashed after it.
+waiting to be created however alike their attributes are.
 
 `to_json` renders the attributes, and `as_json` returns them as a Hash:
 
@@ -710,11 +708,6 @@ client.tickets.search('printer', condition: {'ticket.group_id' => {operator: 'is
 Zammad ignores a parameter it does not read, so a misspelled keyword, or a user keyword on
 another resource, comes back unnarrowed. Tickets are narrowed by group with a `condition`
 on `ticket.group_id`, as above.
-
-`group_ids: [1]` names no access, and Zammad reads that as `full`; a Hash names the access
-for each group, as in `group_ids: {1 => ['read']}`. Neither `role_ids:` nor `permissions:`
-is an access check: a user matches a role that has been disabled, and a deactivated user
-matches as well.
 
 Zammad routes a search endpoint per model, not for every model. `users`, `organizations`,
 `tickets` and `groups` have one; `ticket_states`, `ticket_priorities` and `ticket_articles`
@@ -1079,7 +1072,7 @@ attachments, error handling and threaded use live in [`examples/`](examples/READ
 
 ```sh
 bin/setup            # or: bundle install
-bundle exec rake     # unit specs, RuboCop and Steep
+bundle exec rake     # unit specs, RuboCop, Steep and the shipped signatures
 ```
 
 | Task                     | What it does                                          |
@@ -1089,6 +1082,7 @@ bundle exec rake     # unit specs, RuboCop and Steep
 | `rake check_connection`  | Drives a live Zammad end to end and prints a transcript |
 | `rake rubocop`           | Style checks                                          |
 | `rake steep`             | Type-check `lib/` against `sig/`, and `spec/typed/` the way a caller is checked |
+| `rake rbs_published`     | Validate the signatures the gem ships, without `sig/vendor/` |
 
 Set `COVERAGE=true` to produce a coverage report in `coverage/`.
 
