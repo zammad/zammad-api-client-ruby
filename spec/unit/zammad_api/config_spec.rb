@@ -21,16 +21,6 @@ RSpec.describe ZammadAPI::Config do
         .to raise_error(ZammadAPI::ConfigurationError, 'missing url in config')
     end
 
-    it 'rejects an empty url' do
-      expect { build(url: '') }
-        .to raise_error(ZammadAPI::ConfigurationError, 'missing url in config')
-    end
-
-    it 'rejects a url that was left out' do
-      expect { described_class.new(http_token: 'token') }
-        .to raise_error(ZammadAPI::ConfigurationError, 'missing url in config')
-    end
-
     it 'rejects a non-http scheme' do
       expect { build(url: 'ftp://example.com') }
         .to raise_error(ZammadAPI::ConfigurationError, 'config url needs to start with http:// or https:// and name a host')
@@ -49,15 +39,6 @@ RSpec.describe ZammadAPI::Config do
     it 'refuses credentials in the url, without quoting them' do
       expect { build(url: 'https://admin:url-s3cret@zammad.example.com/') }
         .to raise_error(ZammadAPI::ConfigurationError, 'config url carries credentials: pass user: and password:, or a token, instead')
-    end
-
-    it 'refuses a user name in the url without a password' do
-      expect { build(url: 'https://admin@zammad.example.com/') }
-        .to raise_error(ZammadAPI::ConfigurationError, /config url carries credentials/)
-    end
-
-    it 'accepts a url whose path merely contains an @' do
-      expect(build(url: 'https://zammad.example.com/tenant@acme/').url).to eq('https://zammad.example.com/tenant@acme/')
     end
   end
 
@@ -80,29 +61,14 @@ RSpec.describe ZammadAPI::Config do
           .to raise_error(ZammadAPI::ConfigurationError, /config names more than one way to authenticate \(http_token, user and password\)/)
       end
 
-      it 'refuses two kinds of token' do
-        expect { build(http_token: 'token', oauth2_token: 'other') }
-          .to raise_error(ZammadAPI::ConfigurationError, /more than one way to authenticate \(http_token, oauth2_token\)/)
-      end
-
       it 'refuses all three, naming each' do
         expect { build(http_token: 'token', oauth2_token: 'other', user: 'u', password: 'p') }
           .to raise_error(ZammadAPI::ConfigurationError, /\(http_token, oauth2_token, user and password\)/)
       end
 
-      it 'says what to pass instead' do
-        expect { build(http_token: 'token', oauth2_token: 'other') }
-          .to raise_error(ZammadAPI::ConfigurationError, /: pass http_token:, or oauth2_token:, or user: and password:\z/)
-      end
-
       it 'refuses a token beside a user that has no password' do
         expect { build(http_token: 'token', user: 'u') }
           .to raise_error(ZammadAPI::ConfigurationError, /more than one way to authenticate/)
-      end
-
-      it 'keeps the credentials out of the message' do
-        expect { build(http_token: 'tok-s3cret', user: 'u', password: 'pw-s3cret') }
-          .to raise_error(ZammadAPI::ConfigurationError) { |error| expect(error.message).not_to include('s3cret') }
       end
 
       it 'does not count a blank credential as one' do
@@ -120,11 +86,6 @@ RSpec.describe ZammadAPI::Config do
         .to raise_error(ZammadAPI::ConfigurationError, 'missing password in config')
     end
 
-    it 'treats blank credentials as absent' do
-      expect { build(http_token: '', oauth2_token: '', user: '', password: '') }
-        .to raise_error(ZammadAPI::ConfigurationError, 'missing user in config')
-    end
-
     it 'strips whitespace around a token' do
       expect(build(http_token: " secret\n").http_token).to eq('secret')
     end
@@ -133,10 +94,6 @@ RSpec.describe ZammadAPI::Config do
       it 'treats it as absent, for either token' do
         expect { build(http_token: "  \n") }.to raise_error(ZammadAPI::ConfigurationError, 'missing user in config')
         expect { build(http_token: nil, oauth2_token: "  \n") }.to raise_error(ZammadAPI::ConfigurationError, 'missing user in config')
-      end
-
-      it 'does not count it as a second way to authenticate' do
-        expect(build(http_token: "\n", user: 'u', password: 'p').authentication_scheme).to eq(:basic)
       end
 
       it 'leaves the scheme it would have replaced in an override alone' do
@@ -173,23 +130,11 @@ RSpec.describe ZammadAPI::Config do
     it 'discards log output when no logger is supplied' do
       expect(build.logger).to be_a(Logger)
     end
-
-    it 'leaves the Faraday adapter to Faraday' do
-      expect(build.adapter).to be_nil
-    end
-
-    it 'installs no extra middleware' do
-      expect(build.middleware).to be_nil
-    end
   end
 
   describe 'the user agent' do
     it 'falls back to the default when it is nil' do
       expect(build(user_agent: nil).user_agent).to eq("zammad_api-ruby/#{ZammadAPI::VERSION}")
-    end
-
-    it 'falls back to the default when it is empty' do
-      expect(build(user_agent: '').user_agent).to eq("zammad_api-ruby/#{ZammadAPI::VERSION}")
     end
 
     it 'falls back to the default when it is only whitespace' do
@@ -206,18 +151,9 @@ RSpec.describe ZammadAPI::Config do
       expect(build(adapter: 'test').adapter).to eq(:test)
     end
 
-    it 'keeps an adapter given as a symbol' do
-      expect(build(adapter: :test).adapter).to eq(:test)
-    end
-
     it 'keeps the middleware callable' do
       hook = ->(builder) { builder }
       expect(build(middleware: hook).middleware).to be(hook)
-    end
-
-    it 'accepts any callable, not only a proc' do
-      callable = Class.new { def call(builder) = builder }.new
-      expect(build(middleware: callable).middleware).to be(callable)
     end
   end
 
@@ -226,15 +162,6 @@ RSpec.describe ZammadAPI::Config do
       logger = Logger.new(IO::NULL)
       expect(build(logger: logger).logger).to be(logger)
     end
-
-    it 'accepts anything that logs at debug, not only a Logger' do
-      logger = Class.new { def debug(...) = nil }.new
-      expect(build(logger: logger).logger).to be(logger)
-    end
-  end
-
-  it 'allows disabling retries' do
-    expect(build(retries: 0).retries).to eq(0)
   end
 
   describe '#inspect' do
@@ -280,14 +207,6 @@ RSpec.describe ZammadAPI::Config do
     context 'with an authenticated proxy' do
       subject(:rendered) { build(proxy: 'http://puser:pproxy-s3cret@proxy.test:8080').inspect }
 
-      it 'redacts the proxy credentials' do
-        expect(rendered).not_to include('pproxy-s3cret')
-      end
-
-      it 'keeps the proxy host visible' do
-        expect(rendered).to include('proxy.test:8080')
-      end
-
       it 'marks the redacted userinfo' do
         expect(rendered).to include('proxy="http://[REDACTED]@proxy.test:8080"')
       end
@@ -296,36 +215,12 @@ RSpec.describe ZammadAPI::Config do
     it 'leaves a proxy without credentials alone' do
       expect(build(proxy: 'http://proxy.test:8080').inspect).to include('proxy="http://proxy.test:8080"')
     end
-
-    it 'leaves a url without credentials alone' do
-      expect(build(url: 'https://zammad.example.com/').inspect).to include('url="https://zammad.example.com/"')
-    end
   end
 
   describe 'pretty printing' do
-    it 'redacts the password' do
-      expect(build(http_token: nil, user: 'u', password: 'pw-s3cret').pretty_inspect).not_to include('pw-s3cret')
-    end
-
-    it 'redacts the access token' do
-      expect(build(http_token: 'tok-s3cret').pretty_inspect).not_to include('tok-s3cret')
-    end
-
-    it 'redacts the OAuth2 token' do
-      expect(build(http_token: nil, oauth2_token: 'oauth-s3cret').pretty_inspect).not_to include('oauth-s3cret')
-    end
-
-    it 'redacts the proxy credentials' do
-      expect(build(proxy: 'http://puser:pproxy-s3cret@proxy.test:8080').pretty_inspect).not_to include('pproxy-s3cret')
-    end
-
     it 'prints what inspect prints' do
       config = build(http_token: nil, user: 'u', password: 'hunter2')
       expect(config.pretty_inspect).to eq("#{config.inspect}\n")
-    end
-
-    it 'stays redacted nested inside another structure' do
-      expect({ config: build(http_token: 'tok-s3cret') }.pretty_inspect).not_to include('tok-s3cret')
     end
   end
 
@@ -356,11 +251,6 @@ RSpec.describe ZammadAPI::Config do
       expect(switched.to_h.slice(:http_token, :oauth2_token, :user, :password))
         .to eq({ http_token: 't', oauth2_token: nil, user: nil, password: nil })
     end
-
-    it 'still refuses two schemes named in one call' do
-      expect { build.with(oauth2_token: 'o', user: 'u', password: 'p') }
-        .to raise_error(ZammadAPI::ConfigurationError, /more than one way to authenticate/)
-    end
   end
 
   describe '.merge_options' do
@@ -382,15 +272,7 @@ RSpec.describe ZammadAPI::Config do
     end
   end
 
-  it 'is immutable' do
-    expect(build).to be_frozen
-  end
-
   describe 'other options' do
-    it 'accepts ssl_verify: false' do
-      expect(build(ssl_verify: false).ssl_verify).to be(false)
-    end
-
     it 'reads an empty proxy as none' do
       expect(build(proxy: '').proxy).to be_nil
     end

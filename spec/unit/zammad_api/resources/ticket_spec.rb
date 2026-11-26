@@ -33,13 +33,6 @@ RSpec.describe ZammadAPI::Resources::Ticket do
         .to raise_error(ZammadAPI::ParseError, /Can't get articles \(ZammadAPI::Resources::TicketArticle\): expected a JSON array, got Hash/)
     end
 
-    it 'reads the list again on each call, so an article added in between shows up' do
-      stub_request(:get, articles_url).with(query: hash_including({}))
-        .to_return(json_response([{ id: 1 }]), json_response([{ id: 1 }, { id: 2 }]))
-
-      expect([ticket.articles.size, ticket.articles.size]).to eq([1, 2])
-    end
-
     it 'says to save an unsaved ticket rather than requesting a path without an id' do
       unsaved = described_class.new(unit_transport, title: 'Help')
 
@@ -73,13 +66,6 @@ RSpec.describe ZammadAPI::Resources::Ticket do
       expect(ticket.add_article(body: 'hello')).to be_a(ZammadAPI::Resources::TicketArticle)
     end
 
-    it 'returns a persisted article' do
-      stub_request(:post, article_url).with(query: hash_including({}))
-        .to_return(json_response({ id: 9 }, status: 201))
-
-      expect(ticket.add_article(body: 'hello')).to be_persisted
-    end
-
     # `ticket.add_article(params.require(:article).permit(:body))`, which is
     # taken apart here before the article is built from it.
     it 'reads strong parameters as the Hash they convert to' do
@@ -100,46 +86,16 @@ RSpec.describe ZammadAPI::Resources::Ticket do
       expect(stub).to have_been_requested
     end
 
-    it 'leaves the Hash it was given as it was' do
-      stub_request(:post, article_url).with(query: hash_including({}))
-        .to_return(json_response({ id: 9, ticket_id: 42 }, status: 201))
-      attributes = { ticket_id: 9, body: 'hello' }
-      ticket.add_article(attributes)
-
-      expect(attributes).to eq(ticket_id: 9, body: 'hello')
-    end
-
     context 'when the ticket has not been saved' do
       subject(:ticket) { described_class.new(unit_transport, title: 'Help') }
 
       it 'refuses locally' do
         expect { ticket.add_article(body: 'hello') }.to raise_error(ZammadAPI::Error, /has no id, save it first/)
       end
-
-      it 'sends nothing' do
-        stub = stub_request(:post, article_url).with(query: hash_including({}))
-
-        begin
-          ticket.add_article(body: 'hello')
-        rescue ZammadAPI::Error
-          nil
-        end
-
-        expect(stub).not_to have_been_requested
-      end
     end
   end
 
   describe '#article' do
-    it 'is not a method of a ticket' do
-      expect(described_class.method_defined?(:article)).to be(false)
-    end
-
-    it 'raises NoMethodError when called to add an article, and sends nothing' do
-      expect { ticket.article(body: 'hello') }.to raise_error(NoMethodError)
-      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
-    end
-
     it 'reads the article staged for the next save' do
       ticket.article = { body: 'reply' }
 

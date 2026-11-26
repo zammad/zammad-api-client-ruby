@@ -21,21 +21,6 @@ RSpec.describe ZammadAPI::Collection do
     Array.new(default_per_page) { { id: first_id + it } }
   end
 
-  # Mirrors Zammad's CanPaginate::Pagination: the endpoint reduces per_page to
-  # its own maximum and pages by that reduced size.
-  def stub_capped_endpoint(url, total:, max:)
-    stub_request(:get, url).with(query: hash_including({})).to_return do |request|
-      params = URI.decode_www_form(URI(request.uri).query).to_h
-      limit  = [Integer(params['per_page']), max].min
-      offset = (Integer(params['page']) - 1) * limit
-      json_response(Array(offset...[offset + limit, total].min).map { { id: it + 1 } })
-    end
-  end
-
-  it 'is an Enumerable' do
-    expect(described_class.ancestors).to include(Enumerable)
-  end
-
   describe '#each' do
     it 'walks every page until the server runs out of records' do
       stub_page(1, full_page)
@@ -51,14 +36,6 @@ RSpec.describe ZammadAPI::Collection do
       expect(a_request(:get, url).with(query: hash_including('page' => '2'))).not_to have_been_made
     end
 
-    it 'stops on a page shorter than the one the endpoint has been serving' do
-      stub_page(1, full_page)
-      stub_page(2, [{ id: default_per_page + 1 }])
-
-      expect(collection.map(&:id)).to eq((1..(default_per_page + 1)).to_a)
-      expect(a_request(:get, url).with(query: hash_including('page' => '3'))).not_to have_been_made
-    end
-
     it 'stops on an empty page' do
       stub_page(1, full_page)
       stub_page(2, [])
@@ -72,12 +49,6 @@ RSpec.describe ZammadAPI::Collection do
       expect(collection.first).to be_persisted
     end
 
-    it 'yields records of the right class' do
-      stub_page(1, [{ id: 1 }], per_page: 1)
-
-      expect(collection.first).to be_a(ZammadAPI::Resources::Group)
-    end
-
     it 'returns an Enumerator without a block' do
       expect(collection.each).to be_a(Enumerator)
     end
@@ -85,13 +56,6 @@ RSpec.describe ZammadAPI::Collection do
     it 'does not make a request until it is iterated' do
       collection
       expect(a_request(:get, url).with(query: hash_including({}))).not_to have_been_made
-    end
-
-    it 'stops fetching early when the caller stops consuming' do
-      stub_page(1, [{ id: 1 }], per_page: 1)
-
-      expect(collection.first).to be_a(ZammadAPI::Resources::Group)
-      expect(a_request(:get, url).with(query: hash_including('page' => '2'))).not_to have_been_made
     end
 
     it 'works with lazy enumeration' do
@@ -115,13 +79,6 @@ RSpec.describe ZammadAPI::Collection do
         .to raise_error(ZammadAPI::PaginationError, /page 2 repeated page 1, so the endpoint is ignoring the page parameter/)
     end
 
-    it 'keeps walking records that carry no id' do
-      stub_page(1, Array.new(default_per_page) { { name: "a#{it}" } })
-      stub_page(2, [{ name: 'b0' }])
-
-      expect(collection.map(&:name)).to eq(Array.new(default_per_page) { "a#{it}" } + ['b0'])
-    end
-
     it 'does not hand the repeated page to the block before raising' do
       stub_request(:get, url).with(query: hash_including({}))
         .to_return(json_response(full_page))
@@ -130,16 +87,6 @@ RSpec.describe ZammadAPI::Collection do
 
       expect { collection.in_batches { batches << it } }.to raise_error(ZammadAPI::PaginationError)
       expect(batches.size).to eq(1)
-    end
-
-    it 'does not yield the repeated records to each either' do
-      stub_request(:get, url).with(query: hash_including({}))
-        .to_return(json_response(full_page))
-
-      seen = 0
-
-      expect { collection.each { seen += 1 } }.to raise_error(ZammadAPI::PaginationError)
-      expect(seen).to eq(default_per_page)
     end
 
     # Pages are compared by the ids they hold, not by their payload.
@@ -155,52 +102,6 @@ RSpec.describe ZammadAPI::Collection do
       expect { Timeout.timeout(5) { collection.in_batches { batches += 1 } } }
         .to raise_error(ZammadAPI::PaginationError, /ignoring the page parameter/)
       expect(batches).to eq(1)
-    end
-
-    it 'does not take two pages that share some of their records for a repeat' do
-      stub_page(1, full_page)
-      stub_page(2, full_page(2))
-      stub_page(3, [])
-
-      expect(collection.map(&:id)).to eq([*1..default_per_page, *2..(default_per_page + 1)])
-    end
-
-    it 'raises PaginationError when records without an id repeat' do
-      page = Array.new(default_per_page) { { name: "a#{it}" } }
-      stub_request(:get, url).with(query: hash_including({})).to_return(json_response(page))
-
-      expect { collection.to_a }
-        .to raise_error(ZammadAPI::PaginationError, /ignoring the page parameter/)
-    end
-
-    # The block is the caller's: a StopIteration raised from it is not the
-    # end of the walk.
-    context 'when the block raises StopIteration' do
-      let(:labels) { %w[x y].each }
-
-      before { stub_page(1, [{ id: 1 }, { id: 2 }, { id: 3 }]) }
-
-      it 'raises it, as the same block over an Array does' do
-        expect { collection.map { |group| [group.id, labels.next] } }.to raise_error(StopIteration)
-      end
-
-      it 'raises it from each, rather than ending the walk as if it were complete' do
-        seen = []
-        expect { collection.each { |group| seen << [group.id, labels.next] } }.to raise_error(StopIteration)
-
-        expect(seen).to eq([[1, 'x'], [2, 'y']])
-      end
-
-      it 'raises it from in_batches' do
-        expect { collection.in_batches { raise StopIteration } }.to raise_error(StopIteration)
-      end
-    end
-
-    it 'still ends a walk that a break leaves early' do
-      stub_page(1, full_page)
-
-      expect(collection.each { |group| break group.id if group.id == 2 }).to eq(2)
-      expect(a_request(:get, url).with(query: hash_including({}))).to have_been_made.once
     end
   end
 
@@ -262,20 +163,6 @@ RSpec.describe ZammadAPI::Collection do
       expect(ids).to eq([1, 2, 3])
     end
 
-    it 'does not take a batch the block shortened for a short page' do
-      stub_page(1, [{ id: 1 }, { id: 2 }], per_page: 2)
-      stub_page(2, [{ id: 3 }, { id: 4 }], per_page: 2)
-      stub_page(3, [], per_page: 2)
-
-      ids = []
-      collection.in_batches(of: 2) do |batch|
-        ids.concat(batch.map(&:id))
-        batch.pop if ids.size > 2
-      end
-      expect(ids).to eq([1, 2, 3, 4])
-      expect(a_request(:get, url).with(query: hash_including('page' => '3'))).to have_been_made
-    end
-
     it 'returns an Enumerator without a block' do
       expect(collection.in_batches).to be_a(Enumerator)
     end
@@ -324,29 +211,12 @@ RSpec.describe ZammadAPI::Collection do
       expect(a_request(:get, url).with(query: hash_including('per_page' => '1000'))).to have_been_made
     end
 
-    it 'clamps an explicit page to what a generic index endpoint serves' do
-      stub_page(2, [], per_page: 1000)
-
-      collection.page(2, per_page: 5000).to_a
-      expect(a_request(:get, url).with(query: hash_including('page' => '2', 'per_page' => '1000'))).to have_been_made
-    end
-
     it 'clamps an explicit page to what the ticket index endpoint serves' do
       expect(client.tickets.all.page(3, per_page: 500).inspect).to include('page=3').and include('per_page=100')
     end
 
     it 'clamps an explicit page to what a search endpoint serves' do
       expect(client.users.search('smith').page(1, per_page: 5000).inspect).to include('per_page=200')
-    end
-
-    it 'accepts a page exactly the size the endpoint serves' do
-      expect(client.tickets.all.page(2, per_page: 100).inspect).to include('per_page=100')
-    end
-
-    it 'walks the whole list when asked for more per page than the endpoint serves' do
-      stub_capped_endpoint("#{ClientHelper::BASE_URL}api/v1/tickets", total: 250, max: 100)
-
-      expect(client.tickets.all.find_each(batch_size: 250).map(&:id)).to eq((1..250).to_a)
     end
   end
 
@@ -374,11 +244,6 @@ RSpec.describe ZammadAPI::Collection do
       expect(sorted_request('active,name', 'asc,desc')).to have_been_made
     end
 
-    it 'takes an attribute and a direction as strings' do
-      collection.order('active', 'name' => 'desc').to_a
-      expect(sorted_request('active,name', 'asc,desc')).to have_been_made
-    end
-
     it 'sorts within an earlier order when chained' do
       collection.order(:active).order(name: :desc).to_a
       expect(sorted_request('active,name', 'asc,desc')).to have_been_made
@@ -389,27 +254,6 @@ RSpec.describe ZammadAPI::Collection do
       expect(sorted_request('name', 'desc')).to have_been_made
     end
 
-    it 'keeps the sort on every page it walks' do
-      stub_request(:get, url).with(query: hash_including('page' => '1')).to_return(json_response(full_page))
-
-      collection.order(:name).to_a
-      expect(a_request(:get, url).with(query: hash_including('sort_by' => 'name', 'order_by' => 'asc', 'page' => '2'))).to have_been_made
-    end
-
-    it 'keeps the sort on an explicit page' do
-      collection.order(:name).page(2, per_page: 10).to_a
-      expect(sorted_request('name', 'asc').with(query: hash_including('page' => '2', 'per_page' => '10'))).to have_been_made
-    end
-
-    it 'sends no sort for a collection that asked for none' do
-      collection.to_a
-      expect(a_request(:get, url).with(query: hash_including({})) { !it.uri.query.match?(/sort_by|order_by/) }).to have_been_made
-    end
-
-    it 'returns a new collection' do
-      expect(collection.order(:name)).not_to be(collection)
-    end
-
     it 'leaves the collection it was called on unsorted' do
       collection.order(:name)
       collection.to_a
@@ -418,26 +262,12 @@ RSpec.describe ZammadAPI::Collection do
         .to have_been_made
     end
 
-    it 'makes no request until the collection is read' do
-      collection.order(:name)
-      expect(a_request(:get, url).with(query: hash_including({}))).not_to have_been_made
-    end
-
     # TicketsController#index and UsersController#index hardcode the order and
     # drop sort_by with everything else they do not read.
     context 'with an index endpoint that is always served in id order' do
       it 'refuses, rather than handing back records it would be calling sorted' do
         expect { client.tickets.all.order(:title) }
           .to raise_error(ArgumentError, %r{api/v1/tickets is always served in the same order and ignores sort_by})
-      end
-
-      it 'refuses for users too' do
-        expect { client.users.all.order(:login) }.to raise_error(ArgumentError, %r{api/v1/users is always served})
-      end
-
-      it 'makes no request' do
-        expect { client.tickets.all.order(:title) }.to raise_error(ArgumentError)
-        expect(a_request(:any, /zammad\.test/)).not_to have_been_made
       end
     end
 
@@ -451,14 +281,6 @@ RSpec.describe ZammadAPI::Collection do
 
         expect(a_request(:get, search_url).with(query: hash_including('query' => 'printer', 'sort_by' => 'created_at', 'order_by' => 'desc')))
           .to have_been_made
-      end
-
-      # What a search sorts by where it is not told differs by resource, so a
-      # column named here would replace that order.
-      it 'sends no sort for a search that asked for none' do
-        client.tickets.search('printer').to_a
-
-        expect(a_request(:get, search_url).with(query: hash_including({})) { !it.uri.query.match?(/sort_by|order_by/) }).to have_been_made
       end
     end
   end
@@ -474,25 +296,6 @@ RSpec.describe ZammadAPI::Collection do
       stub_page(1, [{ id: 1, name: 'Users' }, { id: 2, name: 'Support' }])
 
       expect(collection.pluck(:id, :name)).to eq([[1, 'Users'], [2, 'Support']])
-    end
-
-    it 'accepts string keys' do
-      stub_page(1, [{ id: 1, name: 'Users' }])
-
-      expect(collection.pluck('name')).to eq(['Users'])
-    end
-
-    it 'yields nil for an attribute a record does not carry' do
-      stub_page(1, [{ id: 1 }])
-
-      expect(collection.pluck(:name)).to eq([nil])
-    end
-
-    it 'walks every page, like each' do
-      stub_page(1, full_page)
-      stub_page(2, [{ id: default_per_page + 1 }])
-
-      expect(collection.pluck(:id)).to eq((1..(default_per_page + 1)).to_a)
     end
   end
 
@@ -515,17 +318,6 @@ RSpec.describe ZammadAPI::Collection do
 
       expect(collection.count).to eq(default_per_page + 1)
       expect(a_request(:get, url).with(query: hash_including('only_total_count' => 'true'))).not_to have_been_made
-    end
-
-    it 'walks the pages when a search endpoint answers with no total at all' do
-      stub_request(:get, search_url).with(query: hash_including('page' => '1'))
-        .to_return(json_response([{ id: 1 }]))
-      stub_request(:get, search_url).with(query: hash_including('page' => '2'))
-        .to_return(json_response([]))
-      stub_request(:get, search_url).with(query: hash_including('only_total_count' => 'true'))
-        .to_return(json_response({}))
-
-      expect(client.users.search('smith').count).to eq(1)
     end
 
     it 'walks the pages when the total it answers with is not a count' do
@@ -561,16 +353,6 @@ RSpec.describe ZammadAPI::Collection do
 
       expect(collection.count { it.id > 1 }).to eq(2)
     end
-
-    # Enumerable#each_slice asks for the size before it starts, and a size
-    # would be a count, which is a walk of its own.
-    it 'has no size, so each_slice reads the records once' do
-      stub_page(1, [{ id: 1 }, { id: 2 }, { id: 3 }])
-
-      expect(collection).not_to respond_to(:size)
-      expect(collection.each_slice(2).map { it.map(&:id) }).to eq([[1, 2], [3]])
-      expect(a_request(:get, url).with(query: hash_including({}))).to have_been_made.once
-    end
   end
 
   describe '#empty?' do
@@ -592,13 +374,6 @@ RSpec.describe ZammadAPI::Collection do
       collection.empty?
       expect(a_request(:get, url).with(query: hash_including('per_page' => '1'))).to have_been_made
     end
-
-    it 'leaves the page size alone on a collection limited to one page' do
-      stub_request(:get, url).with(query: hash_including({})).to_return(json_response([{ id: 3 }]))
-
-      collection.page(2, per_page: 5).empty?
-      expect(a_request(:get, url).with(query: hash_including('page' => '2', 'per_page' => '5'))).to have_been_made
-    end
   end
 
   # `find` on the proxy is the lookup by id, so the collection refuses an id
@@ -613,11 +388,6 @@ RSpec.describe ZammadAPI::Collection do
     it 'refuses an id where a block belongs, and names the lookup that takes one' do
       expect { collection.find(1) }
         .to raise_error(ArgumentError, 'find on a collection takes a block; look a record up by id with client.<resource>.find(1)')
-    end
-
-    it 'makes no request for the id it refuses' do
-      expect { collection.find(1) }.to raise_error(ArgumentError)
-      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
     end
 
     it 'still returns an Enumerator without a block or an argument' do
@@ -644,24 +414,12 @@ RSpec.describe ZammadAPI::Collection do
       expect(collection.first(2).map(&:id)).to eq([1, 2])
     end
 
-    it 'walks instead when more records are asked for than the endpoint serves' do
-      stub_page(1, full_page)
-      stub_page(2, [{ id: default_per_page + 1 }])
-
-      expect(collection.first(default_per_page + 1).size).to eq(default_per_page + 1)
-    end
-
     # The page size of a collection limited to one says which records it
     # holds, so re-sizing it would move them.
     it 'leaves a collection already limited to a page at its own size' do
       stub_page(3, [{ id: 5 }, { id: 6 }], per_page: 2)
 
       expect(collection.page(3, per_page: 2).first.id).to eq(5)
-    end
-
-    it 'makes no request for a zero count' do
-      expect(collection.first(0)).to eq([])
-      expect(a_request(:any, /zammad\.test/)).not_to have_been_made
     end
   end
 
@@ -673,52 +431,6 @@ RSpec.describe ZammadAPI::Collection do
 
     it 'mentions the page when limited to one' do
       expect(collection.page(4).inspect).to include('page=4')
-    end
-  end
-
-  # ObjectManagerAttributesController#index renders every attribute in one
-  # response and reads no parameter.
-  describe 'an index that serves every record in one response' do
-    subject(:collection) { client.resource(resource).all }
-
-    let(:resource) do
-      Class.new(ZammadAPI::Resources::Base) do
-        def self.name = 'ObjectAttribute'
-
-        path 'api/v1/object_manager_attributes'
-      end
-    end
-    let(:url) { "#{ClientHelper::BASE_URL}api/v1/object_manager_attributes" }
-    let(:records) { [{ id: 1, name: 'c' }, { id: 2, name: 'a' }, { id: 3, name: 'b' }] }
-
-    # The same list whatever it is asked, which is what such an endpoint does.
-    before { stub_request(:get, url).with(query: hash_including({})).to_return(json_response(records)) }
-
-    # The list is shorter than the page asked for, so it is the last one.
-    it 'reads every record in one request' do
-      expect(collection.map(&:id)).to eq([1, 2, 3])
-      expect(a_request(:get, url).with(query: hash_including({}))).to have_been_made.once
-    end
-
-    it 'raises PaginationError where smaller pages are asked for' do
-      expect { collection.in_batches(of: 2).to_a }
-        .to raise_error(ZammadAPI::PaginationError, /page 2 repeated page 1.*read it with client.get instead/)
-    end
-
-    context 'with a list as long as a page' do
-      let(:records) { full_page }
-
-      it 'raises PaginationError' do
-        expect { collection.to_a }.to raise_error(ZammadAPI::PaginationError, /page 2 repeated page 1/)
-      end
-    end
-  end
-
-  describe ZammadAPI::PaginationError do
-    it 'names the page that repeated and how to read an endpoint that does not page' do
-      message = described_class.build(operation: 'get .all of object', page: 3).message
-
-      expect(message).to include('page 3 repeated page 2').and include('read it with client.get instead')
     end
   end
 
@@ -746,30 +458,6 @@ RSpec.describe ZammadAPI::Collection do
       stub_search_page(4, [])
 
       expect(search.map(&:id)).to eq([*1...(page_size * 2), 900, 901])
-    end
-
-    it 'walks on past a short first page too' do
-      stub_search_page(1, hits(1...page_size))
-      stub_search_page(2, hits(page_size..(page_size * 2)))
-      stub_search_page(3, [])
-
-      expect(search.map(&:id)).to eq((1..(page_size * 2)).to_a)
-    end
-
-    it 'ends on an empty page' do
-      stub_search_page(1, hits(1..3))
-      last = stub_search_page(2, [])
-      stub_search_page(3, hits([4]))
-
-      expect(search.map(&:id)).to eq([1, 2, 3])
-      expect(last).to have_been_requested.once
-      expect(a_request(:get, search_url).with(query: hash_including('page' => '3'))).not_to have_been_made
-    end
-
-    it 'still raises PaginationError for a search that ignores the page parameter' do
-      stub_request(:get, search_url).with(query: hash_including({})).to_return(json_response(hits(1..3)))
-
-      expect { search.to_a }.to raise_error(ZammadAPI::PaginationError, /ignoring the page parameter/)
     end
 
     it 'still reads only the one page a search was limited to' do

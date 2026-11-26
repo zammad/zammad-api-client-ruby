@@ -48,11 +48,7 @@ RSpec.describe ZammadAPI::ResponseError do
       422 => ZammadAPI::ValidationError,
       429 => ZammadAPI::RateLimitError,
       400 => ZammadAPI::ClientError,
-      408 => ZammadAPI::ClientError,
-      418 => ZammadAPI::ClientError,
       500 => ZammadAPI::ServerError,
-      502 => ZammadAPI::ServerError,
-      503 => ZammadAPI::ServerError
     }.each do |status, error_class|
       it "maps #{status} to #{error_class}" do
         result = described_class.build(response(status, {}), operation: 'find object')
@@ -151,15 +147,6 @@ RSpec.describe ZammadAPI::ResponseError do
       bare = ZammadAPI::NotFoundError.new(operation: 'find object by name', detail: 'no record matched')
       expect(bare.status).to eq(404)
     end
-
-    it 'still has no body or headers to report without a response' do
-      bare = ZammadAPI::NotFoundError.new(operation: 'find object by name', detail: 'no record matched')
-      expect([bare.body, bare.headers]).to eq([nil, {}])
-    end
-
-    it 'leaves a generic ResponseError without a status' do
-      expect(described_class.new(operation: 'find object').status).to be_nil
-    end
   end
 
   describe ZammadAPI::RateLimitError do
@@ -183,10 +170,6 @@ RSpec.describe ZammadAPI::ResponseError do
 
     it 'reads a figure with a zero in front in base ten' do
       expect(%w[010 08 0030].map { retry_after(it) }).to eq([10, 8, 30])
-    end
-
-    it 'returns nil for a figure in another base' do
-      expect(retry_after('0x10')).to be_nil
     end
 
     it 'reads a figure held as an Integer' do

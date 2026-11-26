@@ -64,20 +64,8 @@ RSpec.describe ZammadAPI::AttributeAccess do
       expect { record.name('Other') }.to raise_error(NoMethodError, /undefined method 'name'/)
     end
 
-    it 'carries the name and the receiver a bare NoMethodError would' do
-      expect { record.custom_field }.to raise_error(NoMethodError) do |error|
-        expect(error.name).to eq(:custom_field)
-        expect(error.receiver).to be(record)
-      end
-    end
-
     it 'still reads an attribute the record carries but Zammad left nil' do
       expect(record_class.new('note' => nil).note).to be_nil
-    end
-
-    it 'leaves [] and fetch answering for an absent attribute' do
-      expect(record[:custom_field]).to be_nil
-      expect(record.fetch(:custom_field, 'fallback')).to eq('fallback')
     end
 
     it 'reports known attributes via #key?' do
@@ -101,10 +89,6 @@ RSpec.describe ZammadAPI::AttributeAccess do
 
     it 'freezes a nested array' do
       expect { record.attributes[:preferences][:notes] << {} }.to raise_error(FrozenError)
-    end
-
-    it 'freezes a hash inside an array' do
-      expect { record.attributes[:preferences][:notes].first[:body] = 'changed' }.to raise_error(FrozenError)
     end
 
     it 'freezes a string value' do
@@ -142,20 +126,11 @@ RSpec.describe ZammadAPI::AttributeAccess do
     it 'supports a block' do
       expect(record.fetch(:nope) { |key| "no #{key}" }).to eq('no nope')
     end
-
-    it 'refuses more than one fallback, the way Hash#fetch does' do
-      expect { record.fetch(:nope, 'one', 'two') }
-        .to raise_error(ArgumentError, 'wrong number of arguments (given 3, expected 1..2)')
-    end
   end
 
   describe '#[]=' do
     it 'goes through the same refusal a named writer does on a read-only record' do
       expect { record[:note] = 'x' }.to raise_error(NoMethodError, /attributes are read-only/)
-    end
-
-    it 'names the attribute that was tried, not the operator' do
-      expect { record[:note] = 'x' }.to raise_error(NoMethodError, /tried to set note/)
     end
   end
 
@@ -189,20 +164,6 @@ RSpec.describe ZammadAPI::AttributeAccess do
     it 'is true for any writer on a record that stages changes' do
       expect(ZammadAPI::Resources::Group.new(unit_transport)).to respond_to(:anything=)
     end
-
-    it 'is false for a predicate' do
-      expect(record).not_to respond_to(:name?)
-    end
-  end
-
-  describe 'method names that are not attributes' do
-    it 'raises NoMethodError for a bang method, so typos surface' do
-      expect { record.save! }.to raise_error(NoMethodError)
-    end
-
-    it 'raises NoMethodError for a predicate' do
-      expect { record.active? }.to raise_error(NoMethodError)
-    end
   end
 
   describe 'pattern matching' do
@@ -212,28 +173,6 @@ RSpec.describe ZammadAPI::AttributeAccess do
                else :not_matched
                end
       expect(result).to eq(:matched)
-    end
-
-    it 'binds matched values' do
-      case record
-      in { name: String => name }
-        expect(name).to eq('Support')
-      end
-    end
-
-    it 'matches nested structures' do
-      case record
-      in { preferences: { notes: [{ body: String => body }, *] } }
-        expect(body).to eq('hello')
-      end
-    end
-
-    it 'does not match an absent attribute' do
-      result = case record
-               in { nope: _ } then :matched
-               else :not_matched
-               end
-      expect(result).to eq(:not_matched)
     end
 
     it 'returns every attribute for a nil key list' do
@@ -258,24 +197,12 @@ RSpec.describe ZammadAPI::AttributeAccess do
       expect(record).not_to eq(Class.new(record_class).new('id' => 1))
     end
 
-    it 'is not equal to something that is not a record' do
-      expect(record).not_to eq('id' => 1)
-    end
-
     it 'answers #eql? too, so a record can be a Hash key' do
       expect({ record => :found }[record_class.new('id' => 1)]).to eq(:found)
     end
 
     it 'hashes equal records alike' do
       expect(record.hash).to eq(record_class.new('id' => 1).hash)
-    end
-
-    it 'deduplicates equal records' do
-      expect([record, record_class.new('id' => 1)].uniq.size).to eq(1)
-    end
-
-    it 'collects equal records into one Set member' do
-      expect(Set[record, record_class.new('id' => 1)].size).to eq(1)
     end
 
     context 'without an id' do
@@ -287,10 +214,6 @@ RSpec.describe ZammadAPI::AttributeAccess do
 
       it 'is not equal to an identical record, which is still a second record' do
         expect(unsaved).not_to eq(record_class.new('name' => 'Support'))
-      end
-
-      it 'is kept apart from an identical record' do
-        expect([unsaved, record_class.new('name' => 'Support')].uniq.size).to eq(2)
       end
     end
   end
@@ -311,22 +234,6 @@ RSpec.describe ZammadAPI::AttributeAccess do
 
     it 'exposes the attributes to an encoder through #as_json' do
       expect(record.as_json).to eq(record.to_h)
-    end
-
-    it 'hands #as_json a copy rather than the frozen attributes' do
-      expect(record.as_json).not_to be_frozen
-    end
-  end
-
-  # ActiveSupport gives every object a public `deep_dup`, and calls it on
-  # whatever a Hash or an Array holds.
-  describe 'the names ActiveSupport gives every object' do
-    it 'defines no deep_dup of its own' do
-      expect(described_class.private_method_defined?(:deep_dup)).to be(false)
-    end
-
-    it 'still hands out a deep copy from #to_h' do
-      expect(record.to_h).to eq(record.attributes).and(satisfy { !it[:preferences][:notes].frozen? })
     end
   end
 

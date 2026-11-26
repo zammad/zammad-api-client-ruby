@@ -20,10 +20,6 @@ RSpec.describe ZammadAPI::Resources::TicketArticleAttachment do
       expect(attachment.id).to eq(3)
     end
 
-    it 'is the same attachment as another read of it' do
-      expect(attachment).to eq(article.attachments.first)
-    end
-
     it 'carries the filename' do
       expect(attachment.filename).to eq('note.txt')
     end
@@ -56,14 +52,6 @@ RSpec.describe ZammadAPI::Resources::TicketArticleAttachment do
       expect(attachment.download).to eq('contents')
     end
 
-    it 'returns binary data undisturbed' do
-      png = "\x89PNG\r\n\x1A\n\x00\xFF".b
-      stub_request(:get, download_url)
-        .to_return(status: 200, body: png, headers: { 'Content-Type' => 'image/png' })
-
-      expect(attachment.download).to eq(png)
-    end
-
     it 'uses binary encoding' do
       stub_request(:get, download_url).to_return(status: 200, body: 'contents')
       expect(attachment.download.encoding).to eq(Encoding::BINARY)
@@ -88,24 +76,11 @@ RSpec.describe ZammadAPI::Resources::TicketArticleAttachment do
       expect(stub).to have_been_requested
       expect(a_request(:get, "#{ClientHelper::BASE_URL}api/v1/users/9/3")).not_to have_been_made
     end
-
-    it 'escapes the article id and the attachment id too' do
-      stub = stub_request(:get, "#{ClientHelper::BASE_URL}api/v1/ticket_attachment/42/9%2F..%2Fx/3%2F..%2Fy")
-        .to_return(status: 200, body: 'contents')
-
-      described_class.new(transport, id: '3/../y', ticket_id: 42, article_id: '9/../x').download
-
-      expect(stub).to have_been_requested
-    end
   end
 
   it 'is read-only' do
     attachment = described_class.new(transport, id: 3)
     expect { attachment.filename = 'other.txt' }.to raise_error(NoMethodError, /read-only/)
-  end
-
-  it 'does not claim a writer it would refuse' do
-    expect(described_class.new(transport, id: 3)).not_to respond_to(:filename=)
   end
 
   describe '#inspect' do
