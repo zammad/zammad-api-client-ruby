@@ -7,7 +7,6 @@ module ZammadAPI
     attr_reader raw_body: String
 
     def self.new: (status: Integer, headers: Hash[String, String], body: untyped, raw_body: String) -> instance
-    SUCCESS_STATUSES: Range[Integer]
 
     def self.decode_body: (String?, String) -> untyped
 

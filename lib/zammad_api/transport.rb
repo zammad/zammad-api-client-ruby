@@ -28,9 +28,6 @@ module ZammadAPI
     # name, as Zammad's own log filter does, so +monkey_id+ is hidden too.
     SENSITIVE_KEY_PATTERN = /passw|pwd|bind_pw|passphrase|secret|token|credential|cookie|authorization|key|otp|salt/i
 
-    # What the log shows in place of a sensitive value.
-    REDACTED = '[REDACTED]'
-
     # A path that opens with a scheme, which Faraday would send to that host.
     ABSOLUTE_URL = /\A[a-z][a-z0-9+.-]*:/i
     private_constant :ABSOLUTE_URL
@@ -83,7 +80,7 @@ module ZammadAPI
     # @return [Object]
     def self.redact(value)
       case value
-      when Hash  then value.to_h { |key, nested| [key, SENSITIVE_KEY_PATTERN.match?(key.to_s) ? REDACTED : redact(nested)] }
+      when Hash  then value.to_h { |key, nested| [key, SENSITIVE_KEY_PATTERN.match?(key.to_s) ? Config::REDACTION : redact(nested)] }
       when Array then value.map { redact(it) }
       else value
       end

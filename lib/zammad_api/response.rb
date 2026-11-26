@@ -20,10 +20,8 @@ module ZammadAPI
   Response = Data.define(:status, :headers, :body, :raw_body)
 
   class Response
-    SUCCESS_STATUSES = (200..299)
-
     # @return [Boolean] whether the status code is in the 2xx range
-    def success? = SUCCESS_STATUSES.cover?(status)
+    def success? = status.between?(200, 299)
 
     # Decodes a JSON body with symbol keys. Anything else - a proxy error page,
     # a file download, a body that does not parse - is handed back as it is.

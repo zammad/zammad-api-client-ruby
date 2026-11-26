@@ -78,7 +78,7 @@ module ZammadAPI
     # Value of the +User-Agent+ header unless one is configured.
     DEFAULT_USER_AGENT = "zammad_api-ruby/#{ZammadAPI::VERSION}".freeze
 
-    # What {#inspect} prints in place of a credential.
+    # What {#inspect} and the log show in place of a credential.
     REDACTION = '[REDACTED]'
 
     # The options of each way to authenticate.

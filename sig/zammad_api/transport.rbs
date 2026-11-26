@@ -12,7 +12,6 @@ module ZammadAPI
     RETRIABLE_STATUSES: Array[Integer]
     RETRIABLE_EXCEPTIONS: Array[untyped]
     SENSITIVE_KEY_PATTERN: Regexp
-    REDACTED: String
     # private_constant in the source; RBS has no way to say so.
     ABSOLUTE_URL: Regexp
 
