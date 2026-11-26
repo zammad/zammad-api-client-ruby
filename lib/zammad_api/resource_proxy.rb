@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'forwardable'
-
 module ZammadAPI
   # Entry point for working with one kind of Zammad record.
   #
@@ -28,7 +26,6 @@ module ZammadAPI
   # block form.
   class ResourceProxy
     include Enumerable
-    extend Forwardable
 
     # @return [Class] the resource class this proxy operates on
     attr_reader :resource_class
@@ -136,9 +133,38 @@ module ZammadAPI
     # @return [Collection]
     def all = Collection.new(@transport, resource_class)
 
-    # @!group Collection shorthands
-    # These forward to {#all}; see {Collection} for each.
-    def_delegators :all, :order, :each, :find_each, :in_batches, :page, :pluck, :count, :empty?, :first
+    # @!group Collection shorthands, each forwarded to {#all}
+
+    # A forward hands on a block or a count that may be nil, which is what picks
+    # the overload on the collection, and Steep cannot follow that through.
+
+    # (see Collection#order)
+    def order(*attributes, **directions) = all.order(*attributes, **directions)
+
+    # (see Collection#each)
+    def each(&block) = all.each(&block) # steep:ignore BlockTypeMismatch
+
+    # (see Collection#find_each)
+    def find_each(batch_size: nil, &block) = all.find_each(batch_size: batch_size, &block) # steep:ignore BlockTypeMismatch
+
+    # (see Collection#in_batches)
+    def in_batches(of: nil, &block) = all.in_batches(of: of, &block) # steep:ignore BlockTypeMismatch
+
+    # (see Collection#page)
+    def page(number, per_page: nil) = all.page(number, per_page: per_page)
+
+    # (see Collection#pluck)
+    def pluck(*keys) = all.pluck(*keys)
+
+    # (see Collection#count)
+    def count(...) = all.count(...)
+
+    # (see Collection#empty?)
+    def empty? = all.empty?
+
+    # (see Collection#first)
+    def first(count = nil) = all.first(count) # steep:ignore ArgumentTypeMismatch
+
     # @!endgroup
 
     # Records matching a Zammad search term, as a lazily paginated collection.

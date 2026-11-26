@@ -4,12 +4,10 @@ target :lib do
   signature 'sig'
   check 'lib'
 
-  # forwardable is here for the collection shorthands ResourceProxy delegates
-  # to Collection; uri is here for the parse Config makes of the instance url
-  # and the escaping of record ids. Neither is named in the signatures the
-  # gem publishes - see sig/vendor/internal.rbs - so this does not add
-  # anything a consumer has to load.
-  library 'json', 'logger', 'timeout', 'forwardable', 'uri'
+  # uri is here for the parse Config makes of the instance url and the
+  # escaping of record ids. The signatures the gem publishes do not name it,
+  # so this does not add anything a consumer has to load.
+  library 'json', 'logger', 'timeout', 'uri'
 
   configure_code_diagnostics do |hash|
     # Default keyword-argument hashes such as `attributes = {}` cannot be
@@ -24,17 +22,12 @@ end
 #
 # sig/vendor is in here, although a consumer does not have it, because Steep
 # hands a signature file to every target of a project whatever the target's
-# own pattern says. Listing only the published directories left this target
-# with sig/vendor/internal.rbs all the same and without the library it names,
-# so its signatures failed to load and Steep then skips the source files of
-# such a target without a word: the check passed having checked nothing. That
-# the published signatures stand on their own is what `rake rbs_published`
-# establishes.
+# own pattern says. That the published signatures stand on their own is what
+# `rake rbs_published` establishes.
 target :usage do
   signature 'sig', 'spec/typed/sig'
   check 'spec/typed'
 
-  # logger is the one library the published signatures name; forwardable is
-  # here for sig/vendor/internal.rbs.
-  library 'logger', 'forwardable'
+  # logger is the one library the published signatures name.
+  library 'logger'
 end
