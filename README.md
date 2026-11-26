@@ -620,9 +620,9 @@ client's credentials only go to the instance it was configured for.
 Modelled: tickets, ticket articles and their attachments, ticket states and priorities,
 users, organizations and groups, the same set as 1.x.
 
-Not modelled yet: text modules; ticket tags, links, mentions, time accounting, checklists,
-shared drafts, merge and history; the knowledge base; global search; CSV imports. Declare
-a resource or use raw requests for those, and
+Not modelled yet: roles; text modules; ticket tags, links, mentions, time accounting,
+checklists, shared drafts, merge and history; the knowledge base; global search; CSV
+imports. Declare a resource or use raw requests for those, and
 [open an issue](https://github.com/zammad/zammad-api-client-ruby/issues/new) for the one
 you need, so we know what to model first.
 
