@@ -626,6 +626,9 @@ a resource or use raw requests for those, and
 [open an issue](https://github.com/zammad/zammad-api-client-ruby/issues/new) for the one
 you need, so we know what to model first.
 
+The [features roadmap](ROADMAP.md) shows what is in progress for 2.0, beside 1.x and the
+PHP client.
+
 ## Adapter and middleware
 
 The client is built on Faraday. `adapter:` picks the Faraday adapter, and `middleware:`
