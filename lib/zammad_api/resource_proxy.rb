@@ -2,10 +2,6 @@
 
 require 'forwardable'
 
-require_relative 'collection'
-require_relative 'errors'
-require_relative 'transport'
-
 module ZammadAPI
   # Entry point for working with one kind of Zammad record.
   #

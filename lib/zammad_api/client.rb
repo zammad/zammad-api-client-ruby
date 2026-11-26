@@ -1,11 +1,5 @@
 # frozen_string_literal: true
 
-require_relative 'config'
-require_relative 'errors'
-require_relative 'resource_proxy'
-require_relative 'resources'
-require_relative 'transport'
-
 module ZammadAPI
   # The entry point of this gem.
   #

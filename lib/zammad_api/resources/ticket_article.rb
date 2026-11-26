@@ -1,8 +1,5 @@
 # frozen_string_literal: true
 
-require_relative 'base'
-require_relative 'ticket_article_attachment'
-
 module ZammadAPI
   module Resources
     class TicketArticle < Base

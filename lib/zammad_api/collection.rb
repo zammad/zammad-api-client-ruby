@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative 'errors'
-
 module ZammadAPI
   # A lazily fetched, automatically paginated list of records.
   #

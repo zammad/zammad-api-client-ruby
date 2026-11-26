@@ -2,8 +2,6 @@
 
 require 'json'
 
-require_relative 'deep_copy'
-
 module ZammadAPI
   # Read access to a Zammad record's attributes.
   #

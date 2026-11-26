@@ -1,10 +1,5 @@
 # frozen_string_literal: true
 
-require_relative '../attribute_access'
-require_relative '../deep_copy'
-require_relative '../errors'
-require_relative '../transport'
-
 module ZammadAPI
   module Resources
     # Shared behaviour for every Zammad record.

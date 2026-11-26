@@ -4,9 +4,6 @@ require 'faraday'
 require 'faraday/retry'
 require 'uri'
 
-require_relative 'errors'
-require_relative 'response'
-
 module ZammadAPI
   # Performs the HTTP requests against a Zammad instance.
   #

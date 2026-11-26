@@ -2,8 +2,6 @@
 
 require 'json'
 
-require_relative 'errors'
-
 module ZammadAPI
   # A decoded HTTP response.
   #

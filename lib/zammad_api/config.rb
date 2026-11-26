@@ -3,9 +3,6 @@
 require 'logger'
 require 'uri'
 
-require_relative 'errors'
-require_relative 'version'
-
 module ZammadAPI
   # Immutable, validated client configuration.
   #
