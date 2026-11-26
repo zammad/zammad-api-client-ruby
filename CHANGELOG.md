@@ -261,3 +261,11 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - Updated package dependencies and tests.
 
 [upgrading]: https://github.com/zammad/zammad-api-client-ruby/blob/master/UPGRADING.md
+[2.0.0.alpha1]: https://github.com/zammad/zammad-api-client-ruby/compare/v1.4.0...v2.0.0.alpha1
+[1.4.0]: https://github.com/zammad/zammad-api-client-ruby/compare/v1.3.1...v1.4.0
+[1.3.1]: https://github.com/zammad/zammad-api-client-ruby/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/zammad/zammad-api-client-ruby/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/zammad/zammad-api-client-ruby/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/zammad/zammad-api-client-ruby/compare/v1.0.8...v1.1.0
+[1.0.8]: https://github.com/zammad/zammad-api-client-ruby/compare/v1.0.7...v1.0.8
+[1.0.7]: https://github.com/zammad/zammad-api-client-ruby/compare/v1.0.6...v1.0.7
