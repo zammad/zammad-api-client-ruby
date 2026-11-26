@@ -64,7 +64,7 @@ end
 
 The sections below cover [creating a client](#creating-a-client),
 [records](#working-with-records), [collections](#collections) and
-[error handling](#error-handling). Runnable scripts live in [`examples/`](examples/README.md).
+[error handling](#error-handling).
 
 ## Creating a client
 
@@ -682,10 +682,64 @@ A resource of your own needs an annotation:
 roles = client.resource(Role) #: ZammadAPI::ResourceProxy[Role]
 ```
 
-## Examples
+## Recipes
 
-Runnable scripts covering pagination, pattern matching, acting on behalf of a user,
-attachments, error handling and threaded use live in [`examples/`](examples/README.md).
+### Resuming a long read
+
+Keep the page number yourself when a job has to survive being interrupted. Save it once a
+page is handled, so a rerun repeats at most one page:
+
+```ruby
+page = File.exist?('cursor') ? Integer(File.read('cursor')) : 1
+
+loop do
+  tickets = client.tickets.page(page, per_page: 50).to_a
+  break if tickets.empty?
+
+  import(tickets)
+
+  page += 1
+  File.write('cursor', page)
+end
+```
+
+A page number is a position, so this suits a list that only grows: tickets are served in
+id order, and new ones arrive at the end.
+
+`in_batches` without a block is an Enumerator, for pulling one page at a time as a
+consumer is ready: `pages = client.tickets.in_batches(of: 50)`, then `pages.next`.
+
+### Sharing one client between threads
+
+A client is immutable, so one instance serves every thread, and an `on_behalf_of` scope in
+one thread cannot leak into another. In Rails, build it once in an initializer:
+
+```ruby
+# config/initializers/zammad.rb
+ZAMMAD = ZammadAPI::Client.new(
+  url:        Rails.application.credentials.zammad_url,
+  http_token: Rails.application.credentials.zammad_token,
+  logger:     Rails.logger
+)
+```
+
+A worker pool shares it the same way:
+
+```ruby
+queue = Queue.new
+client.tickets.first(40).each { queue << it.id }
+queue.close
+
+workers = Array.new(4) do
+  Thread.new do
+    while (id = queue.pop)
+      sync(client.tickets.find(id))
+    end
+  end
+end
+
+workers.each(&:join)
+```
 
 ## Development
 
