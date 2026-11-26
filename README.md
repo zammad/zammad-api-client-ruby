@@ -19,7 +19,6 @@
 >
 > - Which 1.x calls in **your** code the [migration table](#migrating-from-1x) does not cover.
 > - Endpoints you reach with [raw requests](#raw-requests) that should be modelled resources.
-> - Anything the [test kit](#testing-code-that-uses-this-client) cannot stand in for.
 > - Naming that made you look twice, and defaults you had to override every time.
 >
 > Rough notes are welcome — a half-formed "this felt off" is worth more to us now than a
@@ -39,8 +38,6 @@ Ruby client for the Zammad API v1.0.
 - **Your own resources** — `client.resource(Role)` gives a class you declare everything a
   modelled one has — and **raw requests** reach the rest of the API, without giving up
   authentication, retries or the error classes.
-- A **test kit** (`zammad_api/test`) stands in for a Zammad, so your own tests need no
-  HTTP interception.
 
 > **Upgrading from 1.x?** See [Migrating from 1.x](#migrating-from-1x), which lists every
 > call that changed.
@@ -943,79 +940,6 @@ Requests, response statuses and durations are logged at `debug` level. Payload k
 parameters and headers that look like credentials (`password`, `token`, `secret`, `cookie`,
 ...) are redacted, and a path is logged without its query string. A body that is not a
 Hash or an Array, such as a JSON String, is not logged, only its size.
-
-## Testing code that uses this client
-
-`zammad_api/test` ships a stand-in Zammad, so your own tests need no HTTP interception:
-
-```ruby
-require 'zammad_api/test'
-
-RSpec.describe TicketCloser do
-  let(:zammad) { ZammadAPI::Test.new }
-
-  it 'closes the ticket' do
-    zammad.stub(:get, 'api/v1/tickets/1', body: {id: 1, title: 'Help', state: 'open'})
-    zammad.stub(:put, 'api/v1/tickets/1', body: {id: 1, state: 'closed'})
-
-    described_class.new(zammad.client).close(1)
-
-    expect(zammad.requests.last.verb).to eq(:put)
-    expect(zammad.requests.last.body).to eq({state: 'closed'})
-  end
-end
-```
-
-`zammad.client` is a real `ZammadAPI::Client` with the stand-in as its Faraday adapter, so
-requests and responses go through the same encoding, decoding, error mapping and record
-building as real ones — a stub with `status: 404`
-raises `NotFoundError`, and one with `status: 422` makes `save` return `false`.
-
-| Method | What it does |
-| ------ | ------------ |
-| `stub(verb, path, status:, body:, headers:, query:)` | Declares a response. `query:` matches a subset of the request's parameters, so it need not repeat `expand`, `page` or `per_page`. |
-| `client` | A client wired to this stand-in. |
-| `requests` | Every request made, oldest first, as `verb` / `path` / `query` / `body` / `headers` / `on_behalf_of`. |
-| `stubbed` | One `"GET api/v1/groups"` per stubbed endpoint. |
-| `reset` | Forgets the stubs and the recorded requests. |
-
-A `Hash` or `Array` body is served as JSON and gets `content-type: application/json`
-unless `headers:` says otherwise, and it is that header that decides whether the body
-comes back decoded, as it does on the wire. A recorded request's `query` has its keys and
-values as text, and its `headers` are every header sent, with downcased names; an
-`on_behalf_of` scope has a field of its own as well.
-
-Stubbing the same endpoint again queues a second response. A request is answered by the
-first stub whose `query:` it matches, and that stub is used up unless it is the last one
-that matches, so the last answers every later request:
-
-```ruby
-zammad.stub(:get, 'api/v1/groups', body: [{id: 1, name: 'Users'}])
-zammad.stub(:get, 'api/v1/groups', body: [{id: 1, name: 'Users'}, {id: 2, name: 'Sales'}])
-
-client.groups.all.count # => 1
-client.groups.all.count # => 2
-```
-
-One stub is enough for a list. It answers the first page as written, and a request for a
-later page with an empty list, unless its `query:` names a `page`:
-
-```ruby
-zammad.stub(:get, 'api/v1/groups', body: [{id: 1, name: 'Users'}, {id: 2, name: 'Sales'}])
-
-client.groups.all.map(&:name) # => ["Users", "Sales"]
-
-zammad.stub(:get, 'api/v1/tickets', body: first_hundred, query: {page: 1})
-zammad.stub(:get, 'api/v1/tickets', body: [{id: 101}], query: {page: 2})
-```
-
-The stand-in's client does not retry unless you pass `retries:`: a stubbed 429 or 5xx
-raises at once, where a client talking to Zammad would ask again.
-
-A request that was not stubbed raises `ZammadAPI::Test::UnstubbedRequestError`, listing
-what is stubbed, rather than answering with something empty. It is deliberately not a
-`ZammadAPI::Error`: a forgotten stub means the test is wrong, not that Zammad refused
-something, so a `rescue ZammadAPI::Error` in the code under test lets it through.
 
 ## Type signatures
 
