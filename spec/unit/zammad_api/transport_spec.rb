@@ -626,48 +626,6 @@ RSpec.describe ZammadAPI::Transport do
     end
   end
 
-  describe '.on_behalf_of_header' do
-    it 'hands back a login as it is' do
-      expect(described_class.on_behalf_of_header('agent@example.com')).to eq('agent@example.com')
-    end
-
-    it 'takes a user id given as an Integer' do
-      expect(described_class.on_behalf_of_header(7)).to eq('7')
-    end
-
-    it 'takes a login given as a Symbol' do
-      expect(described_class.on_behalf_of_header(:agent)).to eq('agent')
-    end
-
-    it 'strips the whitespace around an identifier' do
-      expect(described_class.on_behalf_of_header(" agent@example.com\n")).to eq('agent@example.com')
-    end
-
-    # Zammad reads an empty From header as none, so every request would run
-    # as the authenticated account.
-    [nil, '', '  '].each do |blank|
-      it "refuses #{blank.inspect}" do
-        expect { described_class.on_behalf_of_header(blank) }
-          .to raise_error(ArgumentError, "on_behalf_of needs the login, email address or id of a user, got #{blank.inspect}")
-      end
-    end
-
-    it 'hands back a frozen copy, which a later change to the String it was given does not reach' do
-      login  = +'agent@example.com'
-      header = described_class.on_behalf_of_header(login)
-      login.replace('admin@example.com')
-
-      expect(header).to eq('agent@example.com').and be_frozen
-    end
-
-    it 'leaves the String it was given writable' do
-      login = +'agent@example.com'
-      described_class.on_behalf_of_header(login)
-
-      expect(login).not_to be_frozen
-    end
-  end
-
   describe '#with_on_behalf_of' do
     it 'sends the From header' do
       stub = stub_request(:get, url).with(headers: { 'From' => 'agent@example.com' }).to_return(json_response([]))

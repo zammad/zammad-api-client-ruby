@@ -26,7 +26,6 @@ module ZammadAPI
 
     @connection: untyped
 
-    def self.on_behalf_of_header: (untyped identifier) -> String
     def self.escape_path_segment: (untyped) -> String
     def self.relative_path: (untyped) -> String
     def self.redact_path: (untyped path) -> String

@@ -61,21 +61,6 @@ module ZammadAPI
     #   +From+ header
     attr_reader :on_behalf_of
 
-    # The value of a +From+ header for {Client#on_behalf_of}.
-    #
-    # A blank identifier is refused: Zammad reads an empty +From+ header as
-    # none, so every request would quietly run as the authenticated account.
-    #
-    # @param identifier [String, Integer] login, email address or user id
-    # @return [String] frozen
-    # @raise [ArgumentError] for an identifier that is nil or blank
-    def self.on_behalf_of_header(identifier)
-      text = identifier.to_s.strip
-      raise ArgumentError, "on_behalf_of needs the login, email address or id of a user, got #{identifier.inspect}" if text.empty?
-
-      text.freeze
-    end
-
     # A record id as a path segment, percent-encoded.
     #
     # @param value [Integer, String]
@@ -124,7 +109,7 @@ module ZammadAPI
     end
 
     # @param config [Config]
-    # @param on_behalf_of [String, nil] see {.on_behalf_of_header}
+    # @param on_behalf_of [String, nil] see {Client#on_behalf_of}
     # @raise [ConfigurationError] when the connection cannot be built
     def initialize(config, on_behalf_of: nil)
       @config       = config
@@ -132,7 +117,7 @@ module ZammadAPI
       @connection   = build_connection
     end
 
-    # @param identifier [String, nil] see {.on_behalf_of_header}
+    # @param identifier [String, nil] see {Client#on_behalf_of}
     # @return [Transport] a copy that performs requests for that user
     def with_on_behalf_of(identifier)
       copy = dup

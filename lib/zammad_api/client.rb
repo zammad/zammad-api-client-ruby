@@ -258,7 +258,10 @@ module ZammadAPI
     # @raise [ArgumentError] for an identifier that is nil or blank, which
     #   would quietly leave the requests unscoped
     def on_behalf_of(identifier)
-      scoped = dup.send(:setup, config, @transport.with_on_behalf_of(Transport.on_behalf_of_header(identifier)))
+      from = identifier.to_s.strip
+      raise ArgumentError, "on_behalf_of needs the login, email address or id of a user, got #{identifier.inspect}" if from.empty?
+
+      scoped = dup.send(:setup, config, @transport.with_on_behalf_of(from.freeze))
       return scoped if !block_given?
 
       yield scoped
