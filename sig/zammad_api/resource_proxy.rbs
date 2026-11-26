@@ -1,0 +1,42 @@
+module ZammadAPI
+  # Generic over the resource it is the entry point for: `client.tickets` is a
+  # ResourceProxy[Resources::Ticket], so `find` answers with a Ticket and a
+  # block over it is handed one.
+  class ResourceProxy[R < Resources::Base]
+    include Enumerable[R]
+
+    attr_reader resource_class: untyped
+
+    @transport: Transport
+
+    def initialize: (Transport, untyped resource_class) -> void
+    def new: (?hash[untyped, untyped] attributes) -> R
+    def create: (?hash[untyped, untyped] attributes) -> R
+    def find: (Integer | String id) -> R
+    def find_by: (**untyped) -> R?
+    def find_by!: (**untyped) -> R
+    def exists?: (Integer | String id) -> bool
+    def destroy: (Integer | String id) -> true
+    def all: () -> Collection[R]
+    def order: (*(Symbol | String) attributes, **(Symbol | String) directions) -> Collection[R]
+
+    def each: () { (R) -> void } -> Collection[R]
+            | () -> Enumerator[R, Collection[R]]
+    def find_each: (?batch_size: Integer?) { (R) -> void } -> Collection[R]
+                 | (?batch_size: Integer?) -> Enumerator[R, Collection[R]]
+    def in_batches: (?of: Integer?) { (Array[R]) -> void } -> Collection[R]
+                  | (?of: Integer?) -> Enumerator[Array[R], Collection[R]]
+    def page: (Integer number, ?per_page: Integer?) -> Collection[R]
+    def pluck: (*(Symbol | String) keys) -> Array[untyped]
+    def count: (*untyped) ?{ (R) -> boolish } -> Integer
+    def empty?: () -> bool
+    def first: () -> R?
+             | (Integer count) -> Array[R]
+    def search: (String term, **untyped filters) -> Collection[R]
+    def inspect: () -> String
+
+    private
+
+    def find_by_id: (Hash[Symbol, untyped] params) -> R?
+  end
+end

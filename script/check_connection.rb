@@ -1,0 +1,355 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# End-to-end check that this gem can actually drive a live Zammad instance.
+#
+# Deliberately standalone: it does not load the spec suite, so it still
+# reports usefully when the specs themselves are what is broken. CI runs it
+# after booting Zammad and before the integration specs, so a broken
+# gem-to-Zammad link fails fast with a readable transcript.
+#
+#   TEST_URL=https://zammad.example/ \
+#   TEST_USER=admin@example.com \
+#   TEST_PASSWORD=test \
+#     bundle exec ruby script/check_connection.rb
+
+$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
+
+require 'zammad_api'
+require 'faraday'
+require 'json'
+require 'securerandom'
+require_relative 'live_target'
+
+# No default for the URL. This script creates and deletes records, and
+# `http://localhost:3000/` is where a Zammad under development listens.
+URL = LiveTarget.url || abort(LiveTarget.unset_message('This script'))
+
+LOGIN    = ENV['TEST_USER']     || 'admin@example.com'
+PASSWORD = ENV['TEST_PASSWORD'] || 'test'
+SUFFIX   = SecureRandom.hex(4)
+
+@failures = []
+@group    = nil
+@ticket   = nil
+
+# Runs one named check, printing its result and recording any failure.
+def check(name)
+  detail = yield
+  puts format('  ok    %<name>-42s %<detail>s', name: name, detail: detail)
+  true
+rescue => e
+  @failures << name
+  puts format('  FAIL  %<name>-42s %<error>s: %<message>s', name: name, error: e.class, message: e.message)
+  false
+end
+
+# A check whose failure makes every later check meaningless, so the run stops
+# rather than burying the cause under cascading NoMethodErrors.
+def check!(name, &block)
+  return if check(name, &block)
+
+  puts "\nAborting: '#{name}' is a precondition for the remaining checks."
+  finish
+end
+
+def section(title)
+  puts "\n#{title}"
+end
+
+def parse_json(body)
+  JSON.parse(body)
+rescue JSON::ParserError
+  {}
+end
+
+def cleanup
+  return if @group.nil? && @ticket.nil?
+
+  section 'Cleanup'
+  check('destroy the ticket') { CLIENT.tickets.destroy(@ticket.id) } if @ticket
+  check('destroy the group')  { CLIENT.groups.destroy(@group.id) }   if @group
+end
+
+def finish
+  cleanup
+  puts
+  if @failures.empty?
+    puts 'All checks passed.'
+    exit 0
+  end
+
+  puts "#{@failures.size} check(s) failed:"
+  @failures.each { puts "  - #{it}" }
+  exit 1
+end
+
+puts "Checking #{URL} with zammad_api #{ZammadAPI::VERSION} on Ruby #{RUBY_VERSION}"
+
+section 'Instance setup'
+
+# The auto wizard creates the admin account. An instance that is already
+# configured reports failure here, which is fine as long as it is set up.
+check!('auto wizard or already configured') do
+  wizard = parse_json(Faraday.new(url: URL).get('api/v1/getting_started/auto_wizard').body)
+  next 'auto wizard ran' if wizard['auto_wizard_success']
+
+  # A configured Zammad requires authentication even for
+  # /api/v1/getting_started, so the setup state cannot be read from there.
+  # An authenticated request answers the only question that matters.
+  ZammadAPI::Client.new(url: URL, user: LOGIN, password: PASSWORD, retries: 0)
+    .groups.all.page(1, per_page: 1).to_a
+  'already set up'
+end
+
+CLIENT = ZammadAPI::Client.new(url: URL, user: LOGIN, password: PASSWORD, timeout: 30)
+
+section 'Client'
+
+check('credentials are redacted') do
+  raise 'password leaked into inspect output' if CLIENT.config.inspect.include?(PASSWORD)
+
+  'password absent from inspect output'
+end
+
+check('derived client re-validates options') do
+  CLIENT.with(timeout: 45)
+  CLIENT.with(url: 'zammad.example.com')
+  raise 'expected ConfigurationError'
+rescue ZammadAPI::ConfigurationError
+  'invalid option rejected'
+end
+
+section 'Records'
+
+check!('create a group') do
+  @group = CLIENT.groups.create(name: "smoke-#{SUFFIX}", note: 'created by check_connection.rb')
+  raise 'no id assigned' if @group.id.nil?
+
+  "id=#{@group.id}"
+end
+
+check('find it back') do
+  found = CLIENT.groups.find(@group.id)
+  raise "name mismatch: #{found.name}" if found.name != "smoke-#{SUFFIX}"
+
+  found.name
+end
+
+# Each of these reads back what Zammad holds and compares it: printing a
+# value checks nothing.
+check('update only the changed attribute') do
+  @group.note = 'updated'
+  raise 'change not staged' if !@group.changed?
+  raise "staged more than the note: #{@group.changes.keys.inspect}" if @group.changes.keys != [:note]
+
+  @group.save
+  found = CLIENT.groups.find(@group.id)
+  raise "note was not saved: #{found.note.inspect}" if found.note != 'updated'
+  raise "name changed with it: #{found.name.inspect}" if found.name != "smoke-#{SUFFIX}"
+
+  found.note
+end
+
+check('reload discards local changes') do
+  @group.note = 'not saved'
+  note = @group.reload.note
+  raise "the staged value is still there: #{note.inspect}" if note != 'updated'
+  raise 'the record still reports a change' if @group.changed?
+
+  note
+end
+
+check('pattern match a record') do
+  case CLIENT.groups.find(@group.id)
+  in { name: String => name, active: true } then name
+  else raise 'record did not match the expected pattern'
+  end
+end
+
+section 'Collections'
+
+check('iterate every group across pages') do
+  names = CLIENT.groups.all.map(&:name)
+  raise 'created group missing from .all' if !names.include?("smoke-#{SUFFIX}")
+
+  "#{names.size} groups"
+end
+
+check('fetch a single page') { "#{CLIENT.groups.all.page(1, per_page: 1).to_a.size} record" }
+
+check('lazy enumeration stops early') { CLIENT.groups.all.lazy.map(&:id).first(1).inspect }
+
+check('page by page') do
+  pages = 0
+  CLIENT.groups.all.in_batches(of: 1) { pages += 1 }
+  "#{pages} page(s)"
+end
+
+# The account this runs as is the one record a search is sure to have, and
+# a search that answers with nothing does not raise.
+check('search') do
+  hits = CLIENT.users.search(LOGIN).to_a
+  raise "no hit is #{LOGIN}, among #{hits.size}" if hits.none? { [it.login, it.email].include?(LOGIN) }
+
+  "#{hits.size} hit(s)"
+end
+
+check('find_by returns a record that matches') do
+  found = CLIENT.groups.find_by(name: "smoke-#{SUFFIX}")
+  raise 'no record found' if found.nil?
+  raise "found the wrong record: #{found.name}" if found.name != "smoke-#{SUFFIX}"
+
+  "id=#{found.id}"
+end
+
+# Two string attributes, of which find_by searches for one. Joined into a
+# single term they match no column on an instance that searches through SQL
+# LIKE rather than Elasticsearch, and a stubbed unit spec cannot see that.
+check('find_by matches on two string attributes') do
+  group = CLIENT.groups.find(@group.id)
+  found = CLIENT.groups.find_by(name: group.name, note: group.note)
+  raise 'no record found' if found.nil?
+  raise "found the wrong record: #{found.name}" if found.id != group.id
+
+  "id=#{found.id}"
+end
+
+check('find_by returns nil for no match') do
+  found = CLIENT.groups.find_by(name: "no-such-group-#{SUFFIX}")
+  raise "expected nil, got #{found.inspect}" if !found.nil?
+
+  'nil'
+end
+
+check('find_by! raises for no match') do
+  CLIENT.groups.find_by!(name: "no-such-group-#{SUFFIX}")
+  raise 'expected NotFoundError'
+rescue ZammadAPI::NotFoundError
+  'raised'
+end
+
+check('exists?') do
+  raise 'the created group is missing' if !CLIENT.groups.exists?(@group.id)
+  raise 'a made-up id exists' if CLIENT.groups.exists?(0)
+
+  'true and false'
+end
+
+check('pluck') do
+  names = CLIENT.groups.all.pluck(:name)
+  raise 'created group missing' if !names.include?("smoke-#{SUFFIX}")
+
+  "#{names.size} names"
+end
+
+check('empty? on a search with no hits') do
+  raise 'expected empty' if !CLIENT.groups.search("no-such-group-#{SUFFIX}").empty?
+
+  'true'
+end
+
+check('order sorts an index endpoint that sorts') do
+  "#{CLIENT.groups.order(name: :desc).page(1, per_page: 2).to_a.size} record(s)"
+end
+
+check('order refuses an index served in a fixed order') do
+  CLIENT.tickets.order(:title).to_a
+  raise 'expected ArgumentError'
+rescue ArgumentError => e
+  e.message.split('.').first
+end
+
+check('order sorts a search') do
+  "#{CLIENT.groups.search("smoke-#{SUFFIX}").order(:name, id: :desc).to_a.size} hit(s)"
+end
+
+section 'Tickets'
+
+check!('create a ticket with its first article') do
+  @ticket = CLIENT.tickets.create(
+    title:    "smoke ticket #{SUFFIX}",
+    group:    'Users',
+    customer: LOGIN,
+    article:  { subject: 'smoke', body: 'created by check_connection.rb', type: 'note' }
+  )
+  "number=#{@ticket.number}"
+end
+
+check('read its articles') { "#{@ticket.articles.size} article(s)" }
+
+check('add another article') do
+  CLIENT.tickets.find(@ticket.id).add_article(subject: 'second', body: 'another one', type: 'note').id
+end
+
+check('article count grew') do
+  count = @ticket.articles.size
+  raise "expected 2 articles, got #{count}" if count != 2
+
+  count
+end
+
+check('attachment metadata and download') do
+  CLIENT.tickets.find(@ticket.id).add_article(
+    subject:     'with attachment',
+    body:        'see attachment',
+    type:        'note',
+    attachments: [{ filename: 'smoke.txt', data: ['smoke test 123'].pack('m0'), 'mime-type': 'text/plain' }]
+  )
+  attachment = @ticket.articles.last.attachments.first
+  raise 'no attachment returned' if attachment.nil?
+
+  # Once: each call is a full attachment fetch, and this transcript is meant to
+  # be a fast read of a freshly booted Zammad.
+  contents = attachment.download
+  raise "unexpected content: #{contents.inspect}" if contents != 'smoke test 123'
+
+  "#{attachment.filename} (#{contents.bytesize} bytes)"
+end
+
+section 'On behalf of another user'
+
+# Acting for the account the client is signed in as reads the same with the
+# header or without it. Zammad answers 403 for a From that names nobody, so
+# that is the answer which says the header arrived.
+check('sends the From header') do
+  number = CLIENT.on_behalf_of(LOGIN) { |scoped| scoped.tickets.find(@ticket.id).number }
+  raise "read ticket #{number}, not #{@ticket.number}" if number != @ticket.number
+
+  begin
+    CLIENT.on_behalf_of("nobody-#{SUFFIX}@example.com") { |scoped| scoped.tickets.find(@ticket.id) }
+  rescue ZammadAPI::AuthorizationError => e
+    next "number=#{number}, and status=#{e.status} for a user that does not exist"
+  end
+  raise 'a From header naming no user was accepted, so none was sent'
+end
+
+check('block form leaves the outer client unscoped') do
+  CLIENT.on_behalf_of(LOGIN) { |scoped| scoped.groups.find(@group.id) }
+  CLIENT.groups.find(@group.id).name
+end
+
+section 'Errors'
+
+check('missing record raises NotFoundError') do
+  CLIENT.groups.find(0)
+  raise 'expected NotFoundError'
+rescue ZammadAPI::NotFoundError => e
+  "status=#{e.status}"
+end
+
+check('invalid attributes raise a ClientError') do
+  CLIENT.groups.create({})
+  raise 'expected a ClientError'
+rescue ZammadAPI::ClientError => e
+  "status=#{e.status}"
+end
+
+check('bad credentials raise AuthenticationError') do
+  ZammadAPI::Client.new(url: URL, user: 'nobody', password: 'wrong', retries: 0).groups.find(1)
+  raise 'expected AuthenticationError'
+rescue ZammadAPI::AuthenticationError => e
+  "status=#{e.status}"
+end
+
+finish

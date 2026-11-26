@@ -1,3 +1,6 @@
+# frozen_string_literal: true
+
 module ZammadAPI
-  VERSION = '1.4.0'.freeze
+  # The version of this gem. {Client#version} is the Zammad instance's.
+  VERSION = '2.0.0.alpha1'
 end

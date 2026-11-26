@@ -1,0 +1,69 @@
+module ZammadAPI
+  # Built with Data.define; the generated readers are declared explicitly.
+  #
+  # `middleware` is a block handed a Faraday::Connection, but it is declared
+  # untyped here: these signatures ship with the gem, while the Faraday
+  # declarations they would need live in sig/vendor, which does not. Naming
+  # Faraday here fails `rbs validate` for every consumer.
+  class Config < ::Data
+    DEFAULT_TIMEOUT: Integer
+    DEFAULT_OPEN_TIMEOUT: Integer
+    DEFAULT_RETRIES: Integer
+    DEFAULT_RETRY_INTERVAL: Float
+    REDACTION: String
+    DEFAULT_USER_AGENT: String
+    CREDENTIAL_OPTIONS: Hash[Symbol, Array[Symbol]]
+
+    def self.new: (**untyped) -> instance
+    def self.merge_options: (Hash[Symbol, untyped] options, Hash[Symbol, untyped] overrides) -> Hash[Symbol, untyped]
+
+    attr_reader url: String
+    attr_reader user: String?
+    attr_reader password: String?
+    attr_reader http_token: String?
+    attr_reader oauth2_token: String?
+    attr_reader user_agent: String
+    attr_reader timeout: Numeric
+    attr_reader open_timeout: Numeric
+    attr_reader retries: Integer
+    attr_reader retry_interval: Numeric
+    attr_reader ssl_verify: bool
+    attr_reader proxy: String?
+    attr_reader adapter: Symbol?
+    attr_reader middleware: untyped
+    attr_reader logger: Logger
+
+    def initialize: (
+      url: untyped,
+      ?user: String?,
+      ?password: String?,
+      ?http_token: String?,
+      ?oauth2_token: String?,
+      ?user_agent: String?,
+      ?timeout: untyped,
+      ?open_timeout: untyped,
+      ?retries: untyped,
+      ?retry_interval: untyped,
+      ?ssl_verify: bool,
+      ?proxy: String?,
+      ?adapter: (Symbol | String)?,
+      ?middleware: untyped,
+      ?logger: Logger?
+    ) -> void
+
+    def authentication_scheme: () -> Symbol
+    def with: (**untyped) -> Config
+    def inspect: () -> String
+    def to_s: () -> String
+    def pretty_print: (untyped printer) -> void
+    def to_h: () -> Hash[Symbol, untyped]
+
+    private
+
+    def render: (Symbol, untyped) -> String
+    def normalize_url: (untyped) -> String
+    def validate_credentials!: () -> void
+    def present: (untyped) -> untyped
+    def stripped: (untyped) -> String?
+  end
+end

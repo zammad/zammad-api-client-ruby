@@ -1,0 +1,66 @@
+module ZammadAPI
+  module Resources
+    class Base
+      include AttributeAccess
+
+      DEFAULT_MAX_PER_PAGE: Integer
+
+      attr_reader error: ValidationError?
+
+      # What Zammad stamps every record with. These four are columns of every
+      # table, and the two names beside them are what `expand` adds: the login
+      # of each user. A record that was built with `new` and not saved yet
+      # carries none of them, and reading one then raises NoMethodError - the
+      # types here, and on every resource, describe a record Zammad served.
+      attr_reader created_by_id: Integer
+      attr_reader updated_by_id: Integer
+      attr_reader created_at: String
+      attr_reader updated_at: String
+      attr_reader created_by: String
+      attr_reader updated_by: String
+
+      @new_record: bool
+      @destroyed: bool
+      @error: ValidationError?
+      @baseline: Hash[Symbol, untyped]
+
+      def self.path: (String) -> void
+      def self.searchable: (bool) -> void
+      def self.max_per_page: (Integer) -> void
+      def self.sortable: (bool) -> void
+      def self.resource_path: () -> String
+      def self.searchable?: () -> bool
+      def self.page_limit: () -> Integer
+      def self.sortable?: () -> bool
+      def self.member_path: ((Integer | String) id) -> String
+      def self.from_response: (Transport, Hash[untyped, untyped] attributes) -> Base
+
+      def initialize: (Transport, ?hash[untyped, untyped]? attributes) -> void
+      def new_record?: () -> bool
+      def persisted?: () -> bool
+      def destroyed?: () -> bool
+      def changes: () -> Hash[Symbol, Array[untyped]]
+      def changed?: () -> bool
+      def assign_attributes: (hash[untyped, untyped] attributes) -> self
+      def save: () -> bool
+      def save!: () -> true
+      def update: (hash[untyped, untyped] attributes) -> bool
+      def update!: (hash[untyped, untyped] attributes) -> true
+      def reload: () -> self
+      def destroy: () -> true
+      def inspect: () -> String
+
+      private
+
+      attr_reader transport: Transport
+
+      def mark_persisted!: () -> void
+      def load_response!: (Response response, String operation) -> void
+      def raise_if_new!: (String operation) -> void
+      def writable_attributes?: () -> bool
+      def write_attribute: (Symbol, untyped) -> untyped
+      def member_path: () -> String
+      def require_id!: () -> Integer
+    end
+  end
+end

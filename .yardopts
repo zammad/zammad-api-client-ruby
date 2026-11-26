@@ -1,0 +1,11 @@
+--markup markdown
+--readme README.md
+--output-dir doc
+--no-private
+--query '@api.text != "private"'
+--protected
+lib/**/*.rb
+-
+UPGRADING.md
+CHANGELOG.md
+LICENSE.md

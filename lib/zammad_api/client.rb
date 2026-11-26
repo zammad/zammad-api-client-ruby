@@ -1,65 +1,281 @@
-require 'forwardable'
-
-require 'zammad_api/log'
-require 'zammad_api/transport'
-require 'zammad_api/dispatcher'
-require 'zammad_api/resources'
+# frozen_string_literal: true
 
 module ZammadAPI
+  # The entry point of this gem.
+  #
+  # @example Token authentication
+  #   client = ZammadAPI::Client.new(
+  #     url:        'https://zammad.example.com/',
+  #     http_token: 'your-access-token'
+  #   )
+  #   client.tickets.find(1).title
+  #
+  # @example Basic authentication with a custom timeout and logger
+  #   client = ZammadAPI::Client.new(
+  #     url:      'https://zammad.example.com/',
+  #     user:     'user@example.com',
+  #     password: 'secret',
+  #     timeout:  10,
+  #     logger:   Logger.new($stdout)
+  #   )
   class Client
-    extend Forwardable
+    # Maps the reader methods of this client to their resource classes.
+    RESOURCES = {
+      groups:            Resources::Group,
+      organizations:     Resources::Organization,
+      tickets:           Resources::Ticket,
+      ticket_articles:   Resources::TicketArticle,
+      ticket_priorities: Resources::TicketPriority,
+      ticket_states:     Resources::TicketState,
+      users:             Resources::User
+    }.freeze
 
-    def_delegators :@transport, :on_behalf_of, :on_behalf_of=
-
-    def initialize(config)
-      @config    = config
-      @logger    = ZammadAPI::Log.new(@config)
-      @transport = ZammadAPI::Transport.new(@config, @logger)
-      check_config
+    # @!method groups
+    #   @return [ResourceProxy] proxy for {Resources::Group}
+    # @!method organizations
+    #   @return [ResourceProxy] proxy for {Resources::Organization}
+    # @!method tickets
+    #   @return [ResourceProxy] proxy for {Resources::Ticket}
+    # @!method ticket_articles
+    #   @return [ResourceProxy] proxy for {Resources::TicketArticle}
+    # @!method ticket_priorities
+    #   @return [ResourceProxy] proxy for {Resources::TicketPriority}
+    # @!method ticket_states
+    #   @return [ResourceProxy] proxy for {Resources::TicketState}
+    # @!method users
+    #   @return [ResourceProxy] proxy for {Resources::User}
+    RESOURCES.each do |name, resource_class|
+      define_method(name) { @resources.fetch(resource_class) }
     end
 
-    def perform_on_behalf_of(identifier)
-      self.on_behalf_of = identifier
-      yield.tap do |_|
-        self.on_behalf_of = nil
+    # Environment variables {.from_env} reads, mapped to the options they set.
+    ENV_OPTIONS = {
+      'ZAMMAD_URL'          => :url,
+      'ZAMMAD_TOKEN'        => :http_token,
+      'ZAMMAD_OAUTH2_TOKEN' => :oauth2_token,
+      'ZAMMAD_USER'         => :user,
+      'ZAMMAD_PASSWORD'     => :password
+    }.freeze
+
+    # Builds a client from the environment.
+    #
+    # Reads {ENV_OPTIONS}; a variable that is empty or blank counts as unset.
+    # Anything passed in wins over the environment, and credentials passed in
+    # replace the ones the environment holds.
+    #
+    # @example
+    #   ZAMMAD_URL=https://zammad.example.com/ ZAMMAD_TOKEN=secret ruby report.rb
+    #
+    #   client = ZammadAPI::Client.from_env
+    #   client = ZammadAPI::Client.from_env(timeout: 300) # for one bulk job
+    #
+    # @param overrides [Hash] any option accepted by {Config}
+    # @return [Client]
+    # @raise [ConfigurationError] when neither the environment nor +overrides+
+    #   supply a URL and credentials
+    def self.from_env(**overrides)
+      from_environment = ENV_OPTIONS.filter_map do |name, option|
+        value = ENV.fetch(name, nil)
+        [option, value] if !value.to_s.strip.empty?
       end
+      options = Config.merge_options(from_environment.to_h, overrides)
+
+      raise ConfigurationError, "missing url: set ZAMMAD_URL or pass url: to #{name}.from_env" if options[:url].to_s.empty?
+
+      new(**options)
     end
 
-    def method_missing(method, *_args)
-      method     = modulize(method.to_s)
-      class_name = "ZammadAPI::Resources::#{method}"
-      begin
-        class_object = Kernel.const_get(class_name)
-      rescue
-        raise ResourceNotFoundError, "Resource for #{method} does not exist"
-      end
-      ZammadAPI::Dispatcher.new(@transport, class_object)
+    # @param options [Hash] see {Config} for every supported option
+    # @option options [String] :url base URL of the Zammad instance
+    # @option options [String] :http_token access token
+    # @option options [String] :oauth2_token OAuth2 token
+    # @option options [String] :user login for basic authentication
+    # @option options [String] :password password for basic authentication
+    # @param transport [Transport, nil] the transport of the client this one
+    #   is derived from, in place of options. For {#with} and {#on_behalf_of}.
+    # @raise [ConfigurationError] when the options are incomplete or invalid,
+    #   or name more than one way to authenticate
+    def initialize(transport: nil, **options)
+      @transport = transport || Transport.new(Config.new(**options))
+      @resources = RESOURCES.values.to_h { [it, ResourceProxy.new(@transport, it)] }.freeze
     end
+
+    # @return [Config] the validated configuration, with credentials redacted
+    #   from its +inspect+ output
+    def config = @transport.config
+
+    # The proxy for a resource, by name or by class. A class is the way to
+    # the parts of the API this gem does not model.
+    #
+    # @example A resource this gem does not model
+    #   class Role < ZammadAPI::Resources::Base
+    #     path 'api/v1/roles'
+    #   end
+    #
+    #   client.resource(Role).each { |role| puts role.name }
+    #
+    # @param name [Symbol, String, Class] a key of {RESOURCES}, or a subclass
+    #   of {Resources::Base}
+    # @return [ResourceProxy]
+    # @raise [UnknownResourceError] when no resource has that name
+    def resource(name)
+      return @resources.fetch(name) { ResourceProxy.new(@transport, name) } if name.is_a?(Class)
+
+      resource_class = RESOURCES.fetch(name.to_sym) { raise UnknownResourceError, unknown_resource_message(name) }
+
+      @resources.fetch(resource_class)
+    end
+
+    # @return [Array<Symbol>] every resource name this client supports
+    def resource_names = RESOURCES.keys
+
+    # The user these requests authenticate as, or the one {#on_behalf_of}
+    # scoped them to.
+    #
+    # @example Checking which account a token belongs to
+    #   client.me.email # => "agent@example.com"
+    #
+    # @return [Resources::User]
+    # @raise [AuthenticationError] when the credentials are not valid
+    def me = users.find('me')
+
+    # The version of the Zammad instance, not of this gem — that is
+    # {ZammadAPI::VERSION}. Zammad serves it to administrators only.
+    #
+    # @example
+    #   client.version # => "6.4.0"
+    #
+    # @return [String, nil] nil when the instance reported no version
+    # @raise [AuthorizationError] when the account is not an administrator
+    def version
+      response = @transport.get('api/v1/version', operation: 'get the Zammad version')
+      response.decoded(:object, operation: 'get the Zammad version')[:version]&.to_s
+    end
+
+    # @!group Raw requests
+
+    # Performs a +GET+ against any endpoint of the Zammad API, with the
+    # client's authentication, retries, JSON decoding and error classes.
+    #
+    # @example An endpoint this gem does not model
+    #   client.get('api/v1/roles').body
+    #   # => [{id: 1, name: "Admin", ...}, ...]
+    #
+    # @example An endpoint that needs a header of its own
+    #   client.get('api/v1/tickets/1', headers: {'Accept-Language' => 'de-de'})
+    #
+    # @param path [String] path relative to {Config#url}; a leading slash is
+    #   ignored, and an absolute URL is refused, so the client's credentials
+    #   only ever go to the instance it was configured for
+    # @param query [Hash, nil] query string parameters
+    # @param headers [Hash, nil] request headers
+    # @return [Response]
+    # @raise [ResponseError] for any non-2xx response
+    # @raise [TransportError] when the request could not be completed
+    # @raise [ArgumentError] for a path that is an absolute URL
+    def get(path, query: nil, headers: nil) = raw(:get, path, query: query, headers: headers)
+
+    # Performs a +POST+ against any endpoint of the Zammad API.
+    #
+    # @example
+    #   client.post('api/v1/tags/add', query: {object: 'Ticket', o_id: 1, item: 'urgent'})
+    #
+    # @param path [String] path relative to {Config#url}
+    # @param query [Hash, nil] query string parameters
+    # @param body [Hash, Array, String, nil] request payload; a Hash or Array is
+    #   encoded as JSON, a String is sent as it is
+    # @param headers [Hash, nil] request headers
+    # @return [Response]
+    # @raise [ResponseError] for any non-2xx response
+    # @see #get
+    def post(path, query: nil, body: nil, headers: nil) = raw(:post, path, query: query, body: body, headers: headers)
+
+    # Performs a +PUT+ against any endpoint of the Zammad API.
+    #
+    # @param path [String] path relative to {Config#url}
+    # @param query [Hash, nil] query string parameters
+    # @param body [Hash, Array, String, nil] request payload; a Hash or Array is
+    #   encoded as JSON, a String is sent as it is
+    # @param headers [Hash, nil] request headers
+    # @return [Response]
+    # @raise [ResponseError] for any non-2xx response
+    # @see #get
+    def put(path, query: nil, body: nil, headers: nil) = raw(:put, path, query: query, body: body, headers: headers)
+
+    # Performs a +DELETE+ against any endpoint of the Zammad API.
+    #
+    # @param path [String] path relative to {Config#url}
+    # @param query [Hash, nil] query string parameters
+    # @param headers [Hash, nil] request headers
+    # @return [Response]
+    # @raise [ResponseError] for any non-2xx response
+    # @see #get
+    def delete(path, query: nil, headers: nil) = raw(:delete, path, query: query, headers: headers)
+
+    # @!endgroup
+
+    # Returns a new client with some configuration options changed.
+    #
+    # The options are re-validated, and any {#on_behalf_of} scope is carried
+    # over. Naming credentials replaces the ones this client has.
+    #
+    # @example A longer timeout for one bulk job
+    #   bulk = client.with(timeout: 300, retries: 5)
+    #
+    # @param options [Hash] any option accepted by {Config}
+    # @return [Client]
+    # @raise [ConfigurationError] when the resulting options are invalid
+    def with(**options)
+      self.class.new(transport: @transport.with_config(config.with(**options)))
+    end
+
+    # Performs requests on behalf of another user, through a new client.
+    #
+    # @example Scoped client
+    #   support = client.on_behalf_of('agent@example.com')
+    #   support.tickets.create(title: 'Help', group: 'Users', customer_id: 1)
+    #
+    # @example Block form
+    #   client.on_behalf_of('agent@example.com') do |scoped|
+    #     scoped.tickets.find(1)
+    #   end
+    #
+    # @param identifier [String, Integer] login, email address or user id
+    # @yieldparam scoped [Client]
+    # @return [Client] when no block is given, otherwise the block's value
+    # @raise [ArgumentError] for an identifier that is nil or blank, which
+    #   would quietly leave the requests unscoped
+    def on_behalf_of(identifier)
+      from = identifier.to_s.strip
+      raise ArgumentError, "on_behalf_of needs the login, email address or id of a user, got #{identifier.inspect}" if from.empty?
+
+      scoped = self.class.new(transport: @transport.with_on_behalf_of(from.freeze))
+      return scoped if !block_given?
+
+      yield scoped
+    end
+
+    def inspect
+      scope = @transport.on_behalf_of
+
+      "#<#{self.class.name} url=#{config.url.inspect} auth=#{config.authentication_scheme}#{" on_behalf_of=#{scope.inspect}" if scope}>"
+    end
+
+    def method_missing(name, *args)
+      return super if name.to_s.end_with?('=', '!', '?')
+
+      raise UnknownResourceError, unknown_resource_message(name)
+    end
+
+    def respond_to_missing?(_name, _include_private = false) = false
 
     private
 
-    def check_config
-      raise ConfigurationError, 'missing url in config' if !@config[:url]
-      raise ConfigurationError, 'config url needs to start with http:// or https://' if !%r{^(http|https)://}.match?(@config[:url])
-
-      # check for token auth
-      return if @config[:http_token] && !@config[:http_token].empty?
-      return if @config[:oauth2_token] && !@config[:oauth2_token].empty?
-
-      if !@config[:user] || @config[:user].empty?
-        raise ConfigurationError, 'missing user in config'
-      end
-
-      return if @config[:password] && !@config[:password].empty?
-
-      raise ConfigurationError, 'missing password in config'
+    def raw(method, path, query: nil, body: nil, headers: nil)
+      operation = "#{method.to_s.upcase} #{Transport.redact_path(path)}"
+      @transport.request(method, path, operation: operation, query: query, body: body, headers: headers)
     end
 
-    def modulize(string)
-      string.gsub(/__(.?)/) { "::#{$1.upcase}" }
-        .gsub(%r{/(.?)}) { "::#{$1.upcase}" }
-        .gsub(/(?:_+|-+)([a-z])/) { $1.upcase }
-        .gsub(/(\A|\s)([a-z])/) { $1 + $2.upcase }
-    end
+    def unknown_resource_message(name) = "Unknown resource #{name}, available resources are: #{RESOURCES.keys.join(', ')}"
   end
 end

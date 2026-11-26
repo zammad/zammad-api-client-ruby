@@ -1,62 +1,176 @@
-require 'json'
+# frozen_string_literal: true
 
 module ZammadAPI
-  class Error < RuntimeError; end
+  # Base class for every error raised by this gem.
+  #
+  # Rescuing +ZammadAPI::Error+ catches all of them.
+  class Error < StandardError
+    # Formats the "<operation> (<ResourceClass>)" fragment shared by error
+    # messages, so every error reads the same way.
+    #
+    # @api private
+    # @param operation [String]
+    # @param resource_class [Class, nil]
+    # @return [String]
+    def self.subject_for(operation, resource_class)
+      resource_class ? "#{operation} (#{resource_class.name})" : operation
+    end
+  end
 
+  # Raised when {Config} cannot be built from the supplied options.
   class ConfigurationError < Error; end
 
-  class ResourceNotFoundError < Error; end
+  # Raised when a resource name is requested that this client does not know
+  # about, e.g. +client.unicorn+.
+  class UnknownResourceError < Error; end
 
+  # Base class for failures that prevented a request from completing.
+  class TransportError < Error; end
+
+  # Raised when the connection to the Zammad instance could not be
+  # established: DNS, a refused connection, a TLS failure, or no connection
+  # within {Config#open_timeout}.
+  class ConnectionError < TransportError; end
+
+  # Raised when a response took longer than {Config#timeout}.
+  class TimeoutError < TransportError; end
+
+  # Raised when a response did not have the shape the caller expected.
+  class ParseError < Error
+    # @param operation [String]
+    # @param expected [Symbol, String] +:object+ or +:array+
+    # @param actual [Class, String] what was decoded instead
+    # @param resource_class [Class, nil]
+    # @return [ParseError]
+    def self.build(operation:, expected:, actual:, resource_class: nil)
+      new("Can't #{subject_for(operation, resource_class)}: expected a JSON #{expected}, got #{actual}")
+    end
+  end
+
+  # Raised when an endpoint answers a page request with the same records as
+  # the page before it. It is ignoring +page+ then, and a walk would never end.
+  class PaginationError < Error
+    # @param operation [String]
+    # @param page [Integer] the page that repeated its predecessor
+    # @param resource_class [Class, nil]
+    # @return [PaginationError]
+    def self.build(operation:, page:, resource_class: nil)
+      new(
+        "Can't #{subject_for(operation, resource_class)}: page #{page} repeated page #{page - 1}, so the endpoint is " \
+        'ignoring the page parameter. If it serves every record in one response, read it with client.get instead.'
+      )
+    end
+  end
+
+  # Base class for errors carrying an HTTP response.
+  #
+  # Use {.build} rather than +new+ to get the most specific subclass for a
+  # given status code.
   class ResponseError < Error
-    attr_reader :response, :operation, :resource_class
+    # @return [Response, nil] the decoded HTTP response
+    attr_reader :response
 
-    def initialize(operation:, response:, resource_class: nil)
+    # @return [String] human readable description of what was attempted
+    attr_reader :operation
+
+    # @return [Class, nil] the resource class involved, when applicable
+    attr_reader :resource_class
+
+    # Returns the most specific error class for +response+ and instantiates it.
+    #
+    # @param response [Response]
+    # @param operation [String]
+    # @param resource_class [Class, nil]
+    # @return [ResponseError]
+    def self.build(response, operation:, resource_class: nil)
+      error_class = STATUS_ERRORS.fetch(response.status) { response.status >= 500 ? ServerError : ClientError }
+
+      error_class.new(response: response, operation: operation, resource_class: resource_class)
+    end
+
+    # @param operation [String] what was attempted
+    # @param response [Response, nil]
+    # @param resource_class [Class, nil]
+    # @param detail [String, nil] replaces the part of the message that would
+    #   otherwise describe the response, for a failure that has none
+    def initialize(operation:, response: nil, resource_class: nil, detail: nil)
       @operation      = operation
       @response       = response
       @resource_class = resource_class
-      super(default_message)
+      @detail         = detail
+      super(build_message)
     end
 
+    # The status of the response, or, for an error raised without one such as
+    # {ResourceProxy#find_by!} finding nothing, the status its class stands for.
+    #
+    # @return [Integer, nil] HTTP status code
     def status
-      response&.status
+      response&.status || STATUS_ERRORS.key(self.class)
     end
 
+    # @return [Hash, String, nil] parsed JSON body, or the raw body for
+    #   non-JSON responses
     def body
       response&.body
     end
 
-    def self.from(response, **kwargs)
-      klass = if response.nil?
-                self
-              elsif response.status >= 500
-                ServerError
-              else
-                ClientError
-              end
-      klass.new(response: response, **kwargs)
+    # @return [Hash] response headers, empty when there is no response
+    def headers
+      response&.headers || {}
+    end
+
+    # @return [String, nil] the error message reported by Zammad, if any
+    def server_message
+      return nil if !body.is_a?(Hash)
+
+      value = body[:error_human] || body[:error]
+      value.to_s.empty? ? nil : value.to_s
     end
 
     private
 
-    def default_message
-      subject = resource_class ? "#{operation} (#{resource_class.name})" : operation
-      "Can't #{subject}: #{detail}"
+    def build_message
+      "Can't #{Error.subject_for(operation, resource_class)}: #{detail}"
     end
 
     def detail
-      body_error || "HTTP #{status}"
-    end
-
-    def body_error
-      return nil if body.to_s.strip.empty?
-
-      parsed = JSON.parse(body)
-      parsed.is_a?(Hash) ? parsed['error'] : nil
-    rescue JSON::ParserError
-      nil
+      @detail || server_message || (status ? "HTTP #{status}" : 'no response')
     end
   end
 
+  # Any 4xx response that has no more specific subclass.
   class ClientError < ResponseError; end
+
+  # Any 5xx response.
   class ServerError < ResponseError; end
+
+  # 401 - credentials missing, wrong, or expired.
+  class AuthenticationError < ClientError; end
+
+  # 403 - authenticated, but not permitted to perform the operation.
+  class AuthorizationError < ClientError; end
+
+  # 404 - the requested record does not exist.
+  class NotFoundError < ClientError; end
+
+  # 422 - Zammad rejected the submitted attributes.
+  class ValidationError < ClientError; end
+
+  # 429 - too many requests.
+  class RateLimitError < ClientError
+    # @return [Integer, nil] value of the +Retry-After+ response header, in seconds
+    def retry_after = Integer(headers['retry-after'].to_s, 10, exception: false)
+  end
+
+  class ResponseError
+    STATUS_ERRORS = {
+      401 => AuthenticationError,
+      403 => AuthorizationError,
+      404 => NotFoundError,
+      422 => ValidationError,
+      429 => RateLimitError
+    }.freeze
+    private_constant :STATUS_ERRORS
+  end
 end

@@ -1,0 +1,47 @@
+module ZammadAPI
+  # The Faraday connection and responses are untyped here rather than named:
+  # these signatures ship with the gem and the Faraday declarations they would
+  # need live in sig/vendor, which does not. See sig/zammad_api/config.rbs.
+  class Transport
+    def get: (String path, operation: String, **untyped options) -> Response
+    def post: (String path, operation: String, **untyped options) -> Response
+    def put: (String path, operation: String, **untyped options) -> Response
+    def delete: (String path, operation: String, **untyped options) -> Response
+
+    RETRIABLE_METHODS: Array[Symbol]
+    RETRIABLE_STATUSES: Array[Integer]
+    RETRIABLE_EXCEPTIONS: Array[untyped]
+    SENSITIVE_KEY_PATTERN: Regexp
+    # private_constant in the source; RBS has no way to say so.
+    ABSOLUTE_URL: Regexp
+
+    attr_reader config: Config
+    attr_reader on_behalf_of: String?
+
+    @connection: untyped
+
+    def self.escape_path_segment: (untyped) -> String
+    def self.relative_path: (untyped) -> String
+    def self.redact_path: (untyped path) -> String
+    def self.redact: (untyped value) -> untyped
+
+    def initialize: (Config, ?on_behalf_of: String?) -> void
+    def with_on_behalf_of: (String? identifier) -> Transport
+    def with_config: (Config) -> Transport
+    def inspect: () -> String
+
+    def request: (Symbol method, String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?, ?resource_class: Class?) -> Response
+
+    private
+
+    def perform: (Symbol, String, Hash[Symbol, untyped]?, untyped, Hash[untyped, untyped]?) -> untyped
+    def build_connection: () -> untyped
+    def retry_options: () -> Hash[Symbol, untyped]
+    def apply_authentication: (untyped) -> void
+    def decode: (untyped) -> Response
+    def log_request: (Symbol, String, Hash[Symbol, untyped]?, untyped, Hash[untyped, untyped]?) -> void
+    def log_response: (Symbol, String, Response, Float) -> void
+    def loggable_body: (untyped body) -> String
+    def logger: () -> Logger
+  end
+end
