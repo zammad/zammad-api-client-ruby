@@ -8,17 +8,12 @@ Gem::Specification.new do |spec|
   spec.authors  = ['Martin Edenhofer', 'Martin Gruner', 'Mantas Masalskis']
   spec.email    = ['support@zammad.org']
 
-  # Two versions meet in these lines, and only one of them is this gem's: 2.0
-  # is the client, and v1.0 is the API that Zammad serves under /api/v1.
-  #
-  # A prerelease says so where the gem is listed, and stops saying so by itself
-  # once VERSION no longer carries a prerelease segment.
-  prerelease = Gem::Version.new(ZammadAPI::VERSION).prerelease?
-
-  spec.summary     = "Version 2.0 of the Ruby client for the Zammad API#{' (prerelease)' if prerelease}."
-  spec.description = 'Version 2.0 of the Ruby client for the Zammad API v1.0, the one a Zammad serves under ' \
-                     '/api/v1. It is a breaking release: UPGRADING.md lists every call that changed since 1.x.'
-  spec.description += " This is a prerelease, #{ZammadAPI::VERSION}: install it with --pre." if prerelease
+  # v1.0 is the version of the API, the one a Zammad serves under /api/v1, and
+  # not of this gem.
+  spec.summary     = 'Ruby client for the Zammad API v1.0.'
+  spec.description = 'Tickets, articles, users, organizations and groups of a Zammad instance as records to ' \
+                     'find, create, update and destroy, with collections that paginate themselves, timeouts, ' \
+                     'retries and an error class per kind of failure.'
   spec.homepage    = 'https://github.com/zammad/zammad-api-client-ruby'
   spec.licenses    = ['AGPL-3.0-only', 'MIT']
 
