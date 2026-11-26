@@ -116,6 +116,6 @@ module ZammadAPI
       raise NoMethodError, "#{self.class.name} attributes are read-only (tried to set #{key})"
     end
 
-    def frozen_attributes(value) = DeepCopy.frozen_copy(value, symbolize_keys: true)
+    def frozen_attributes(value) = DeepCopy.frozen_copy(value)
   end
 end

@@ -8,17 +8,16 @@ module ZammadAPI
     module_function
 
     # A frozen deep copy, so a record's attributes cannot change behind its
-    # back. Strings are copied before they are frozen, so the caller's own
-    # values are left alone.
+    # back. Hash keys become Symbols, so that caller-supplied attributes
+    # behave the same as decoded responses. Strings are copied before they
+    # are frozen, so the caller's own values are left alone.
     #
     # @param value [Object]
-    # @param symbolize_keys [Boolean] whether Hash keys become Symbols, so
-    #   that caller-supplied attributes behave the same as decoded responses
     # @return [Object] a frozen copy
-    def frozen_copy(value, symbolize_keys: false)
+    def frozen_copy(value)
       case value
-      when Hash   then value.to_h { |key, nested| [symbolize_keys ? symbolize(key) : key, frozen_copy(nested, symbolize_keys: symbolize_keys)] }.freeze
-      when Array  then value.map { frozen_copy(it, symbolize_keys: symbolize_keys) }.freeze
+      when Hash   then value.to_h { |key, nested| [symbolize(key), frozen_copy(nested)] }.freeze
+      when Array  then value.map { frozen_copy(it) }.freeze
       when String then value.dup.freeze
       else value
       end

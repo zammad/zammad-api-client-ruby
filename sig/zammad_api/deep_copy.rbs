@@ -1,6 +1,6 @@
 module ZammadAPI
   module DeepCopy
-    def self?.frozen_copy: (untyped value, ?symbolize_keys: bool) -> untyped
+    def self?.frozen_copy: (untyped value) -> untyped
     def self?.writable_copy: (untyped value) -> untyped
     def self?.symbolize: (untyped key) -> untyped
   end
