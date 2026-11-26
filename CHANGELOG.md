@@ -3,7 +3,7 @@
 ## [2.0.0.alpha1] - 2026-11-17
 
 The first prerelease of 2.0, a breaking release that modernises the whole gem. See
-[Migrating from 1.x](README.md#migrating-from-1x) for the complete before/after guide.
+[UPGRADING.md](UPGRADING.md) for the complete before/after guide.
 
 Everything below is what changed since 1.4.0. It is published as an alpha so that it can
 still change: names, defaults and behaviour may differ in 2.0.0. A prerelease has to be

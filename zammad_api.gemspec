@@ -17,7 +17,7 @@ Gem::Specification.new do |spec|
 
   spec.summary     = "Version 2.0 of the Ruby client for the Zammad API#{' (prerelease)' if prerelease}."
   spec.description = 'Version 2.0 of the Ruby client for the Zammad API v1.0, the one a Zammad serves under ' \
-                     '/api/v1. It is a breaking release: the README lists every call that changed since 1.x.'
+                     '/api/v1. It is a breaking release: UPGRADING.md lists every call that changed since 1.x.'
   spec.description += " This is a prerelease, #{ZammadAPI::VERSION}: install it with --pre." if prerelease
   spec.homepage    = 'https://github.com/zammad/zammad-api-client-ruby'
   spec.licenses    = ['AGPL-3.0-only', 'MIT']
@@ -50,9 +50,10 @@ Gem::Specification.new do |spec|
     LICENSE.MIT.txt
     LICENSE.md
     README.md
+    UPGRADING.md
   ]
   spec.require_paths      = ['lib']
-  spec.extra_rdoc_files   = ['README.md', 'CHANGELOG.md']
+  spec.extra_rdoc_files   = ['README.md', 'UPGRADING.md', 'CHANGELOG.md']
 
   spec.add_dependency 'faraday', '~> 2.9'
   spec.add_dependency 'faraday-retry', '~> 2.2'
