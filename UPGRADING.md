@@ -59,7 +59,7 @@ If this is not the time to move, [1.x stays available](#staying-on-1x).
 | `client.ticket`, `client.user`, …      | `client.tickets`, `client.users`, …              | A resource is every record of its kind. The singular names raise `UnknownResourceError` |
 | `client.on_behalf_of = 'login'`        | `client.on_behalf_of('login')` → new client      | The setter mutated the client and leaked across threads              |
 | `client.perform_on_behalf_of('x') { }` | `client.on_behalf_of('x') { \|scoped\| ... }`    | The old block form left the header set if the block raised           |
-| `ZammadAPI::Resources::Role < Base` reached by `client.role` | `client.resource(Role)`, for a `Role < ZammadAPI::Resources::Base` of your own | The named readers are a fixed list. [Raw requests](README.md#raw-requests) reach whatever is not a resource |
+| `ZammadAPI::Resources::Role < Base` reached by `client.role` | `client.resource(Role)`, for a `Role < ZammadAPI::Resources::Base` of your own | The named readers are a fixed list. [Raw requests][raw-requests] reach whatever is not a resource |
 
 ## Collections
 
@@ -116,7 +116,7 @@ server took. A call that used to hang raises `ZammadAPI::TimeoutError`, or
 `ZammadAPI::ConnectionError` when the connection is not opened in time. A `GET` is retried
 twice with exponential backoff on connection failures, timeouts and the transient
 statuses; a `POST`, `PUT` or `DELETE` is never retried. Both are options: see
-[Timeouts and retries](README.md#timeouts-and-retries). The `User-Agent` is
+[Timeouts and retries][timeouts-and-retries]. The `User-Agent` is
 `zammad_api-ruby/<version>` rather than `Zammad API Ruby`.
 
 ## What did not change
@@ -151,3 +151,6 @@ gem install zammad_api -v '~> 1.4'
 fixes, while new features go into 2.0 only. Report a 1.x problem in the same
 [issue tracker](https://github.com/zammad/zammad-api-client-ruby/issues), naming the
 version, and open a pull request for it against `1-stable`.
+
+[raw-requests]: https://github.com/zammad/zammad-api-client-ruby/blob/master/README.md#raw-requests
+[timeouts-and-retries]: https://github.com/zammad/zammad-api-client-ruby/blob/master/README.md#timeouts-and-retries

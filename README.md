@@ -7,7 +7,7 @@
 > `2.0.0.alpha1` is the first prerelease of a breaking 2.0. Names and defaults can still
 > change: [open an issue](https://github.com/zammad/zammad-api-client-ruby/issues/new) with
 > anything that reads wrong, is missing, or makes upgrading hard. Rough notes are welcome.
-> On 1.x? See [UPGRADING.md](UPGRADING.md), which also says how to stay on 1.x.
+> On 1.x? See [UPGRADING.md][upgrading], which also says how to stay on 1.x.
 
 Ruby client for the Zammad API v1.0.
 
@@ -626,7 +626,7 @@ imports. Declare a resource or use raw requests for those, and
 [open an issue](https://github.com/zammad/zammad-api-client-ruby/issues/new) for the one
 you need, so we know what to model first.
 
-The [features roadmap](ROADMAP.md) shows what is in progress for 2.0, beside 1.x and the
+The [features roadmap][roadmap] shows what is in progress for 2.0, beside 1.x and the
 PHP client.
 
 ## Adapter and middleware
@@ -749,15 +749,22 @@ bundle exec rake     # unit specs, RuboCop, Steep and the shipped signatures
 ```
 
 Integration specs need a disposable Zammad named by `TEST_URL`; see
-[CONTRIBUTING.md](CONTRIBUTING.md).
+[CONTRIBUTING.md][contributing].
 
 ## Upgrading from 1.x
 
 Most code needs one rename: `client.ticket` is `client.tickets`. Nearly everything else
-that changed raises at the call site. [UPGRADING.md](UPGRADING.md) lists every change, and
+that changed raises at the call site. [UPGRADING.md][upgrading] lists every change, and
 says how to stay on 1.x.
 
 ## License
 
-Dual licensed under the [AGPL-3.0-only](LICENSE.AGPL.txt) or [MIT](LICENSE.MIT.txt)
-licenses. See [LICENSE.md](LICENSE.md).
+Dual licensed under the [AGPL-3.0-only][agpl] or [MIT][mit] licenses. See
+[LICENSE.md][license].
+
+[upgrading]: https://github.com/zammad/zammad-api-client-ruby/blob/master/UPGRADING.md
+[contributing]: https://github.com/zammad/zammad-api-client-ruby/blob/master/CONTRIBUTING.md
+[roadmap]: https://github.com/zammad/zammad-api-client-ruby/blob/master/ROADMAP.md
+[agpl]: https://github.com/zammad/zammad-api-client-ruby/blob/master/LICENSE.AGPL.txt
+[mit]: https://github.com/zammad/zammad-api-client-ruby/blob/master/LICENSE.MIT.txt
+[license]: https://github.com/zammad/zammad-api-client-ruby/blob/master/LICENSE.md

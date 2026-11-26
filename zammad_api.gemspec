@@ -38,6 +38,7 @@ Gem::Specification.new do |spec|
   # sig/vendor holds stand-ins for dependencies that ship no signatures. They
   # exist only for this repository's own type checking and are not published.
   spec.files = Dir['lib/**/*.rb', 'sig/**/*.rbs'].grep_v(%r{\Asig/vendor/}) + %w[
+    .yardopts
     CHANGELOG.md
     LICENSE.AGPL.txt
     LICENSE.MIT.txt
