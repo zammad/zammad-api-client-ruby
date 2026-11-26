@@ -39,9 +39,6 @@ Layout/HashAlignment:
   EnforcedColonStyle: table
   EnforcedLastArgumentHashStyle: always_inspect
 
-Style/ClassAndModuleChildren:
-  Enabled: false
-
 Naming/MethodParameterName:
   # `of` is ActiveRecord's name for a batch size, see Collection#in_batches.
   AllowedNames: [id, to, of]
@@ -73,13 +70,6 @@ Style/Documentation:
   Description: 'Public API documentation is enforced by review, not by this cop.'
   Enabled: false
 
-Style/PerlBackrefs:
-  Enabled: false
-
-Style/BlockComments:
-  Description: 'Block comments make examples easy to copy and paste.'
-  Enabled: false
-
 Layout/LineLength:
   Enabled: false
 
@@ -102,11 +92,6 @@ Metrics/ParameterLists:
   # Config mirrors every supported option as a keyword argument.
   Max: 16
   MaxOptionalParameters: 15
-
-# Broken: "String".downcase == "strinG".downcase is not the same as
-# "String".casecmp("strinG"), only as "String".casecmp("strinG") == 0.
-Performance/Casecmp:
-  Enabled: false
 
 # --- Specs ------------------------------------------------------------------
 
