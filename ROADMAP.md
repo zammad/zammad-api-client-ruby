@@ -15,6 +15,7 @@ What each Zammad API client models: this gem in its 1.x and 2.0 versions, and th
 | Users                     | ✅       | ✅       | ✅                                                   |
 | Organizations             | ✅       | ✅       | ✅                                                   |
 | Groups                    | ✅       | ✅       | ✅                                                   |
+| Roles                     | ❌       | 🚧       | ✅                                                   |
 | Tags                      | ❌       | 🚧       | ✅ list, search, add, remove                         |
 | Links                     | ❌       | 🚧       | ✅ ticket to ticket                                  |
 | Text modules              | ❌       | 🚧       | ✅                                                   |
