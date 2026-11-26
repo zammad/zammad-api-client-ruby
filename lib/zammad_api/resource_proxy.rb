@@ -66,7 +66,11 @@ module ZammadAPI
     # @param id [Integer, String]
     # @return [Resources::Base]
     # @raise [NotFoundError] when no such record exists
-    def find(id) = resource_class.fetch_one(@transport, id)
+    def find(id)
+      response = @transport.get(resource_class.member_path(id), operation: 'find object', resource_class: resource_class, query: { expand: true })
+
+      resource_class.from_response(@transport, response.decoded(:object, operation: 'find object', resource_class: resource_class))
+    end
 
     # The first record carrying all of these attribute values, or nil.
     #
@@ -130,9 +134,7 @@ module ZammadAPI
     # Every record of this kind, as a lazily paginated collection.
     #
     # @return [Collection]
-    def all
-      collection(path, 'get .all of object')
-    end
+    def all = Collection.new(@transport, resource_class)
 
     # @!group Collection shorthands
     # These forward to {#all}; see {Collection} for each.
@@ -159,23 +161,12 @@ module ZammadAPI
       raise Error, "Zammad routes no search endpoint for #{resource_class.name}: look a record up with find_by, which walks the records instead" if !resource_class.searchable?
       raise ArgumentError, "search needs a non-empty query string. Search for '*' to ask for every record." if !term.is_a?(String) || term.strip.empty?
 
-      collection("#{path}/search", 'get .search of object', query: { query: term, **filters }, search: true)
+      Collection.new(@transport, resource_class, search: true, query: { query: term, **filters })
     end
 
     def inspect = "#<#{self.class.name} #{resource_class.name}>"
 
     private
-
-    def collection(path, operation, query: {}, search: false)
-      Collection.new(
-        transport:      @transport,
-        resource_class: resource_class,
-        path:           path,
-        operation:      operation,
-        search:         search,
-        query:          { expand: true }.merge(query)
-      )
-    end
 
     def find_by_id(params)
       record = find(params.fetch(:id))
@@ -183,7 +174,5 @@ module ZammadAPI
     rescue NotFoundError
       nil
     end
-
-    def path = resource_class.resource_path
   end
 end

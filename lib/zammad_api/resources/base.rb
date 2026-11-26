@@ -74,19 +74,6 @@ module ZammadAPI
         # @return [String]
         def member_path(id) = "#{resource_path}/#{Transport.escape_path_segment(id)}"
 
-        # Reads one record by id.
-        #
-        # @api private
-        # @param transport [Transport]
-        # @param id [Integer, String]
-        # @return [Base]
-        def fetch_one(transport, id)
-          operation = 'find object'
-          response  = transport.get(member_path(id), operation: operation, resource_class: self, query: { expand: true })
-
-          from_response(transport, response.decoded(:object, operation: operation, resource_class: self))
-        end
-
         # Builds a record that is already stored in Zammad.
         #
         # @api private

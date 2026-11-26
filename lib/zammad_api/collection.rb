@@ -38,17 +38,17 @@ module ZammadAPI
     # @param search [Boolean] whether this is a search endpoint, which can
     #   serve a short page before the last one, can count its results and
     #   always sorts
-    def initialize(transport:, resource_class:, path:, operation:, query: {}, per_page: nil, page: nil, search: false)
+    def initialize(transport, resource_class, search: false, query: {}, per_page: nil, page: nil)
       max_per_page = search ? SEARCH_MAX_PER_PAGE : resource_class.page_limit
 
       @transport      = transport
       @resource_class = resource_class
-      @path           = path
-      @operation      = operation
-      @query          = query
+      @search         = search
+      @path           = search ? "#{resource_class.resource_path}/search" : resource_class.resource_path
+      @operation      = "get .#{search ? 'search' : 'all'} of object"
+      @query          = { expand: true }.merge(query)
       @per_page       = [per_page || max_per_page, max_per_page].min
       @page           = page
-      @search         = search
     end
 
     # Yields every record, fetching pages as needed.
@@ -223,16 +223,7 @@ module ZammadAPI
     end
 
     def with(page: @page, per_page: @per_page, query: @query)
-      self.class.new(
-        transport:      @transport,
-        resource_class: @resource_class,
-        path:           @path,
-        operation:      @operation,
-        query:          query,
-        per_page:       per_page,
-        page:           page,
-        search:         @search
-      )
+      self.class.new(@transport, @resource_class, search: @search, query: query, per_page: per_page, page: page)
     end
   end
 end

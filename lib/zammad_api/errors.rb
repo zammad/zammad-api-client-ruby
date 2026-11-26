@@ -83,20 +83,10 @@ module ZammadAPI
     # @param resource_class [Class, nil]
     # @return [ResponseError]
     def self.build(response, operation:, resource_class: nil)
-      error_class_for(response).new(
-        response:       response,
-        operation:      operation,
-        resource_class: resource_class
-      )
-    end
+      error_class = STATUS_ERRORS.fetch(response.status) { response.status >= 500 ? ServerError : ClientError }
 
-    # @api private
-    def self.error_class_for(response)
-      STATUS_ERRORS.fetch(response.status) do
-        response.status >= 500 ? ServerError : ClientError
-      end
+      error_class.new(response: response, operation: operation, resource_class: resource_class)
     end
-    private_class_method :error_class_for
 
     # @param operation [String] what was attempted
     # @param response [Response, nil]

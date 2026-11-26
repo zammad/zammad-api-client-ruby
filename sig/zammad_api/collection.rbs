@@ -16,16 +16,7 @@ module ZammadAPI
     @page: Integer?
     @search: bool
 
-    def initialize: (
-      transport: Transport,
-      resource_class: untyped,
-      path: String,
-      operation: String,
-      ?query: Hash[Symbol, untyped],
-      ?per_page: Integer?,
-      ?page: Integer?,
-      ?search: bool
-    ) -> void
+    def initialize: (Transport transport, untyped resource_class, ?search: bool, ?query: Hash[Symbol, untyped], ?per_page: Integer?, ?page: Integer?) -> void
 
     def each: () { (R) -> void } -> Collection[R]
             | () -> Enumerator[R, Collection[R]]

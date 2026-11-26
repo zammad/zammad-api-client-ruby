@@ -36,7 +36,6 @@ module ZammadAPI
     @detail: String?
 
     def self.build: (Response response, operation: String, ?resource_class: Class?) -> ResponseError
-    def self.error_class_for: (Response) -> singleton(ResponseError)
 
     def initialize: (operation: String, ?response: Response?, ?resource_class: Class?, ?detail: String?) -> void
     def status: () -> Integer?

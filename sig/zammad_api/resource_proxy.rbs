@@ -37,8 +37,6 @@ module ZammadAPI
 
     private
 
-    def collection: (String, String, ?query: Hash[Symbol, untyped], ?search: bool) -> Collection[R]
     def find_by_id: (Hash[Symbol, untyped] params) -> R?
-    def path: () -> String
   end
 end

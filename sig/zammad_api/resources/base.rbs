@@ -33,7 +33,6 @@ module ZammadAPI
       def self.page_limit: () -> Integer
       def self.sortable?: () -> bool
       def self.member_path: ((Integer | String) id) -> String
-      def self.fetch_one: (Transport transport, (Integer | String) id) -> Base
       def self.from_response: (Transport, Hash[untyped, untyped] attributes) -> Base
 
       def initialize: (Transport, ?hash[untyped, untyped]? attributes) -> void
