@@ -2,6 +2,8 @@
 
 module ZammadAPI
   module Resources
+    # An article of a ticket: an e-mail, a note, a phone call. Reached through
+    # {Ticket#articles}, or by id through {Client#ticket_articles}.
     class TicketArticle < Base
       path 'api/v1/ticket_articles'
 

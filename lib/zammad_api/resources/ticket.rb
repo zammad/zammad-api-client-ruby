@@ -2,6 +2,8 @@
 
 module ZammadAPI
   module Resources
+    # A ticket. Reached through {Client#tickets}, and its articles through
+    # {#articles} and {#add_article}.
     class Ticket < Base
       path 'api/v1/tickets'
 
