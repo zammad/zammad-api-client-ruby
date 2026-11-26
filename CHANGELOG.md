@@ -35,9 +35,6 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - `Collection#[]` was removed. It cost a request per index and ignored the page a
   collection was limited to; use `first`, or `page(n, per_page: 1).first` for one record at an
   offset.
-- There is no `per`. The page size belongs to the call that reads: `find_each(batch_size:)`
-  to walk, `in_batches(of:)` to batch, `page(number, per_page:)` for one page. Everything else
-  fetches as many records as the endpoint serves.
 - A collection fetches the endpoint's own page size rather than a fixed 100 — 1000 on the
   index endpoints, 100 on `/api/v1/tickets`, 200 on a search. `page(n)` without `per_page:`
   is a page of that size, so pin it with `page(n, per_page: 100)` where a persisted page
@@ -93,9 +90,6 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
   `Enumerable#find`, whose argument is an ifnone callable, so `client.tickets.all.find(1)`
   answered with an `Enumerator` and made no request. Use `client.tickets.find(1)`, or
   `detect { … }` for the block form.
-- `find_by` searches one string value, the longest, and compares every value against the
-  hits. A lookup with no string in it, or on a resource without a search endpoint, walks
-  the index instead.
 - `search` raises `ZammadAPI::Error` on a resource Zammad routes no search endpoint for —
   `ticket_states`, `ticket_priorities` and `ticket_articles` — instead of reaching a 404.
 - A configuration that names more than one way to authenticate raises `ConfigurationError`.
@@ -132,8 +126,6 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - `search(term, **filters)` passes its keywords on to the search endpoint, for what it
   narrows by besides the term: `condition:` and `ids:`, and `role_ids:`, `group_ids:` and
   `permissions:` on users. A blank term raises `ArgumentError`; `'*'` asks for every record.
-- There is no `where`: Zammad's index endpoints sort and page and drop every other
-  parameter, so filtering is `search` and `find_by`.
 - A resource proxy is `Enumerable` over `all`, so `client.tickets.each`,
   `client.tickets.first(5)`, `client.tickets.map`, `#find_each`, `#in_batches`, `#page`,
   `#pluck` and `#count` all work without naming `all`. `client.x.find(id)` keeps
@@ -148,8 +140,8 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - `client.<resource>.find_by(**params)` and `#find_by!`, which look a record up by
   attribute value, and `client.<resource>.exists?(id)`. `find_by` answers with the first
   record that carries all the values, or `nil`: by its id where `id:` is given, through a
-  search where the resource has one and a String value is given, and by walking the index
-  everywhere else.
+  search for the longest String value where the resource has a search endpoint, and by
+  walking the index everywhere else.
 - The page size is clamped to what an endpoint serves (100 for `/api/v1/tickets`, 200 for
   a search, 1000 for the other index endpoints). Asking for more used to end iteration
   after the first page, because Zammad capped the response and the short page read as the
