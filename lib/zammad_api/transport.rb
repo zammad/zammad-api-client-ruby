@@ -13,25 +13,6 @@ module ZammadAPI
   #
   # @api private
   class Transport
-    # The verb shorthands, shared with {Test::Transport} so that the two answer
-    # the same calls.
-    #
-    # @api private
-    module Verbs
-      # @!method get(path, operation:, query: nil, headers: nil, resource_class: nil)
-      # @!method post(path, operation:, query: nil, body: nil, headers: nil, resource_class: nil)
-      # @!method put(path, operation:, query: nil, body: nil, headers: nil, resource_class: nil)
-      # @!method delete(path, operation:, query: nil, headers: nil, resource_class: nil)
-      # @return [Response]
-      %i[get post put delete].each do |verb|
-        define_method(verb) do |path, **options|
-          request(verb, path, **options) # steep:ignore NoMethod
-        end
-      end
-    end
-
-    include Verbs
-
     # Methods that are retried: the ones that only read. A write that timed
     # out may still have been applied, so it is not sent twice.
     RETRIABLE_METHODS = %i[get head options].freeze
@@ -165,6 +146,12 @@ module ZammadAPI
     rescue Faraday::ConnectionFailed => e
       raise ConnectionError, "Can't #{operation}: #{config.url} is unreachable (#{e.message})"
     end
+
+    # The verb shorthands.
+    def get(path, operation:, **options) = request(:get, path, operation: operation, **options)
+    def post(path, operation:, **options) = request(:post, path, operation: operation, **options)
+    def put(path, operation:, **options) = request(:put, path, operation: operation, **options)
+    def delete(path, operation:, **options) = request(:delete, path, operation: operation, **options)
 
     private
 

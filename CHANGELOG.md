@@ -172,8 +172,8 @@ asked for, with `gem install zammad_api --pre` or `gem 'zammad_api', '~> 2.0.0.a
 - `require 'zammad_api/test'` ships a stand-in Zammad for testing code that calls this
   client: `ZammadAPI::Test#stub` declares responses, `#client` hands back a real client
   wired to them, and `#requests` records what was sent, with the query as text and the
-  headers by downcased name. Responses travel the same decoding, error mapping and record
-  building as real ones, so a stubbed 404 raises `NotFoundError`. An unstubbed request
+  headers by downcased name. The stand-in is the client's Faraday adapter, so requests and
+  responses travel the same transport as real ones and a stubbed 404 raises `NotFoundError`. An unstubbed request
   raises `ZammadAPI::Test::UnstubbedRequestError` rather than answering with something
   empty. It is not a `ZammadAPI::Error`, so the code under test cannot rescue it.
 - `respond_to?` answers correctly for attribute readers and resource methods.

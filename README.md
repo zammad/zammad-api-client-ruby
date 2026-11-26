@@ -966,8 +966,9 @@ RSpec.describe TicketCloser do
 end
 ```
 
-`zammad.client` is a real `ZammadAPI::Client`, so responses come back through the same
-decoding, error mapping and record building as real ones — a stub with `status: 404`
+`zammad.client` is a real `ZammadAPI::Client` with the stand-in as its Faraday adapter, so
+requests and responses go through the same encoding, decoding, error mapping and record
+building as real ones — a stub with `status: 404`
 raises `NotFoundError`, and one with `status: 422` makes `save` return `false`.
 
 | Method | What it does |
@@ -981,8 +982,8 @@ raises `NotFoundError`, and one with `status: 422` makes `save` return `false`.
 A `Hash` or `Array` body is served as JSON and gets `content-type: application/json`
 unless `headers:` says otherwise, and it is that header that decides whether the body
 comes back decoded, as it does on the wire. A recorded request's `query` has its keys and
-values as text, and its `headers` have downcased names; the headers the client sets from
-its configuration are not in it, and an `on_behalf_of` scope has a field of its own.
+values as text, and its `headers` are every header sent, with downcased names; an
+`on_behalf_of` scope has a field of its own as well.
 
 Stubbing the same endpoint again queues a second response. A request is answered by the
 first stub whose `query:` it matches, and that stub is used up unless it is the last one
@@ -1008,8 +1009,8 @@ zammad.stub(:get, 'api/v1/tickets', body: first_hundred, query: {page: 1})
 zammad.stub(:get, 'api/v1/tickets', body: [{id: 101}], query: {page: 2})
 ```
 
-The stand-in does not retry: a stubbed 429 or 5xx raises at once, where a client talking
-to Zammad would ask again.
+The stand-in's client does not retry unless you pass `retries:`: a stubbed 429 or 5xx
+raises at once, where a client talking to Zammad would ask again.
 
 A request that was not stubbed raises `ZammadAPI::Test::UnstubbedRequestError`, listing
 what is stubbed, rather than answering with something empty. It is deliberately not a

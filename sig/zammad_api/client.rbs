@@ -3,15 +3,13 @@ module ZammadAPI
     RESOURCES: Hash[Symbol, untyped]
     ENV_OPTIONS: Hash[String, Symbol]
 
-    attr_reader config: Config
-
     @transport: Transport
     @resources: Hash[untyped, ResourceProxy[untyped]]
 
     def self.from_env: (**untyped overrides) -> Client
-    def self.build: (Config config, untyped transport) -> Client
 
-    def initialize: (**untyped options) -> void
+    def initialize: (?transport: Transport?, **untyped options) -> void
+    def config: () -> Config
 
     def groups: () -> ResourceProxy[Resources::Group]
     def organizations: () -> ResourceProxy[Resources::Organization]
@@ -47,6 +45,5 @@ module ZammadAPI
 
     def raw: (Symbol method, String path, ?query: Hash[untyped, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?) -> Response
     def unknown_resource_message: (Symbol | String) -> String
-    def setup: (Config config, untyped transport) -> self
   end
 end

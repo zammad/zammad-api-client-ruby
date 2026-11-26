@@ -11,4 +11,15 @@ module ZammadAPI
   class ResourceProxy[R < Resources::Base]
     extend Forwardable
   end
+
+  # The test kit's adapter names a Faraday class, which the published
+  # signatures must not.
+  class Test
+    class Adapter < Faraday::Adapter
+      @test: Test
+
+      def initialize: (untyped app, Test test) -> void
+      def call: (untyped env) -> untyped
+    end
+  end
 end

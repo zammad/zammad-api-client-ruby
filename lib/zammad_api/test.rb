@@ -8,9 +8,9 @@ module ZammadAPI
   # A stand-in Zammad, for testing code that calls this client.
   #
   # Stub the endpoints the code under test will reach, hand it {#client}, then
-  # assert against {#requests}. No HTTP stack is involved, so nothing has to be
-  # intercepted at the socket level and the responses come back through the
-  # same decoding, error mapping and record building as real ones.
+  # assert against {#requests}. The stand-in is the client's Faraday adapter,
+  # so nothing has to be intercepted at the socket level and requests and
+  # responses go through the same transport as real ones.
   #
   # @example
   #   require 'zammad_api/test'
@@ -47,14 +47,11 @@ module ZammadAPI
     # @!attribute [r] body
     #   @return [Hash, nil] the request payload
     # @!attribute [r] headers
-    #   @return [Hash{String => String}] the headers the call asked for, names
-    #     downcased. The +From+ scope has a member of its own below.
+    #   @return [Hash{String => String}] the request headers, names downcased.
+    #     The +From+ scope has a member of its own below.
     # @!attribute [r] on_behalf_of
     #   @return [String, nil] the +From+ scope in effect
     Request = Data.define(:verb, :path, :query, :body, :headers, :on_behalf_of)
-
-    # @return [Config] the configuration the stand-in client reports
-    attr_reader :config
 
     # A client that talks to this stand-in instead of to a Zammad.
     #
@@ -64,12 +61,15 @@ module ZammadAPI
     # @param options [Hash] any option accepted by {Config}; the defaults are
     #   enough for a client that never opens a connection
     def initialize(**options)
-      @config   = Config.new(**Config.merge_options({ url: 'https://zammad.test/', http_token: 'test-token' }, options))
+      defaults  = { url: 'https://zammad.test/', http_token: 'test-token', retries: 0 }
       @stubs    = {}
       @requests = []
       @monitor  = Mutex.new
-      @client   = Client.build(@config, Transport.new(self))
+      @client   = Client.new(**Config.merge_options(defaults, options), middleware: ->(faraday) { faraday.adapter(Adapter, self) })
     end
+
+    # @return [Config] the configuration the stand-in client reports
+    def config = client.config
 
     # Declares the response for one endpoint.
     #
@@ -96,6 +96,7 @@ module ZammadAPI
     def stub(method, path, status: 200, body: nil, headers: {}, query: nil)
       headers = headers.to_h { |name, value| [name.to_s.downcase, value.to_s] }
       headers = { 'content-type' => 'application/json' }.merge(headers) if body.is_a?(Hash) || body.is_a?(Array)
+      body    = body.is_a?(Hash) || body.is_a?(Array) ? JSON.generate(body) : body.to_s
 
       @monitor.synchronize do
         (@stubs[key(method, path)] ||= []) << { status: status, body: body, headers: headers.freeze, query: query && stringify(query) }
@@ -124,35 +125,31 @@ module ZammadAPI
 
     def inspect = @monitor.synchronize { "#<#{self.class.name} stubbed=#{@stubs.size} requests=#{@requests.size}>" }
 
-    # Answers a request from the stubs, recording it first. This is the
-    # {Transport} interface, called by the client rather than by a test.
+    # Answers a request from the stubs, recording it first. Called by the
+    # {Adapter} rather than by a test.
     #
     # @api private
-    # @return [Response]
-    # @raise [ResponseError] for a stubbed non-2xx status
+    # @param env [Faraday::Env]
+    # @return [Hash] the stub that answers
     # @raise [UnstubbedRequestError] when no stub matches
-    def answer(method, path, operation:, query: nil, body: nil, headers: nil, resource_class: nil, on_behalf_of: nil)
-      relative = ::ZammadAPI::Transport.relative_path(path)
-      params   = stringify(query || {})
-      request  = Request.new(
-        verb:         method,
-        path:         relative,
-        query:        params,
-        body:         DeepCopy.frozen_copy(body),
-        headers:      (headers || {}).to_h { |name, value| [name.to_s.downcase, value.to_s] },
-        on_behalf_of: on_behalf_of
+    def answer(env)
+      path    = env.url.to_s.delete_prefix(config.url).sub(/\?.*/m, '')
+      headers = env.request_headers.to_h { |name, value| [name.downcase, value] }
+      json    = headers['content-type'].to_s.include?('json') && env.request_body
+      request = Request.new(
+        verb:         env.method,
+        path:         path,
+        query:        Faraday::Utils.parse_nested_query(env.url.query) || {},
+        body:         DeepCopy.frozen_copy(json ? JSON.parse(env.request_body, symbolize_names: true) : env.request_body),
+        headers:      headers,
+        on_behalf_of: headers['from']
       )
 
       stub = @monitor.synchronize do
         @requests << request
-        take(method, relative, params)
+        take(request.verb, path, request.query)
       end
-      raise UnstubbedRequestError, unstubbed_message(request) if stub.nil?
-
-      response = response_for(stub)
-      return response if response.success?
-
-      raise ResponseError.build(response, operation: operation, resource_class: resource_class)
+      stub || raise(UnstubbedRequestError, unstubbed_message(request))
     end
 
     private
@@ -168,7 +165,7 @@ module ZammadAPI
     end
 
     # What a later page is answered with where the stub names no page.
-    EMPTY_PAGE = { status: 200, body: [].freeze, headers: { 'content-type' => 'application/json' }.freeze, query: nil }.freeze
+    EMPTY_PAGE = { status: 200, body: '[]', headers: { 'content-type' => 'application/json' }.freeze, query: nil }.freeze
     private_constant :EMPTY_PAGE
 
     # The first stub of the endpoint whose query matches, spent unless it is
@@ -189,16 +186,6 @@ module ZammadAPI
 
     def matches?(expected, params) = expected.nil? || expected.all? { |name, value| params[name] == value }
 
-    def response_for(stub)
-      raw = case stub[:body]
-            when Hash, Array then JSON.generate(stub[:body])
-            when nil         then ''
-            else                  stub[:body].to_s
-            end
-
-      Response.new(status: stub[:status], headers: stub[:headers], body: Response.decode_body(stub[:headers]['content-type'], raw), raw_body: raw)
-    end
-
     def stubbed_endpoints = @stubs.keys.map { |method, path| "#{method.to_s.upcase} #{path}" }
 
     def unstubbed_message(request)
@@ -208,38 +195,19 @@ module ZammadAPI
         "#{self.class.name} (#{stubbed.empty? ? 'nothing is stubbed' : "stubbed: #{stubbed.join(', ')}"})"
     end
 
-    # The transport a {Test} client talks through.
+    # The Faraday adapter a {Test} client sends through.
     #
     # @api private
-    class Transport
-      include ::ZammadAPI::Transport::Verbs
-
-      attr_reader :test, :config, :on_behalf_of
-
-      # @param test [Test]
-      # @param on_behalf_of [String, nil]
-      # @param config [Config]
-      def initialize(test, on_behalf_of: nil, config: test.config)
-        @test         = test
-        @config       = config
-        @on_behalf_of = on_behalf_of
+    class Adapter < Faraday::Adapter
+      def initialize(app, test)
+        super(app)
+        @test = test
       end
 
-      def with_on_behalf_of(identifier) = self.class.new(test, on_behalf_of: identifier, config: config)
-
-      def with_config(config) = self.class.new(test, on_behalf_of: on_behalf_of, config: config)
-
-      def request(method, path, operation:, query: nil, body: nil, headers: nil, resource_class: nil)
-        test.answer(
-          method,
-          path,
-          operation:      operation,
-          query:          query,
-          body:           body,
-          headers:        headers,
-          resource_class: resource_class,
-          on_behalf_of:   on_behalf_of
-        )
+      def call(env)
+        super
+        stub = @test.answer(env)
+        save_response(env, stub[:status], stub[:body], stub[:headers])
       end
     end
   end

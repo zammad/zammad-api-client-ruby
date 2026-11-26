@@ -47,5 +47,15 @@ module Faraday
     def use: (untyped, *untyped) -> void
   end
 
+  class Adapter
+    def initialize: (?untyped app, ?untyped opts) -> void
+    def call: (untyped env) -> untyped
+    def save_response: (untyped env, Integer status, untyped body, ?untyped headers) -> untyped
+  end
+
+  module Utils
+    def self.parse_nested_query: (String? query) -> Hash[String, untyped]?
+  end
+
   def self.new: (**untyped) ?{ (Connection) -> void } -> Connection
 end

@@ -16,8 +16,9 @@ module ZammadAPI
       def self.new: (**untyped) -> instance
     end
 
-    attr_reader config: Config
     attr_reader client: Client
+
+    def config: () -> Config
 
     @stubs: Hash[[Symbol, String], Array[Hash[Symbol, untyped]]]
     @requests: Array[Request]
@@ -30,16 +31,7 @@ module ZammadAPI
     def stubbed: () -> Array[String]
     def inspect: () -> String
 
-    def answer: (
-      Symbol method,
-      String path,
-      operation: String,
-      ?query: Hash[untyped, untyped]?,
-      ?body: untyped,
-      ?headers: Hash[untyped, untyped]?,
-      ?resource_class: Class?,
-      ?on_behalf_of: String?
-    ) -> Response
+    def answer: (untyped env) -> Hash[Symbol, untyped]
 
     private
 
@@ -50,22 +42,7 @@ module ZammadAPI
     def stringify: (untyped value) -> untyped
     def take: (Symbol method, String path, Hash[String, untyped] params) -> Hash[Symbol, untyped]?
     def matches?: (Hash[String, untyped]? expected, Hash[String, untyped] params) -> bool
-    def response_for: (Hash[Symbol, untyped] stub) -> Response
     def stubbed_endpoints: () -> Array[String]
     def unstubbed_message: (Request request) -> String
-
-    class Transport
-      include ::ZammadAPI::Transport::Verbs
-
-      attr_reader test: Test
-      attr_reader config: Config
-      attr_reader on_behalf_of: String?
-
-      def initialize: (Test test, ?on_behalf_of: String?, ?config: Config) -> void
-      def with_on_behalf_of: (String? identifier) -> Test::Transport
-      def with_config: (Config) -> Test::Transport
-
-      def request: (Symbol method, String path, operation: String, ?query: Hash[Symbol, untyped]?, ?body: untyped, ?headers: Hash[untyped, untyped]?, ?resource_class: Class?) -> Response
-    end
   end
 end

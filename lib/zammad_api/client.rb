@@ -30,10 +30,6 @@ module ZammadAPI
       users:             Resources::User
     }.freeze
 
-    # @return [Config] the validated configuration, with credentials redacted
-    #   from its +inspect+ output
-    attr_reader :config
-
     # @!method groups
     #   @return [ResourceProxy] proxy for {Resources::Group}
     # @!method organizations
@@ -89,29 +85,24 @@ module ZammadAPI
       new(**options)
     end
 
-    # Builds a client from a {Config} that is already validated and a
-    # transport that is already built, for {Test}.
-    #
-    # @api private
-    # @param config [Config]
-    # @param transport [Transport] anything with a {Transport} interface
-    # @return [Client]
-    def self.build(config, transport)
-      allocate.send(:setup, config, transport)
-    end
-
     # @param options [Hash] see {Config} for every supported option
     # @option options [String] :url base URL of the Zammad instance
     # @option options [String] :http_token access token
     # @option options [String] :oauth2_token OAuth2 token
     # @option options [String] :user login for basic authentication
     # @option options [String] :password password for basic authentication
+    # @param transport [Transport, nil] the transport of the client this one
+    #   is derived from, in place of options. For {#with} and {#on_behalf_of}.
     # @raise [ConfigurationError] when the options are incomplete or invalid,
     #   or name more than one way to authenticate
-    def initialize(**options)
-      config = Config.new(**options)
-      setup(config, Transport.new(config))
+    def initialize(transport: nil, **options)
+      @transport = transport || Transport.new(Config.new(**options))
+      @resources = RESOURCES.values.to_h { [it, ResourceProxy.new(@transport, it)] }.freeze
     end
+
+    # @return [Config] the validated configuration, with credentials redacted
+    #   from its +inspect+ output
+    def config = @transport.config
 
     # The proxy for a resource, by name or by class. A class is the way to
     # the parts of the API this gem does not model.
@@ -233,8 +224,7 @@ module ZammadAPI
     # @return [Client]
     # @raise [ConfigurationError] when the resulting options are invalid
     def with(**options)
-      derived_config = config.with(**options)
-      dup.send(:setup, derived_config, @transport.with_config(derived_config))
+      self.class.new(transport: @transport.with_config(config.with(**options)))
     end
 
     # Performs requests on behalf of another user, through a new client.
@@ -257,7 +247,7 @@ module ZammadAPI
       from = identifier.to_s.strip
       raise ArgumentError, "on_behalf_of needs the login, email address or id of a user, got #{identifier.inspect}" if from.empty?
 
-      scoped = dup.send(:setup, config, @transport.with_on_behalf_of(from.freeze))
+      scoped = self.class.new(transport: @transport.with_on_behalf_of(from.freeze))
       return scoped if !block_given?
 
       yield scoped
@@ -285,18 +275,5 @@ module ZammadAPI
     end
 
     def unknown_resource_message(name) = "Unknown resource #{name}, available resources are: #{RESOURCES.keys.join(', ')}"
-
-    # Everything a client is, in the one place {.new}, {.build}, {#with} and
-    # {#on_behalf_of} go through. The proxies are built up front so that a
-    # client is immutable, and safe to share between threads, once built.
-    #
-    # @return [self]
-    def setup(config, transport)
-      @config    = config
-      @transport = transport
-      @resources = RESOURCES.values.to_h { [it, ResourceProxy.new(transport, it)] }.freeze
-
-      self
-    end
   end
 end
