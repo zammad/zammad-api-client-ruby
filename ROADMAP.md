@@ -46,7 +46,7 @@ Until a 🚧 row lands in Ruby 2.0, reach it by
 | Attachment download as a stream       | ❌       | ❌                          | ❌                                               |
 | Attachment upload helper              | ❌       | ❌                          | ❌ Base64 in the article                         |
 | Test doubles for applications         | ❌       | ❌                          | ❌                                               |
-| Framework integration                 | ❌       | ❌                          | ✅ Laravel, Symfony                              |
+| Framework integration                 | -       | -                          | ✅ Laravel, Symfony                              |
 
 ## Requested, not planned yet
 
