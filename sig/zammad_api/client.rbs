@@ -1,7 +1,6 @@
 module ZammadAPI
   class Client
     RESOURCES: Hash[Symbol, untyped]
-    CONVERSION_METHODS: Array[Symbol]
     ENV_OPTIONS: Hash[String, Symbol]
 
     attr_reader config: Config

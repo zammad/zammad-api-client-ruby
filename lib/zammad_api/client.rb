@@ -30,10 +30,6 @@ module ZammadAPI
       users:             Resources::User
     }.freeze
 
-    # Methods Ruby calls implicitly for type coercion. They must keep raising
-    # NoMethodError so that this object behaves normally in core operations.
-    CONVERSION_METHODS = %i[to_ary to_a to_hash to_str to_io to_proc coerce].freeze
-
     # @return [Config] the validated configuration, with credentials redacted
     #   from its +inspect+ output
     attr_reader :config
@@ -274,7 +270,7 @@ module ZammadAPI
     end
 
     def method_missing(name, *args)
-      return super if CONVERSION_METHODS.include?(name) || name.to_s.end_with?('=', '!', '?')
+      return super if name.to_s.end_with?('=', '!', '?')
 
       raise UnknownResourceError, unknown_resource_message(name)
     end
