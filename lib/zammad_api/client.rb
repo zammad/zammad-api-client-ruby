@@ -182,7 +182,8 @@ module ZammadAPI
     #
     # @param path [String] path relative to {Config#url}
     # @param query [Hash, nil] query string parameters
-    # @param body [Hash, Array, nil] request payload, encoded as JSON
+    # @param body [Hash, Array, String, nil] request payload; a Hash or Array is
+    #   encoded as JSON, a String is sent as it is
     # @param headers [Hash, nil] request headers
     # @return [Response]
     # @raise [ResponseError] for any non-2xx response
@@ -193,7 +194,8 @@ module ZammadAPI
     #
     # @param path [String] path relative to {Config#url}
     # @param query [Hash, nil] query string parameters
-    # @param body [Hash, Array, nil] request payload, encoded as JSON
+    # @param body [Hash, Array, String, nil] request payload; a Hash or Array is
+    #   encoded as JSON, a String is sent as it is
     # @param headers [Hash, nil] request headers
     # @return [Response]
     # @raise [ResponseError] for any non-2xx response
