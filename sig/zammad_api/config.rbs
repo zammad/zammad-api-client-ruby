@@ -4,8 +4,7 @@ module ZammadAPI
   # `middleware` is a block handed a Faraday::Connection, but it is declared
   # untyped here: these signatures ship with the gem, while the Faraday
   # declarations they would need live in sig/vendor, which does not. Naming
-  # Faraday here made `rbs validate` fail for every consumer with
-  # `Could not find Faraday::Connection`.
+  # Faraday here fails `rbs validate` for every consumer.
   class Config < ::Data
     DEFAULT_TIMEOUT: Integer
     DEFAULT_OPEN_TIMEOUT: Integer

@@ -19,13 +19,10 @@ Gem::Specification.new do |spec|
 
   # Keep in sync with TargetRubyVersion in .rubocop.yml and the CI matrix.
   #
-  # 3.4 rather than 3.3, the one older line still maintained - for security
-  # fixes, until March 2027 - and for a single reason: the `it` block
-  # parameter, which lib/ uses throughout. Nothing else here needs 3.4. On
-  # Ruby 3.3.13, with every `it` rewritten to `_1`, the unit suite passed but
-  # for five examples that assert the format Hash#inspect has had since 3.4.
-  # So the floor is a choice of style over reach rather than a dependency, and
-  # lowering it is that rewrite, those five expectations and a CI entry.
+  # 3.4 rather than 3.3, which gets security fixes until March 2027, for the
+  # `it` block parameter that lib/ uses throughout. Nothing else needs 3.4:
+  # lowering the floor is rewriting `it` to `_1`, the five spec expectations
+  # of the format Hash#inspect has had since 3.4, and a CI entry.
   spec.required_ruby_version = '>= 3.4'
 
   spec.metadata['allowed_push_host']      = 'https://rubygems.org'

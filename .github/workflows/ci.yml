@@ -54,16 +54,11 @@ jobs:
       fail-fast: false
       matrix:
         # Stable releases only, from required_ruby_version up to the current
-        # stable line. There is no 3.5: that line was abandoned after
-        # 3.5.0-preview1 and became 4.0.
+        # stable line. There is no 3.5: that line became 4.0.
         #
-        # 'head' is absent. It could not install while the lockfile said
-        # `BUNDLED WITH 2.6.9`: bundler self-downgraded from head's 4.1.0.dev
-        # and died with NameError on the removed Pathname::SEPARATOR_PAT, and
-        # without the lockfile a fresh resolution pulled steep -> listen ->
-        # rb-inotify -> ffi, whose native gems require Ruby < 4.1.dev. The
-        # lockfile now names Bundler 4.0.20, which does not use that constant,
-        # so the first of those may be gone; head has not been retried since.
+        # 'head' is absent: it could not install the bundle when it was last
+        # tried, under a lockfile that named Bundler 2.6.9. The lockfile names
+        # Bundler 4 now, and head has not been retried since.
         ruby: ['3.4', '4.0']
     env:
       # The unit specs do not need the type-checking toolchain, and skipping it

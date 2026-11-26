@@ -10,12 +10,9 @@ class Helper
   # The Zammad the integration specs run against, where one was named.
   #
   # There is no default. These specs run the auto wizard and then create,
-  # change and delete groups, organizations, users, tickets, states and
-  # priorities, and `http://localhost:3000/` used to stand in for a TEST_URL
-  # that was not set. That is where a Zammad under development listens, and
-  # a bare `rspec` runs these files along with the unit specs, so the
-  # commonest way to run the suite wrote test records into whatever was
-  # there. Where to write is for whoever runs them to say.
+  # change and delete records, a bare `rspec` loads them along with the unit
+  # specs, and `http://localhost:3000/` is where a Zammad under development
+  # listens. Where to write is for whoever runs them to say.
   #
   # Asked of {LiveTarget}, which rake and script/check_connection.rb ask
   # as well, so that the three agree on whether a target was named.
@@ -53,11 +50,9 @@ class Helper
   #
   # Memoized and idempotent, so it does not matter which spec file happens to
   # run first, and re-running the suite against an already configured instance
-  # is not an error.
-  # The failure is memoized alongside the success, because `||=` memoizes
-  # neither. A TEST_URL with nothing behind it re-ran the whole probe - two
-  # requests, each with a ten second open timeout - once per example, so a
-  # Zammad that never came up took the suite a very long time to say so.
+  # is not an error. The failure is memoized alongside the success, so that a
+  # TEST_URL with nothing behind it is probed once rather than once per
+  # example, each probe waiting out its timeouts.
   def self.ensure_configured!
     raise SetupError, 'TEST_URL is not set, so there is no Zammad to run the integration specs against' if target.nil?
     return true if @ensure_configured
@@ -72,12 +67,9 @@ class Helper
     end
   end
 
-  # The body is asked about only where it is a JSON object. Valid JSON
-  # that is not one - `null`, a list, a number - raised NoMethodError on
-  # the lookup, which is neither the SetupError {.ensure_configured!}
-  # memoizes nor an answer, so every example ran the probe again. Anything
-  # but an object saying the wizard ran leaves {.verify_setup_done!} to
-  # decide.
+  # The body is asked about only where it is a JSON object: valid JSON that
+  # is not one - `null`, a list, a number - is no answer. Anything but an
+  # object saying the wizard ran leaves {.verify_setup_done!} to decide.
   #
   # @return [Boolean] whether the auto wizard ran now
   # @raise [SetupError] when the instance cannot be reached at all
@@ -86,11 +78,9 @@ class Helper
     body     = parse(response.body)
     body.is_a?(Hash) && body['auto_wizard_success'] == true
   rescue Faraday::Error => e
-    # {.verify_setup_done!} wraps its failure into a SetupError naming the URL
-    # and the user; this probe runs one line earlier and did not, so the
-    # commonest failure of all - CI booting against a Zammad that never came
-    # up - reached every example as a bare Faraday exception from a helper
-    # that exists to explain exactly that.
+    # Wrapped the way {.verify_setup_done!} wraps its failure, so that a
+    # Zammad that never came up reaches every example as a SetupError naming
+    # the URL rather than as a bare Faraday exception.
     raise SetupError,
           "Zammad at #{config[:url]} could not be reached: the setup check failed to connect " \
           "(#{e.class}: #{e.message}). Set TEST_URL to a running instance."
@@ -133,10 +123,9 @@ end
 # save, find, destroy - and every step asserts on what the previous one left
 # behind, so the record is shared across ordered examples.
 #
-# That coupling is fine as long as the whole file runs in definition order,
-# and silent nonsense as soon as it does not: `--only-failures`, `-e 'save'`
-# or a `--seed` reordering used to fail as `NoMethodError: undefined method
-# 'save' for nil`, which says nothing about the actual cause. This says it.
+# That coupling holds as long as the whole file runs in definition order.
+# Under `--only-failures` or `-e 'save'` it does not, and this names the
+# cause where the example would otherwise fail on nil.
 module LifecycleState
   def established!(record, example)
     return record if record

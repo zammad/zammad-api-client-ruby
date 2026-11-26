@@ -34,9 +34,8 @@ RSpec.configure do |config|
   # and never touch the network, integration specs need a live Zammad.
   #
   # The integration specs also walk a record through its lifecycle across
-  # ordered examples, so they are pinned to definition order. Without that a
-  # `--seed` or `--order random` run scrambled the lifecycle and failed on a
-  # record that had not been built yet. Unit specs stay order-independent.
+  # ordered examples, so they are pinned to definition order, whatever
+  # `--seed` or `--order` says. Unit specs stay order-independent.
   config.define_derived_metadata(file_path: %r{/spec/unit/}) { it[:unit] = true }
   config.define_derived_metadata(file_path: %r{/spec/integration/}) do |metadata|
     metadata[:integration] = true
@@ -52,11 +51,10 @@ RSpec.configure do |config|
   # the suite: RSpec runs no suite hook for a run that selected nothing,
   # which is what `rspec spec/integration` is without a TEST_URL.
   #
-  # A run that selected nothing but them fails, though: `rspec
-  # spec/integration` without a TEST_URL left every example out and passed
-  # with `0 examples, 0 failures`, so a CI job that lost its TEST_URL went
-  # green having run nothing. A bare `rspec` still runs the unit specs, so
-  # this fires only where everything selected was left out.
+  # A run that selected nothing but them fails, though, so that a CI job
+  # that lost its TEST_URL does not pass with `0 examples, 0 failures`. A
+  # bare `rspec` still runs the unit specs, so this fires only where
+  # everything selected was left out.
   config.fail_if_no_examples = true
 
   if Helper.target.nil?

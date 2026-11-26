@@ -43,10 +43,9 @@ task :steep do
 end
 
 # sig/vendor stands in for dependencies that ship no signatures and is kept
-# out of the gem, so the published set has to hold up without it. Naming a
-# Faraday type in a published signature made `rbs validate` fail for every
-# consumer, and nothing in this repo noticed, because sig/vendor is always
-# on the load path here.
+# out of the gem, so the published set has to hold up without it. Nothing
+# else here notices a published signature that names a Faraday type, because
+# sig/vendor is always on the load path in this repository.
 desc 'Check that the signatures the gem ships validate without sig/vendor'
 task :rbs_published do
   require 'tmpdir'

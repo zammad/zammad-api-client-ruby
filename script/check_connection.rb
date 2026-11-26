@@ -136,9 +136,8 @@ check('find it back') do
   found.name
 end
 
-# Each of these reads back what Zammad holds and compares it. Printing it
-# was not a check: with the body of the PUT lost on the way, this said
-# `ok ... created by check_connection.rb` and went on.
+# Each of these reads back what Zammad holds and compares it: printing a
+# value checks nothing.
 check('update only the changed attribute') do
   @group.note = 'updated'
   raise 'change not staged' if !@group.changed?
@@ -196,9 +195,6 @@ check('search') do
   "#{hits.size} hit(s)"
 end
 
-# These were never driven against a live Zammad, which is why nobody noticed
-# that an attribute filter passed to an index endpoint never reached the query
-# at all.
 check('find_by returns a record that matches') do
   found = CLIENT.groups.find_by(name: "smoke-#{SUFFIX}")
   raise 'no record found' if found.nil?
@@ -207,12 +203,9 @@ check('find_by returns a record that matches') do
   "id=#{found.id}"
 end
 
-# Two string attributes, because one is the shape that works whatever the
-# search term looks like. Joined into a single term - which is what this used
-# to send - the query asks every string column to contain the whole of it, and
-# on an instance searching through SQL LIKE rather than Elasticsearch no
-# column does, so a record that exists comes back as nil. A stubbed unit spec
-# cannot see that; it answers whatever term it is handed.
+# Two string attributes, of which find_by searches for one. Joined into a
+# single term they match no column on an instance that searches through SQL
+# LIKE rather than Elasticsearch, and a stubbed unit spec cannot see that.
 check('find_by matches on two string attributes') do
   group = CLIENT.groups.find(@group.id)
   found = CLIENT.groups.find_by(name: group.name, note: group.note)
